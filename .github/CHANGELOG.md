@@ -19,19 +19,32 @@ Format based on Keep a Changelog, using semantic versioning.
 
 ## [1.0.0] - YYYY-MM-DD
 ### Added
-- Initial release of Testergizer Pro Dashboard.
-- Complete project structure including modules:
-  - Analytics
-  - Snapshots
-  - Logs
-  - Workflows
-  - Compliance
-  - Settings
-- Build system configured (Vite/Next).
-- API layer skeleton.
-- Global state management setup.
-- RBAC-ready layout structure.
-- Proprietary licensing integration.
+# Changelog
+
+## [0.1.0] - 2025-12-11
+### Added
+- Initial import of the Testergizer Open-Core codebase.
+- Core project structure including:
+  - Execution engine scaffolding (`src/core`)
+  - Locator and self-healing framework (`src/locators`)
+  - Snapshot capture and diff analysis modules (`src/snapshots`)
+  - DOM scoring and impact analysis placeholders (`src/analysis`)
+  - Test outline generation interfaces (`src/generators`)
+  - Shared utilities and helpers (`src/utils`)
+- Public API surface (`src/index.ts`) defining the initial module boundaries.
+- CLI entrypoint (`bin/testergizer.js`) for future runner capabilities.
+- TypeScript configuration, build pipeline, and development tooling.
+- Repository documentation:
+  - README with project overview and usage
+  - CONTRIBUTING guidelines for community participation
+- Apache-2.0 open-source license.
+- `.github` templates for PRs and initial governance setup.
+
+### Notes
+This release establishes the foundation of the Testergizer Open-Core project.
+Subsequent versions will build on this structure with runnable modules, stable
+APIs, snapshot diffing, DOM analysis algorithms, and full CLI workflow support.
+
 
 ### Changed
 - N/A (initial release)
