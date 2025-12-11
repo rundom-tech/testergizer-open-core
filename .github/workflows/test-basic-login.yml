@@ -38,4 +38,4 @@ jobs:
       - name: Run basicLogin.ts
         run: |
           echo "Running basicLogin.ts"
-          npx playwright test basicLogin.ts --reporter=list
+          npx playwright test src/examples/basicLogin.ts --reporter=list
