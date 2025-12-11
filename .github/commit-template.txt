@@ -1,0 +1,23 @@
+# --- Commit Title (short, imperative) ---
+# Example: Add analytics module and API integration
+
+# --- Extended Description (optional but recommended) ---
+# Provide context and motivation:
+# - What was added?
+# - Why was it added?
+# - How does it affect the project?
+# - Any breaking changes?
+
+# Example:
+# This commit introduces the analytics module, including the new API 
+# client, charts, and state management setup. This prepares the dashboard
+# for trend visualization and integration with the Pro backend.
+
+# --- Related Issues / Tasks ---
+# Closes: #ISSUE_NUMBER
+# References: #ISSUE_NUMBER
+
+# --- Additional Notes ---
+# - Architectural decisions
+# - Migration or config steps
+# - Known limitations
