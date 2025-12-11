@@ -1,0 +1,41 @@
+name: Test Framework (basicLogin)
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch: {}
+
+jobs:
+  run-basic-login:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Checkout repo
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Setup Node
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      # 3. Install dependencies
+      - name: Install dependencies
+        run: npm install
+
+      # 4. Install Playwright browsers
+      - name: Install Playwright Browsers
+        run: npx playwright install --with-deps
+
+      # 5. Build Testergizer Open-Core (if using TypeScript)
+      - name: Build project
+        run: npm run build
+
+      # 6. Run basicLogin test
+      - name: Run basicLogin.ts
+        run: |
+          echo "Running basicLogin.ts"
+          npx playwright test basicLogin.ts --reporter=list
