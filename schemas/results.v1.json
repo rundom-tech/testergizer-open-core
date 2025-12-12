@@ -1,6 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Testergizer Results v1",
+  "$id": "https://testergizer.ai/schemas/results.v1.json",
+  "title": "Testergizer Results (v1)",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -9,7 +10,8 @@
     "suite",
     "startedAt",
     "tests",
-    "summary"
+    "summary",
+    "meta"
   ],
   "properties": {
     "schemaVersion": {
@@ -33,14 +35,27 @@
     "endedAt": {
       "type": "string"
     },
+    "options": {
+      "type": "object",
+      "additionalProperties": true
+    },
     "meta": {
-      "type": "object"
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "runnerVersion"
+      ],
+      "properties": {
+        "runnerVersion": {
+          "type": "string"
+        }
+      }
     },
     "tests": {
       "type": "array",
       "items": {
         "type": "object",
-        "additionalProperties": false,
+        "additionalProperties": true,
         "required": [
           "name",
           "status",
@@ -68,11 +83,36 @@
               "null"
             ]
           },
-          "steps": {
+          "screenshot": {
+            "type": "string"
+          },
+          "consoleLogs": {
             "type": "array",
             "items": {
               "type": "object",
               "additionalProperties": false,
+              "required": [
+                "type",
+                "text"
+              ],
+              "properties": {
+                "type": {
+                  "type": "string"
+                },
+                "text": {
+                  "type": "string"
+                },
+                "location": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
               "required": [
                 "id",
                 "action",
@@ -92,16 +132,26 @@
                     "null"
                   ]
                 },
+                "durationMs": {
+                  "type": "number"
+                },
                 "attempts": {
                   "type": "number"
                 },
                 "flaky": {
                   "type": "boolean"
                 },
+                "error": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "attemptErrors": {
                   "type": "array",
                   "items": {
                     "type": "object",
+                    "additionalProperties": false,
                     "required": [
                       "reason",
                       "message"
@@ -124,6 +174,7 @@
     },
     "summary": {
       "type": "object",
+      "additionalProperties": false,
       "required": [
         "total",
         "passed",

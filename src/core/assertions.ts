@@ -2,6 +2,10 @@ import { Page } from "playwright";
 
 type AssertionFn = (page: Page, step: any) => Promise<void>;
 
+function timeoutOpt(step: any) {
+  return step?.timeoutMs ? { timeout: Number(step.timeoutMs) } : undefined;
+}
+
 const assertions: Record<string, AssertionFn> = {
   exists: async (page, step) => {
     const el = await page.$(step.selector);
@@ -9,11 +13,11 @@ const assertions: Record<string, AssertionFn> = {
   },
 
   visible: async (page, step) => {
-    await page.waitForSelector(step.selector, { state: "visible" });
+    await page.waitForSelector(step.selector, { state: "visible", ...(timeoutOpt(step) ?? {}) });
   },
 
   hidden: async (page, step) => {
-    await page.waitForSelector(step.selector, { state: "hidden" });
+    await page.waitForSelector(step.selector, { state: "hidden", ...(timeoutOpt(step) ?? {}) });
   },
 
   textContains: async (page, step) => {
@@ -49,7 +53,7 @@ const assertions: Record<string, AssertionFn> = {
   attributeEquals: async (page, step) => {
     const el = await page.$(step.selector);
     if (!el) throw new Error(`Assertion failed: element not found (${step.selector})`);
-    if (!step.attribute) throw new Error(`Assertion failed: attributeEquals requires "attribute" field`);
+    if (!step.attribute) throw new Error(`Assertion failed: attributeEquals requires "attribute"`);
 
     const attr = await el.getAttribute(step.attribute);
     if (attr !== step.value) {
@@ -80,7 +84,6 @@ const assertions: Record<string, AssertionFn> = {
   enabled: async (page, step) => {
     const el = await page.$(step.selector);
     if (!el) throw new Error(`Assertion failed: element not found (${step.selector})`);
-
     const disabled = await el.getAttribute("disabled");
     if (disabled !== null) throw new Error(`Assertion failed: element is disabled (${step.selector})`);
   },
@@ -88,7 +91,6 @@ const assertions: Record<string, AssertionFn> = {
   disabled: async (page, step) => {
     const el = await page.$(step.selector);
     if (!el) throw new Error(`Assertion failed: element not found (${step.selector})`);
-
     const disabled = await el.getAttribute("disabled");
     if (disabled === null) throw new Error(`Assertion failed: element is not disabled (${step.selector})`);
   },

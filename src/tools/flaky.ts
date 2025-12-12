@@ -1,57 +1,106 @@
-
 import fs from "fs";
 import path from "path";
 
 type AnyObj = Record<string, any>;
 
+function listJsonFiles(input: string): string[] {
+  const p = path.resolve(process.cwd(), input);
+  if (!fs.existsSync(p)) return [];
+  const stat = fs.statSync(p);
+  if (stat.isFile()) return [p];
+  if (!stat.isDirectory()) return [];
+  const files: string[] = [];
+  for (const name of fs.readdirSync(p)) {
+    const full = path.join(p, name);
+    if (fs.statSync(full).isFile() && name.toLowerCase().endsWith(".json")) files.push(full);
+  }
+  return files.sort();
+}
+
 function testKey(t: AnyObj): string {
   return String(t.id ?? t.name);
 }
 
-export function resolveInputs(inputs: string[]): string[] {
-  const out: string[] = [];
-  for (const inp of inputs) {
-    const p = path.resolve(inp);
-    if (!fs.existsSync(p)) continue;
-
-    if (fs.statSync(p).isFile()) out.push(p);
-    else {
-      for (const f of fs.readdirSync(p)) {
-        if (f.endsWith(".json")) out.push(path.join(p, f));
-      }
-    }
-  }
-  return Array.from(new Set(out));
+function lastReason(step: AnyObj): string {
+  const errs = step?.attemptErrors;
+  if (!Array.isArray(errs) || errs.length === 0) return "unknown";
+  const last = errs[errs.length - 1];
+  return String(last?.reason ?? "unknown");
 }
 
-export function detectFlaky(paths: string[]) {
-  const runs = paths.map(p => JSON.parse(fs.readFileSync(p, "utf-8")));
-  const stepStats: Record<string, { pass: number; fail: number }> = {};
+export function resolveInputs(inputs: string[]): string[] {
+  const out: string[] = [];
+  for (const inp of inputs) out.push(...listJsonFiles(inp));
+  return Array.from(new Set(out)).sort();
+}
+
+export function detectFlaky(resultsPaths: string[]): AnyObj {
+  const runs: AnyObj[] = resultsPaths.map(p => JSON.parse(fs.readFileSync(p, "utf-8")));
+
+  const stepStats: Record<string, { passes: number; fails: number; runs: number; reasons: Record<string, number> }> = {};
+  const testStats: Record<string, { passes: number; fails: number; runs: number }> = {};
 
   for (const r of runs) {
-    for (const t of r.tests ?? []) {
+    for (const t of (r.tests ?? [])) {
       const tk = testKey(t);
-      for (const s of t.steps ?? []) {
-        const key = `${tk}::${s.id}`;
-        stepStats[key] ??= { pass: 0, fail: 0 };
-        s.status === "passed" ? stepStats[key].pass++ : stepStats[key].fail++;
+      const ts = testStats[tk] ?? { passes: 0, fails: 0, runs: 0 };
+      ts.runs += 1;
+      if (t.status === "passed") ts.passes += 1;
+      if (t.status === "failed") ts.fails += 1;
+      testStats[tk] = ts;
+
+      for (const s of (t.steps ?? [])) {
+        const sid = String(s.id);
+        const key = `${tk}::${sid}`;
+        const ss = stepStats[key] ?? { passes: 0, fails: 0, runs: 0, reasons: {} };
+        ss.runs += 1;
+        if (s.status === "passed") ss.passes += 1;
+        if (s.status === "failed") {
+          ss.fails += 1;
+          const reason = lastReason(s);
+          ss.reasons[reason] = (ss.reasons[reason] ?? 0) + 1;
+        }
+        stepStats[key] = ss;
       }
     }
   }
 
-  const flaky = Object.entries(stepStats)
-    .filter(([_, v]) => v.pass > 0 && v.fail > 0)
-    .map(([k, v]) => ({
-      step: k,
-      passes: v.pass,
-      fails: v.fail,
-      failRate: v.fail / (v.pass + v.fail)
-    }));
+  const flakySteps: AnyObj[] = [];
+  for (const [k, v] of Object.entries(stepStats)) {
+    if (v.passes > 0 && v.fails > 0) {
+      flakySteps.push({
+        key: k,
+        runs: v.runs,
+        passes: v.passes,
+        fails: v.fails,
+        failRate: v.fails / v.runs,
+        reasons: v.reasons
+      });
+    }
+  }
+  flakySteps.sort((a, b) => b.failRate - a.failRate || a.key.localeCompare(b.key));
+
+  const flakyTests: AnyObj[] = [];
+  for (const [k, v] of Object.entries(testStats)) {
+    if (v.passes > 0 && v.fails > 0) {
+      flakyTests.push({
+        test: k,
+        runs: v.runs,
+        passes: v.passes,
+        fails: v.fails,
+        failRate: v.fails / v.runs
+      });
+    }
+  }
+  flakyTests.sort((a, b) => b.failRate - a.failRate || a.test.localeCompare(b.test));
 
   return {
     schemaVersion: "1.0",
     type: "flaky-analysis",
-    runs: runs.length,
-    flaky
+    runCount: runs.length,
+    inputs: resultsPaths,
+    flakyTests,
+    flakySteps,
+    summary: { flakyTests: flakyTests.length, flakySteps: flakySteps.length }
   };
 }

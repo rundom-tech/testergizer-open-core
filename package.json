@@ -23,6 +23,7 @@
   ],
   "author": "",
   "dependencies": {
+    "ajv": "^8.17.1",
     "playwright": "^1.49.0"
   },
   "devDependencies": {

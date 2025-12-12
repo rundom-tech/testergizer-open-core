@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://testergizer.ai/schemas/test-suite.v1.json",
+  "title": "Testergizer Test Suite (v1)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "suiteName",
+    "tests"
+  ],
+  "properties": {
+    "version": {
+      "type": "string",
+      "default": "1.0"
+    },
+    "suiteName": {
+      "type": "string"
+    },
+    "timeoutMs": {
+      "type": "number",
+      "minimum": 1
+    },
+    "tests": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "steps"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "timeoutMs": {
+            "type": "number",
+            "minimum": 1
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "action"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "action": {
+                  "type": "string",
+                  "enum": [
+                    "goto",
+                    "assert"
+                  ]
+                },
+                "disabled": {
+                  "type": "boolean"
+                },
+                "url": {
+                  "type": "string"
+                },
+                "waitUntil": {
+                  "type": "string"
+                },
+                "timeoutMs": {
+                  "type": "number",
+                  "minimum": 1
+                },
+                "assert": {
+                  "type": "string"
+                },
+                "selector": {
+                  "type": "string"
+                },
+                "value": {},
+                "attribute": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

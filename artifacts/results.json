@@ -1,10 +1,10 @@
 {
   "schemaVersion": "1.0",
-  "runId": "8263393b-0fa1-4efb-b5be-277dab783d3b",
+  "runId": "32d51c67-5348-4839-8abc-63eed48a118f",
   "suite": "SauceDemo Login Smoke",
   "suitePath": "tests/login.saucedemo.json",
   "suiteVersion": "1.0",
-  "startedAt": "2025-12-12T21:43:02.467Z",
+  "startedAt": "2025-12-12T21:59:45.719Z",
   "options": {
     "headless": false,
     "slowMo": null,
@@ -19,8 +19,8 @@
       "id": "login-ui-contract",
       "name": "Login UI contract",
       "status": "passed",
-      "startedAt": "2025-12-12T21:43:03.524Z",
-      "durationMs": 2075,
+      "startedAt": "2025-12-12T21:59:46.342Z",
+      "durationMs": 2118,
       "error": null,
       "steps": [
         {
@@ -29,7 +29,7 @@
           "status": "passed",
           "skipped": false,
           "reason": "",
-          "durationMs": 899,
+          "durationMs": 1354,
           "attempts": 1,
           "flaky": false,
           "error": null,
@@ -41,7 +41,7 @@
           "status": "passed",
           "skipped": false,
           "reason": "",
-          "durationMs": 73,
+          "durationMs": 99,
           "attempts": 1,
           "flaky": false,
           "error": null,
@@ -53,7 +53,7 @@
           "status": "passed",
           "skipped": false,
           "reason": "",
-          "durationMs": 15,
+          "durationMs": 13,
           "attempts": 1,
           "flaky": false,
           "error": null,
@@ -65,7 +65,7 @@
           "status": "passed",
           "skipped": false,
           "reason": "",
-          "durationMs": 18,
+          "durationMs": 15,
           "attempts": 1,
           "flaky": false,
           "error": null,
@@ -77,7 +77,7 @@
           "status": "passed",
           "skipped": false,
           "reason": "",
-          "durationMs": 12,
+          "durationMs": 13,
           "attempts": 1,
           "flaky": false,
           "error": null,
@@ -86,7 +86,7 @@
       ]
     }
   ],
-  "endedAt": "2025-12-12T21:43:04.922Z",
+  "endedAt": "2025-12-12T21:59:48.214Z",
   "summary": {
     "total": 1,
     "passed": 1,

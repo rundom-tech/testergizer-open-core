@@ -3,6 +3,10 @@ import path from "path";
 import crypto from "crypto";
 import { chromium, firefox, webkit } from "playwright";
 import { runAssertion } from "./assertions";
+import { validateSuite } from "./validateSuite";
+import { validateResults } from "./validateResults";
+import { classifyRetry } from "./retryClassifier";
+import { collectMeta } from "./meta";
 
 export interface RunnerOptions {
   headless?: boolean;
@@ -42,22 +46,29 @@ function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-export async function runSuiteFromFile(
-  suitePath: string,
-  options: RunnerOptions = {}
-): Promise<boolean> {
+function resolveTimeoutMs(suite: any, test: any, step: any): number {
+  const stepT = step?.timeoutMs ? Number(step.timeoutMs) : undefined;
+  if (Number.isFinite(stepT) && stepT! > 0) return stepT!;
+  const testT = test?.timeoutMs ? Number(test.timeoutMs) : undefined;
+  if (Number.isFinite(testT) && testT! > 0) return testT!;
+  const suiteT = suite?.timeoutMs ? Number(suite.timeoutMs) : undefined;
+  if (Number.isFinite(suiteT) && suiteT! > 0) return suiteT!;
+  return 30000;
+}
+
+export async function runSuiteFromFile(suitePath: string, options: RunnerOptions = {}): Promise<boolean> {
   const artifactsDir = ensureArtifactsDir();
   const raw = fs.readFileSync(suitePath, "utf-8");
   const suite = JSON.parse(raw);
+
+  validateSuite(suite);
 
   const runId = (crypto as any).randomUUID ? (crypto as any).randomUUID() : crypto.randomBytes(16).toString("hex");
   const suiteVersion = typeof suite.version === "string" ? suite.version : "1.0";
 
   console.log(`Loaded suite: ${suite.suiteName}`);
   console.log(`Suite version: ${suiteVersion}`);
-  console.log(
-    `Running in ${options.headless === false ? "headed" : "headless"} mode (${options.browser ?? "chromium"})`
-  );
+  console.log(`Running in ${options.headless === false ? "headed" : "headless"} mode (${options.browser ?? "chromium"})`);
 
   const results: any = {
     schemaVersion: "1.0",
@@ -75,6 +86,7 @@ export async function runSuiteFromFile(
       retryStepIds: options.retryStepIds ?? [],
       retryDelayMs: options.retryDelayMs ?? 0
     },
+    meta: collectMeta(),
     tests: []
   };
 
@@ -83,7 +95,13 @@ export async function runSuiteFromFile(
 
   let suiteOk = true;
 
-  for (const test of suite.tests ?? []) {
+  const tests = [...(suite.tests ?? [])].sort((a: any, b: any) => {
+    const ak = String(a.id ?? a.name ?? "");
+    const bk = String(b.id ?? b.name ?? "");
+    return ak.localeCompare(bk);
+  });
+
+  for (const test of tests) {
     const testStart = Date.now();
     console.log(`\n=== Test: ${test.name} ===`);
 
@@ -94,11 +112,25 @@ export async function runSuiteFromFile(
 
     const page = await browser.newPage();
 
+    const defaultTimeout = resolveTimeoutMs(suite, test, null);
+    page.setDefaultTimeout(defaultTimeout);
+    page.setDefaultNavigationTimeout(defaultTimeout);
+
+    const consoleLogs: Array<{ type: string; text: string; location?: string }> = [];
+    page.on("console", (msg) => {
+      try {
+        const loc = msg.location();
+        const location = loc?.url ? `${loc.url}:${loc.lineNumber}:${loc.columnNumber}` : undefined;
+        consoleLogs.push({ type: msg.type(), text: msg.text(), location });
+      } catch {
+        consoleLogs.push({ type: "log", text: String(msg.text()) });
+      }
+    });
+
     const testResult: any = {
       id: test.id ?? null,
       name: test.name,
       status: "passed",
-      startedAt: new Date().toISOString(),
       durationMs: 0,
       error: null,
       steps: []
@@ -115,8 +147,6 @@ export async function runSuiteFromFile(
           testResult.steps.push({
             id: stepId,
             action: step.action,
-            skipped: true,
-            reason: "disabled",
             status: null,
             durationMs: 0,
             attempts: 0,
@@ -128,7 +158,7 @@ export async function runSuiteFromFile(
         }
 
         const stepStart = Date.now();
-        const attemptErrors: string[] = [];
+        const attemptErrors: Array<{ reason: string; message: string }> = [];
         const maxAttempts = 1 + (options.stepRetries ?? 0);
         const eligible = shouldRetry(stepId, options);
         let attempts = 0;
@@ -139,17 +169,19 @@ export async function runSuiteFromFile(
           console.log(`→ Step (${stepId}) [${attempt}/${maxAttempts}]: ${step.action}`);
 
           try {
+            const stepTimeout = resolveTimeoutMs(suite, test, step);
+
             switch (step.action) {
               case "goto":
                 await page.goto(step.url, {
                   waitUntil: step.waitUntil ?? "load",
-                  timeout: step.timeoutMs ?? 30000
+                  timeout: stepTimeout
                 });
                 lastErr = null;
                 break;
 
               case "assert":
-                await runAssertion(page, step);
+                await runAssertion(page, { ...step, timeoutMs: stepTimeout });
                 lastErr = null;
                 break;
 
@@ -157,10 +189,13 @@ export async function runSuiteFromFile(
                 throw new Error(`Unknown action: ${step.action}`);
             }
 
-            break; // succeeded
+            break;
           } catch (err: any) {
             lastErr = err;
-            attemptErrors.push(String(err?.message ?? err));
+            attemptErrors.push({
+              reason: classifyRetry(err),
+              message: String(err?.message ?? err)
+            });
 
             const isLast = attempt === maxAttempts;
             if (!eligible || isLast) break;
@@ -175,8 +210,6 @@ export async function runSuiteFromFile(
             id: stepId,
             action: step.action,
             status: "failed",
-            skipped: false,
-            reason: "",
             durationMs: Date.now() - stepStart,
             attempts,
             flaky: false,
@@ -189,8 +222,6 @@ export async function runSuiteFromFile(
             id: stepId,
             action: step.action,
             status: "passed",
-            skipped: false,
-            reason: "",
             durationMs: Date.now() - stepStart,
             attempts,
             flaky: attempts > 1,
@@ -205,10 +236,11 @@ export async function runSuiteFromFile(
       suiteOk = false;
       testResult.status = "failed";
       testResult.error = String(err?.message ?? err);
+      testResult.consoleLogs = consoleLogs;
 
       if (options.screenshotOnFail) {
         const file = `${safeFileName(test.id ?? test.name)}-failure.png`;
-        const outPath = path.join(artifactsDir, file);
+        const outPath = __dirname ? path.join(artifactsDir, file) : path.join(artifactsDir, file);
         await page.screenshot({ path: outPath, fullPage: true });
         testResult.screenshot = path.relative(process.cwd(), outPath).replace(/\\/g, "/");
         console.error(`Screenshot saved: ${testResult.screenshot}`);
@@ -228,6 +260,8 @@ export async function runSuiteFromFile(
     passed: results.tests.filter((t: any) => t.status === "passed").length,
     failed: results.tests.filter((t: any) => t.status === "failed").length
   };
+
+  validateResults(results);
 
   const resultsPath = path.join(artifactsDir, "results.json");
   fs.writeFileSync(resultsPath, JSON.stringify(results, null, 2), "utf-8");
