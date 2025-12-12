@@ -1,0 +1,145 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Testergizer Results v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "runId",
+    "suite",
+    "startedAt",
+    "tests",
+    "summary"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "string"
+    },
+    "runId": {
+      "type": "string"
+    },
+    "suite": {
+      "type": "string"
+    },
+    "suitePath": {
+      "type": "string"
+    },
+    "suiteVersion": {
+      "type": "string"
+    },
+    "startedAt": {
+      "type": "string"
+    },
+    "endedAt": {
+      "type": "string"
+    },
+    "meta": {
+      "type": "object"
+    },
+    "tests": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "status",
+          "steps"
+        ],
+        "properties": {
+          "id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "durationMs": {
+            "type": "number"
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "action",
+                "status",
+                "attempts"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "action": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "attempts": {
+                  "type": "number"
+                },
+                "flaky": {
+                  "type": "boolean"
+                },
+                "attemptErrors": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "reason",
+                      "message"
+                    ],
+                    "properties": {
+                      "reason": {
+                        "type": "string"
+                      },
+                      "message": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": [
+        "total",
+        "passed",
+        "failed"
+      ],
+      "properties": {
+        "total": {
+          "type": "number"
+        },
+        "passed": {
+          "type": "number"
+        },
+        "failed": {
+          "type": "number"
+        }
+      }
+    }
+  }
+}

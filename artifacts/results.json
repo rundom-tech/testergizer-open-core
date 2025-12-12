@@ -1,70 +1,92 @@
 {
-  "suite": "Login Suite",
-  "suitePath": "tests/login.json",
-  "startedAt": "2025-12-12T07:12:02.159Z",
+  "schemaVersion": "1.0",
+  "runId": "8263393b-0fa1-4efb-b5be-277dab783d3b",
+  "suite": "SauceDemo Login Smoke",
+  "suitePath": "tests/login.saucedemo.json",
+  "suiteVersion": "1.0",
+  "startedAt": "2025-12-12T21:43:02.467Z",
   "options": {
     "headless": false,
     "slowMo": null,
     "browser": "chromium",
-    "screenshotOnFail": false
+    "screenshotOnFail": false,
+    "stepRetries": 0,
+    "retryStepIds": [],
+    "retryDelayMs": 0
   },
   "tests": [
     {
-      "id": "login-basic",
-      "name": "Basic Login",
+      "id": "login-ui-contract",
+      "name": "Login UI contract",
       "status": "passed",
-      "startedAt": "2025-12-12T07:12:02.952Z",
-      "durationMs": 1686,
+      "startedAt": "2025-12-12T21:43:03.524Z",
+      "durationMs": 2075,
+      "error": null,
       "steps": [
         {
+          "id": "goto-login",
           "action": "goto",
           "status": "passed",
-          "durationMs": 739
+          "skipped": false,
+          "reason": "",
+          "durationMs": 899,
+          "attempts": 1,
+          "flaky": false,
+          "error": null,
+          "attemptErrors": []
         },
         {
+          "id": "username-placeholder",
           "action": "assert",
           "status": "passed",
-          "durationMs": 46
+          "skipped": false,
+          "reason": "",
+          "durationMs": 73,
+          "attempts": 1,
+          "flaky": false,
+          "error": null,
+          "attemptErrors": []
         },
         {
+          "id": "password-placeholder",
           "action": "assert",
           "status": "passed",
-          "durationMs": 26
+          "skipped": false,
+          "reason": "",
+          "durationMs": 15,
+          "attempts": 1,
+          "flaky": false,
+          "error": null,
+          "attemptErrors": []
         },
         {
+          "id": "login-button-value",
           "action": "assert",
           "status": "passed",
-          "durationMs": 19
+          "skipped": false,
+          "reason": "",
+          "durationMs": 18,
+          "attempts": 1,
+          "flaky": false,
+          "error": null,
+          "attemptErrors": []
         },
         {
+          "id": "login-button-enabled",
           "action": "assert",
           "status": "passed",
-          "durationMs": 16
-        },
-        {
-          "action": "assert",
-          "status": "passed",
-          "durationMs": 13
-        },
-        {
-          "action": "assert",
-          "status": "passed",
-          "durationMs": 13
-        },
-        {
-          "action": "assert",
-          "status": "passed",
-          "durationMs": 11
-        },
-        {
-          "action": "assert",
-          "status": "passed",
-          "durationMs": 10
+          "skipped": false,
+          "reason": "",
+          "durationMs": 12,
+          "attempts": 1,
+          "flaky": false,
+          "error": null,
+          "attemptErrors": []
         }
       ]
     }
   ],
-  "endedAt": "2025-12-12T07:12:04.347Z",
+  "endedAt": "2025-12-12T21:43:04.922Z",
   "summary": {
     "total": 1,
     "passed": 1,
