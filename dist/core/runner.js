@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.runSuiteFromFile = runSuiteFromFile;
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
+const crypto_1 = __importDefault(require("crypto"));
 const playwright_1 = require("playwright");
 const assertions_1 = require("./assertions");
 function ensureArtifactsDir() {
@@ -16,21 +17,47 @@ function ensureArtifactsDir() {
 function safeFileName(input) {
     return String(input).replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 120);
 }
+function getStepId(step, index) {
+    if (step?.id)
+        return String(step.id);
+    return `step-${index + 1}`;
+}
+function shouldRetry(stepId, options) {
+    const retries = options.stepRetries ?? 0;
+    if (retries <= 0)
+        return false;
+    const allow = options.retryStepIds?.filter(Boolean) ?? [];
+    if (allow.length === 0)
+        return true;
+    return allow.includes(stepId);
+}
+function delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
 async function runSuiteFromFile(suitePath, options = {}) {
     const artifactsDir = ensureArtifactsDir();
     const raw = fs_1.default.readFileSync(suitePath, "utf-8");
     const suite = JSON.parse(raw);
+    const runId = crypto_1.default.randomUUID ? crypto_1.default.randomUUID() : crypto_1.default.randomBytes(16).toString("hex");
+    const suiteVersion = typeof suite.version === "string" ? suite.version : "1.0";
     console.log(`Loaded suite: ${suite.suiteName}`);
+    console.log(`Suite version: ${suiteVersion}`);
     console.log(`Running in ${options.headless === false ? "headed" : "headless"} mode (${options.browser ?? "chromium"})`);
     const results = {
+        schemaVersion: "1.0",
+        runId,
         suite: suite.suiteName,
         suitePath,
+        suiteVersion,
         startedAt: new Date().toISOString(),
         options: {
             headless: options.headless !== false,
             slowMo: options.slowMo ?? null,
             browser: options.browser ?? "chromium",
-            screenshotOnFail: !!options.screenshotOnFail
+            screenshotOnFail: !!options.screenshotOnFail,
+            stepRetries: options.stepRetries ?? 0,
+            retryStepIds: options.retryStepIds ?? [],
+            retryDelayMs: options.retryDelayMs ?? 0
         },
         tests: []
     };
@@ -50,45 +77,96 @@ async function runSuiteFromFile(suitePath, options = {}) {
             status: "passed",
             startedAt: new Date().toISOString(),
             durationMs: 0,
+            error: null,
             steps: []
         };
         try {
-            for (const step of test.steps ?? []) {
+            const stepsArr = test.steps ?? [];
+            for (let i = 0; i < stepsArr.length; i++) {
+                const step = stepsArr[i];
+                const stepId = getStepId(step, i);
                 if (step.disabled) {
-                    console.log(`↷ Step skipped (disabled): ${step.action}`);
-                    testResult.steps.push({ action: step.action, skipped: true, reason: "disabled" });
+                    console.log(`↷ Step skipped (${stepId}): ${step.action}`);
+                    testResult.steps.push({
+                        id: stepId,
+                        action: step.action,
+                        skipped: true,
+                        reason: "disabled",
+                        status: null,
+                        durationMs: 0,
+                        attempts: 0,
+                        flaky: false,
+                        error: null,
+                        attemptErrors: []
+                    });
                     continue;
                 }
                 const stepStart = Date.now();
-                console.log("→ Step:", step.action);
-                try {
-                    switch (step.action) {
-                        case "goto":
-                            await page.goto(step.url, {
-                                waitUntil: step.waitUntil ?? "load",
-                                timeout: step.timeoutMs ?? 30000
-                            });
-                            break;
-                        case "assert":
-                            await (0, assertions_1.runAssertion)(page, step);
-                            break;
-                        default:
-                            throw new Error(`Unknown action: ${step.action}`);
+                const attemptErrors = [];
+                const maxAttempts = 1 + (options.stepRetries ?? 0);
+                const eligible = shouldRetry(stepId, options);
+                let attempts = 0;
+                let lastErr = null;
+                for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+                    attempts = attempt;
+                    console.log(`→ Step (${stepId}) [${attempt}/${maxAttempts}]: ${step.action}`);
+                    try {
+                        switch (step.action) {
+                            case "goto":
+                                await page.goto(step.url, {
+                                    waitUntil: step.waitUntil ?? "load",
+                                    timeout: step.timeoutMs ?? 30000
+                                });
+                                lastErr = null;
+                                break;
+                            case "assert":
+                                await (0, assertions_1.runAssertion)(page, step);
+                                lastErr = null;
+                                break;
+                            default:
+                                throw new Error(`Unknown action: ${step.action}`);
+                        }
+                        break; // succeeded
                     }
-                    testResult.steps.push({
-                        action: step.action,
-                        status: "passed",
-                        durationMs: Date.now() - stepStart
-                    });
+                    catch (err) {
+                        lastErr = err;
+                        attemptErrors.push(String(err?.message ?? err));
+                        const isLast = attempt === maxAttempts;
+                        if (!eligible || isLast)
+                            break;
+                        const d = options.retryDelayMs ?? 0;
+                        if (d > 0)
+                            await delay(d);
+                    }
                 }
-                catch (stepErr) {
+                if (lastErr) {
                     testResult.steps.push({
+                        id: stepId,
                         action: step.action,
                         status: "failed",
+                        skipped: false,
+                        reason: "",
                         durationMs: Date.now() - stepStart,
-                        error: String(stepErr?.message ?? stepErr)
+                        attempts,
+                        flaky: false,
+                        error: String(lastErr?.message ?? lastErr),
+                        attemptErrors
                     });
-                    throw stepErr;
+                    throw lastErr;
+                }
+                else {
+                    testResult.steps.push({
+                        id: stepId,
+                        action: step.action,
+                        status: "passed",
+                        skipped: false,
+                        reason: "",
+                        durationMs: Date.now() - stepStart,
+                        attempts,
+                        flaky: attempts > 1,
+                        error: null,
+                        attemptErrors
+                    });
                 }
             }
             console.log(`✔ Test passed: ${test.name}`);
