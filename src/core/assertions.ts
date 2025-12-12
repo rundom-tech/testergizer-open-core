@@ -10,9 +10,7 @@ const assertions: Record<string, AssertionFn> = {
   exists: async (page, step) => {
     const el = await page.$(step.selector);
     if (!el) {
-      throw new Error(
-        `Assertion failed: element does not exist (${step.selector})`
-      );
+      throw new Error(`Assertion failed: element does not exist (${step.selector})`);
     }
   },
 
@@ -31,32 +29,24 @@ const assertions: Record<string, AssertionFn> = {
   textContains: async (page, step) => {
     const el = await page.$(step.selector);
     if (!el) {
-      throw new Error(
-        `Assertion failed: element not found (${step.selector})`
-      );
+      throw new Error(`Assertion failed: element not found (${step.selector})`);
     }
 
     const text = await el.textContent();
     if (!text || !text.includes(step.value)) {
-      throw new Error(
-        `Assertion failed: text does not contain "${step.value}". Actual: "${text}"`
-      );
+      throw new Error(`Assertion failed: text does not contain "${step.value}". Actual: "${text}"`);
     }
   },
 
   textEquals: async (page, step) => {
     const el = await page.$(step.selector);
     if (!el) {
-      throw new Error(
-        `Assertion failed: element not found (${step.selector})`
-      );
+      throw new Error(`Assertion failed: element not found (${step.selector})`);
     }
 
     const text = (await el.textContent())?.trim();
     if (text !== step.value) {
-      throw new Error(
-        `Assertion failed: expected text "${step.value}", got "${text}"`
-      );
+      throw new Error(`Assertion failed: expected text "${step.value}", got "${text}"`);
     }
   },
 
@@ -67,37 +57,55 @@ const assertions: Record<string, AssertionFn> = {
   valueContains: async (page, step) => {
     const el = await page.$(step.selector);
     if (!el) {
-      throw new Error(
-        `Assertion failed: element not found (${step.selector})`
-      );
+      throw new Error(`Assertion failed: element not found (${step.selector})`);
     }
 
     const value = await el.getAttribute("value");
     if (!value || !value.includes(step.value)) {
-      throw new Error(
-        `Assertion failed: value does not contain "${step.value}". Actual: "${value}"`
-      );
+      throw new Error(`Assertion failed: value does not contain "${step.value}". Actual: "${value}"`);
     }
   },
 
   attributeEquals: async (page, step) => {
     const el = await page.$(step.selector);
     if (!el) {
-      throw new Error(
-        `Assertion failed: element not found (${step.selector})`
-      );
+      throw new Error(`Assertion failed: element not found (${step.selector})`);
     }
 
     if (!step.attribute) {
-      throw new Error(
-        `Assertion failed: attributeEquals requires "attribute" field`
-      );
+      throw new Error(`Assertion failed: attributeEquals requires "attribute" field`);
     }
 
     const attr = await el.getAttribute(step.attribute);
     if (attr !== step.value) {
       throw new Error(
         `Assertion failed: attribute "${step.attribute}" expected "${step.value}", got "${attr}"`
+      );
+    }
+  },
+
+  placeholderEquals: async (page, step) => {
+    const el = await page.$(step.selector);
+    if (!el) {
+      throw new Error(`Assertion failed: element not found (${step.selector})`);
+    }
+
+    const placeholder = await el.getAttribute("placeholder");
+    if (placeholder !== step.value) {
+      throw new Error(`Assertion failed: placeholder expected "${step.value}", got "${placeholder}"`);
+    }
+  },
+
+  placeholderContains: async (page, step) => {
+    const el = await page.$(step.selector);
+    if (!el) {
+      throw new Error(`Assertion failed: element not found (${step.selector})`);
+    }
+
+    const placeholder = await el.getAttribute("placeholder");
+    if (!placeholder || !placeholder.includes(step.value)) {
+      throw new Error(
+        `Assertion failed: placeholder does not contain "${step.value}". Actual: "${placeholder}"`
       );
     }
   },
@@ -109,68 +117,26 @@ const assertions: Record<string, AssertionFn> = {
   enabled: async (page, step) => {
     const el = await page.$(step.selector);
     if (!el) {
-      throw new Error(
-        `Assertion failed: element not found (${step.selector})`
-      );
+      throw new Error(`Assertion failed: element not found (${step.selector})`);
     }
 
     const disabled = await el.getAttribute("disabled");
     if (disabled !== null) {
-      throw new Error(
-        `Assertion failed: element is disabled (${step.selector})`
-      );
+      throw new Error(`Assertion failed: element is disabled (${step.selector})`);
     }
   },
 
   disabled: async (page, step) => {
     const el = await page.$(step.selector);
     if (!el) {
-      throw new Error(
-        `Assertion failed: element not found (${step.selector})`
-      );
+      throw new Error(`Assertion failed: element not found (${step.selector})`);
     }
 
     const disabled = await el.getAttribute("disabled");
     if (disabled === null) {
-      throw new Error(
-        `Assertion failed: element is not disabled (${step.selector})`
-      );
+      throw new Error(`Assertion failed: element is not disabled (${step.selector})`);
     }
   },
-
-  placeholderEquals: async (page, step) => {
-    const el = await page.$(step.selector);
-    if (!el) {
-        throw new Error(
-        `Assertion failed: element not found (${step.selector})`
-        );
-    }
-
-    const placeholder = await el.getAttribute("placeholder");
-    if (placeholder !== step.value) {
-        throw new Error(
-        `Assertion failed: placeholder expected "${step.value}", got "${placeholder}"`
-        );
-    }
-    },
-
-    placeholderContains: async (page, step) => {
-  const el = await page.$(step.selector);
-  if (!el) {
-    throw new Error(
-      `Assertion failed: element not found (${step.selector})`
-    );
-  }
-
-  const placeholder = await el.getAttribute("placeholder");
-  if (!placeholder || !placeholder.includes(step.value)) {
-    throw new Error(
-      `Assertion failed: placeholder does not contain "${step.value}". Actual: "${placeholder}"`
-    );
-  }
-},
-
-
 
   /* ======================================================
    * URL assertions
@@ -179,21 +145,12 @@ const assertions: Record<string, AssertionFn> = {
   urlContains: async (page, step) => {
     const url = page.url();
     if (!url.includes(step.value)) {
-      throw new Error(
-        `Assertion failed: URL does not contain "${step.value}". Actual: "${url}"`
-      );
+      throw new Error(`Assertion failed: URL does not contain "${step.value}". Actual: "${url}"`);
     }
   }
 };
 
-/* ========================================================
- * Public API
- * ======================================================== */
-
-export async function runAssertion(
-  page: Page,
-  step: any
-): Promise<void> {
+export async function runAssertion(page: Page, step: any): Promise<void> {
   const type = step.assert;
 
   if (!type) {
@@ -203,9 +160,7 @@ export async function runAssertion(
   const fn = assertions[type];
   if (!fn) {
     throw new Error(
-      `Unknown assertion type: ${type}. Supported assertions: ${Object.keys(
-        assertions
-      ).join(", ")}`
+      `Unknown assertion type: ${type}. Supported assertions: ${Object.keys(assertions).join(", ")}`
     );
   }
 
