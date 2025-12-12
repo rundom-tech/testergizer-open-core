@@ -1,2 +1,2 @@
 #!/usr/bin/env node
-import '../dist/cli/index';
+require("../dist/cli/index");
