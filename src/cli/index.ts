@@ -1,24 +1,78 @@
 import { runSuiteFromFile } from "../core/runner";
 
-function getArg(flag: string): string | undefined {
-  const idx = process.argv.indexOf(flag);
-  if (idx >= 0) return process.argv[idx + 1];
-  return undefined;
-}
+/**
+ * CLI entry point
+ */
+export async function cli() {
+  const args = process.argv.slice(2);
 
-export function cli() {
-  const [, , command, suitePath] = process.argv;
-
-  if (command !== "run" || !suitePath) {
-    console.log("Usage: testergizer run <path/to/suite.json> [--parallel N] [--headed]");
+  if (args.length === 0) {
+    printHelp();
     process.exit(1);
   }
 
-  const parallel = getArg("--parallel");
-  const headed = process.argv.includes("--headed");
+  const command = args[0];
 
-  runSuiteFromFile(suitePath, {
-    parallel: parallel ? Number(parallel) : undefined,
-    headless: headed ? false : undefined
-  });
+  switch (command) {
+    case "run": {
+      // Find the suite path (first non-flag argument after "run")
+      const suitePath = args.find(
+        arg => arg !== "run" && !arg.startsWith("-")
+      );
+
+      if (!suitePath) {
+        console.error("Error: missing test suite path");
+        printHelp();
+        process.exit(1);
+      }
+
+      // Flags
+      const headed = args.includes("--headed");
+
+      await runSuiteFromFile(suitePath, {
+        headless: !headed
+      });
+
+      break;
+    }
+
+    case "--help":
+    case "-h":
+    case "help":
+      printHelp();
+      process.exit(0);
+
+    default:
+      console.error(`Unknown command: ${command}`);
+      printHelp();
+      process.exit(1);
+  }
 }
+
+/**
+ * Help output
+ */
+function printHelp() {
+  console.log(`
+Testergizer — AI-assisted test execution engine
+
+Usage:
+  testergizer run <suite.json> [options]
+
+Options:
+  --headed        Run browser in headed (UI) mode
+  -h, --help      Show this help message
+
+Examples:
+  testergizer run tests/login.json
+  testergizer run tests/login.json --headed
+`);
+}
+
+/**
+ * Execute CLI
+ */
+cli().catch(err => {
+  console.error(err);
+  process.exit(1);
+});

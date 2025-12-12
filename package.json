@@ -4,11 +4,18 @@
   "description": "Testergizer open-core engine: JSON locator model, core runner, and base CLI.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "license": "Apache-2.0",
+
+  "bin": {
+    "testergizer": "bin/testergizer.js"
+  },
+
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "node dist/examples/runExample.js || echo \"No tests yet.\"",
     "lint": "echo \"Add your linter of choice (ESLint, etc.)\""
   },
+
   "keywords": [
     "qa",
     "testing",
@@ -17,13 +24,19 @@
     "open-core",
     "testergizer"
   ],
+
   "author": "",
-  "license": "Apache-2.0",
+
   "dependencies": {
     "playwright": "^1.49.0"
   },
+
   "devDependencies": {
     "@types/node": "^20.19.26",
     "typescript": "^5.7.0"
+  },
+
+  "engines": {
+    "node": ">=18"
   }
 }

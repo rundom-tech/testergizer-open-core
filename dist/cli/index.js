@@ -1,54 +1,67 @@
-#!/usr/bin/env node
 "use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
 Object.defineProperty(exports, "__esModule", { value: true });
-const coreRunner_1 = require("../coreRunner");
-const fs = __importStar(require("fs"));
-async function main() {
-    const file = process.argv[2];
-    if (!file) {
-        console.error("Usage: testergizer <path-to-json-test>");
+exports.cli = cli;
+const runner_1 = require("../core/runner");
+/**
+ * CLI entry point
+ */
+async function cli() {
+    const args = process.argv.slice(2);
+    if (args.length === 0) {
+        printHelp();
         process.exit(1);
     }
-    const raw = fs.readFileSync(file, "utf-8");
-    const def = JSON.parse(raw);
-    const runner = new coreRunner_1.CoreRunner();
-    await runner.run(def);
-    await runner.dispose();
+    const command = args[0];
+    switch (command) {
+        case "run": {
+            // Find the suite path (first non-flag argument after "run")
+            const suitePath = args.find(arg => arg !== "run" && !arg.startsWith("-"));
+            if (!suitePath) {
+                console.error("Error: missing test suite path");
+                printHelp();
+                process.exit(1);
+            }
+            // Flags
+            const headed = args.includes("--headed");
+            await (0, runner_1.runSuiteFromFile)(suitePath, {
+                headless: !headed
+            });
+            break;
+        }
+        case "--help":
+        case "-h":
+        case "help":
+            printHelp();
+            process.exit(0);
+        default:
+            console.error(`Unknown command: ${command}`);
+            printHelp();
+            process.exit(1);
+    }
 }
-main().catch(err => {
-    console.error("[testergizer] Error:", err);
+/**
+ * Help output
+ */
+function printHelp() {
+    console.log(`
+Testergizer — AI-assisted test execution engine
+
+Usage:
+  testergizer run <suite.json> [options]
+
+Options:
+  --headed        Run browser in headed (UI) mode
+  -h, --help      Show this help message
+
+Examples:
+  testergizer run tests/login.json
+  testergizer run tests/login.json --headed
+`);
+}
+/**
+ * Execute CLI
+ */
+cli().catch(err => {
+    console.error(err);
     process.exit(1);
 });
