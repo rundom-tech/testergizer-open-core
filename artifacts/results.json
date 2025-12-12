@@ -1,0 +1,73 @@
+{
+  "suite": "Login Suite",
+  "suitePath": "tests/login.json",
+  "startedAt": "2025-12-12T07:12:02.159Z",
+  "options": {
+    "headless": false,
+    "slowMo": null,
+    "browser": "chromium",
+    "screenshotOnFail": false
+  },
+  "tests": [
+    {
+      "id": "login-basic",
+      "name": "Basic Login",
+      "status": "passed",
+      "startedAt": "2025-12-12T07:12:02.952Z",
+      "durationMs": 1686,
+      "steps": [
+        {
+          "action": "goto",
+          "status": "passed",
+          "durationMs": 739
+        },
+        {
+          "action": "assert",
+          "status": "passed",
+          "durationMs": 46
+        },
+        {
+          "action": "assert",
+          "status": "passed",
+          "durationMs": 26
+        },
+        {
+          "action": "assert",
+          "status": "passed",
+          "durationMs": 19
+        },
+        {
+          "action": "assert",
+          "status": "passed",
+          "durationMs": 16
+        },
+        {
+          "action": "assert",
+          "status": "passed",
+          "durationMs": 13
+        },
+        {
+          "action": "assert",
+          "status": "passed",
+          "durationMs": 13
+        },
+        {
+          "action": "assert",
+          "status": "passed",
+          "durationMs": 11
+        },
+        {
+          "action": "assert",
+          "status": "passed",
+          "durationMs": 10
+        }
+      ]
+    }
+  ],
+  "endedAt": "2025-12-12T07:12:04.347Z",
+  "summary": {
+    "total": 1,
+    "passed": 1,
+    "failed": 0
+  }
+}

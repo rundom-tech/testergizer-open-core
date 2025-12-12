@@ -66,6 +66,26 @@ const assertions = {
             throw new Error(`Assertion failed: attribute "${step.attribute}" expected "${step.value}", got "${attr}"`);
         }
     },
+    placeholderEquals: async (page, step) => {
+        const el = await page.$(step.selector);
+        if (!el) {
+            throw new Error(`Assertion failed: element not found (${step.selector})`);
+        }
+        const placeholder = await el.getAttribute("placeholder");
+        if (placeholder !== step.value) {
+            throw new Error(`Assertion failed: placeholder expected "${step.value}", got "${placeholder}"`);
+        }
+    },
+    placeholderContains: async (page, step) => {
+        const el = await page.$(step.selector);
+        if (!el) {
+            throw new Error(`Assertion failed: element not found (${step.selector})`);
+        }
+        const placeholder = await el.getAttribute("placeholder");
+        if (!placeholder || !placeholder.includes(step.value)) {
+            throw new Error(`Assertion failed: placeholder does not contain "${step.value}". Actual: "${placeholder}"`);
+        }
+    },
     /* ======================================================
      * Enabled / disabled state
      * ====================================================== */
@@ -89,26 +109,6 @@ const assertions = {
             throw new Error(`Assertion failed: element is not disabled (${step.selector})`);
         }
     },
-    placeholderEquals: async (page, step) => {
-        const el = await page.$(step.selector);
-        if (!el) {
-            throw new Error(`Assertion failed: element not found (${step.selector})`);
-        }
-        const placeholder = await el.getAttribute("placeholder");
-        if (placeholder !== step.value) {
-            throw new Error(`Assertion failed: placeholder expected "${step.value}", got "${placeholder}"`);
-        }
-    },
-    placeholderContains: async (page, step) => {
-        const el = await page.$(step.selector);
-        if (!el) {
-            throw new Error(`Assertion failed: element not found (${step.selector})`);
-        }
-        const placeholder = await el.getAttribute("placeholder");
-        if (!placeholder || !placeholder.includes(step.value)) {
-            throw new Error(`Assertion failed: placeholder does not contain "${step.value}". Actual: "${placeholder}"`);
-        }
-    },
     /* ======================================================
      * URL assertions
      * ====================================================== */
@@ -119,9 +119,6 @@ const assertions = {
         }
     }
 };
-/* ========================================================
- * Public API
- * ======================================================== */
 async function runAssertion(page, step) {
     const type = step.assert;
     if (!type) {

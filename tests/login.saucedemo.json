@@ -1,0 +1,44 @@
+{
+  "version": "1.0",
+  "suiteName": "SauceDemo Login Smoke",
+  "tests": [
+    {
+      "id": "login-ui-contract",
+      "name": "Login UI contract",
+      "steps": [
+        {
+          "id": "goto-login",
+          "action": "goto",
+          "url": "https://www.saucedemo.com/"
+        },
+        {
+          "id": "username-placeholder",
+          "action": "assert",
+          "assert": "placeholderEquals",
+          "selector": "#user-name",
+          "value": "Username"
+        },
+        {
+          "id": "password-placeholder",
+          "action": "assert",
+          "assert": "placeholderEquals",
+          "selector": "#password",
+          "value": "Password"
+        },
+        {
+          "id": "login-button-value",
+          "action": "assert",
+          "assert": "valueContains",
+          "selector": "#login-button",
+          "value": "Login"
+        },
+        {
+          "id": "login-button-enabled",
+          "action": "assert",
+          "assert": "enabled",
+          "selector": "#login-button"
+        }
+      ]
+    }
+  ]
+}
