@@ -1,22 +1,24 @@
-#!/usr/bin/env node
-import { CoreRunner } from "../coreRunner";
-import { JsonTestDefinition } from "../types";
-import * as fs from "fs";
+import { runSuiteFromFile } from "../core/runner";
 
-async function main() {
-  const file = process.argv[2];
-  if (!file) {
-    console.error("Usage: testergizer <path-to-json-test>");
-    process.exit(1);
-  }
-  const raw = fs.readFileSync(file, "utf-8");
-  const def = JSON.parse(raw) as JsonTestDefinition;
-  const runner = new CoreRunner();
-  await runner.run(def);
-  await runner.dispose();
+function getArg(flag: string): string | undefined {
+  const idx = process.argv.indexOf(flag);
+  if (idx >= 0) return process.argv[idx + 1];
+  return undefined;
 }
 
-main().catch(err => {
-  console.error("[testergizer] Error:", err);
-  process.exit(1);
-});
+export function cli() {
+  const [, , command, suitePath] = process.argv;
+
+  if (command !== "run" || !suitePath) {
+    console.log("Usage: testergizer run <path/to/suite.json> [--parallel N] [--headed]");
+    process.exit(1);
+  }
+
+  const parallel = getArg("--parallel");
+  const headed = process.argv.includes("--headed");
+
+  runSuiteFromFile(suitePath, {
+    parallel: parallel ? Number(parallel) : undefined,
+    headless: headed ? false : undefined
+  });
+}

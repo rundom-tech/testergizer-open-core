@@ -1,0 +1,15 @@
+{
+  "baseUrl": "",
+  "parallel": 4,
+  "headless": true,
+  "artifactsDir": "artifacts",
+  "snapshots": {
+    "enabled": true,
+    "html": true,
+    "screenshot": true
+  },
+  "retries": {
+    "test": 0,
+    "step": 0
+  }
+}
