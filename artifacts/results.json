@@ -1,12 +1,12 @@
 {
   "schemaVersion": "1.0",
-  "runId": "32d51c67-5348-4839-8abc-63eed48a118f",
+  "runId": "05c3b146-02e7-4bb8-b75a-feb9bf162650",
   "suite": "SauceDemo Login Smoke",
   "suitePath": "tests/login.saucedemo.json",
   "suiteVersion": "1.0",
-  "startedAt": "2025-12-12T21:59:45.719Z",
+  "startedAt": "2025-12-13T06:10:56.558Z",
   "options": {
-    "headless": false,
+    "headless": true,
     "slowMo": null,
     "browser": "chromium",
     "screenshotOnFail": false,
@@ -14,22 +14,36 @@
     "retryStepIds": [],
     "retryDelayMs": 0
   },
+  "meta": {
+    "runnerVersion": "0.1.0",
+    "git": {
+      "sha": "e27066715e5ad9de9a3238967815b0a52ef3dfda",
+      "branch": "main",
+      "dirty": true
+    },
+    "ci": {
+      "name": null,
+      "runId": null,
+      "job": null
+    },
+    "env": {
+      "node": "v20.11.0",
+      "platform": "win32"
+    }
+  },
   "tests": [
     {
       "id": "login-ui-contract",
       "name": "Login UI contract",
       "status": "passed",
-      "startedAt": "2025-12-12T21:59:46.342Z",
-      "durationMs": 2118,
+      "durationMs": 4865,
       "error": null,
       "steps": [
         {
           "id": "goto-login",
           "action": "goto",
           "status": "passed",
-          "skipped": false,
-          "reason": "",
-          "durationMs": 1354,
+          "durationMs": 3402,
           "attempts": 1,
           "flaky": false,
           "error": null,
@@ -39,9 +53,7 @@
           "id": "username-placeholder",
           "action": "assert",
           "status": "passed",
-          "skipped": false,
-          "reason": "",
-          "durationMs": 99,
+          "durationMs": 89,
           "attempts": 1,
           "flaky": false,
           "error": null,
@@ -51,9 +63,7 @@
           "id": "password-placeholder",
           "action": "assert",
           "status": "passed",
-          "skipped": false,
-          "reason": "",
-          "durationMs": 13,
+          "durationMs": 14,
           "attempts": 1,
           "flaky": false,
           "error": null,
@@ -63,9 +73,7 @@
           "id": "login-button-value",
           "action": "assert",
           "status": "passed",
-          "skipped": false,
-          "reason": "",
-          "durationMs": 15,
+          "durationMs": 17,
           "attempts": 1,
           "flaky": false,
           "error": null,
@@ -75,9 +83,7 @@
           "id": "login-button-enabled",
           "action": "assert",
           "status": "passed",
-          "skipped": false,
-          "reason": "",
-          "durationMs": 13,
+          "durationMs": 15,
           "attempts": 1,
           "flaky": false,
           "error": null,
@@ -86,7 +92,7 @@
       ]
     }
   ],
-  "endedAt": "2025-12-12T21:59:48.214Z",
+  "endedAt": "2025-12-13T06:11:01.894Z",
   "summary": {
     "total": 1,
     "passed": 1,

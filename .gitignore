@@ -1,0 +1,20 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Runtime artifacts
+artifacts/
+*.log
+
+# Playwright
+.playwright/
+test-results/
+playwright-report/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
