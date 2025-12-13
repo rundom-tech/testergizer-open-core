@@ -1,10 +1,10 @@
 {
   "schemaVersion": "1.0",
-  "runId": "05c3b146-02e7-4bb8-b75a-feb9bf162650",
+  "runId": "e442e860-1ca3-4c9d-b1eb-d043aca5280d",
   "suite": "SauceDemo Login Smoke",
   "suitePath": "tests/login.saucedemo.json",
   "suiteVersion": "1.0",
-  "startedAt": "2025-12-13T06:10:56.558Z",
+  "startedAt": "2025-12-13T06:20:39.479Z",
   "options": {
     "headless": true,
     "slowMo": null,
@@ -17,9 +17,9 @@
   "meta": {
     "runnerVersion": "0.1.0",
     "git": {
-      "sha": "e27066715e5ad9de9a3238967815b0a52ef3dfda",
+      "sha": "bb46fed9cdd6c7b0c0e0a19f9a897749005d7527",
       "branch": "main",
-      "dirty": true
+      "dirty": false
     },
     "ci": {
       "name": null,
@@ -36,14 +36,14 @@
       "id": "login-ui-contract",
       "name": "Login UI contract",
       "status": "passed",
-      "durationMs": 4865,
+      "durationMs": 3483,
       "error": null,
       "steps": [
         {
           "id": "goto-login",
           "action": "goto",
           "status": "passed",
-          "durationMs": 3402,
+          "durationMs": 3132,
           "attempts": 1,
           "flaky": false,
           "error": null,
@@ -53,7 +53,7 @@
           "id": "username-placeholder",
           "action": "assert",
           "status": "passed",
-          "durationMs": 89,
+          "durationMs": 68,
           "attempts": 1,
           "flaky": false,
           "error": null,
@@ -63,7 +63,7 @@
           "id": "password-placeholder",
           "action": "assert",
           "status": "passed",
-          "durationMs": 14,
+          "durationMs": 13,
           "attempts": 1,
           "flaky": false,
           "error": null,
@@ -73,7 +73,7 @@
           "id": "login-button-value",
           "action": "assert",
           "status": "passed",
-          "durationMs": 17,
+          "durationMs": 14,
           "attempts": 1,
           "flaky": false,
           "error": null,
@@ -83,7 +83,7 @@
           "id": "login-button-enabled",
           "action": "assert",
           "status": "passed",
-          "durationMs": 15,
+          "durationMs": 11,
           "attempts": 1,
           "flaky": false,
           "error": null,
@@ -92,7 +92,7 @@
       ]
     }
   ],
-  "endedAt": "2025-12-13T06:11:01.894Z",
+  "endedAt": "2025-12-13T06:20:43.449Z",
   "summary": {
     "total": 1,
     "passed": 1,

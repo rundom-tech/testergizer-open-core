@@ -4,11 +4,10 @@ node_modules/
 # Build output
 dist/
 
-# Runtime artifacts
+# Runtime artifacts (results, screenshots, analysis output)
 artifacts/
-*.log
 
-# Playwright
+# Playwright runtime
 .playwright/
 test-results/
 playwright-report/
