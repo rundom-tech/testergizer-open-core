@@ -28,3 +28,11 @@ New features will be evaluated for:
 - Open Core vs Pro scope
 
 Significant new capabilities are expected to land in Testergizer Pro, not in Open Core.
+
+## Governance
+
+Testergizer Open Core is maintained by the project maintainer(s).
+
+Contributions are welcome via pull requests.  
+Changes to licensing, schemas, CLI contracts, or scope require explicit maintainer approval.
+
