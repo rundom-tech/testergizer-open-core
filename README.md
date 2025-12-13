@@ -125,3 +125,10 @@ For a clear explanation of the Open Core vs commercial boundary, see:
 Maintenance policy for the v0.1.x line is documented here:  
 **[Open Core Maintenance Policy](MAINTENANCE.md)**
 
+## License and copyright
+
+Testergizer Open Core is licensed under the **Apache License, Version 2.0**.
+
+- See [LICENSE](LICENSE) for the full license text
+- See [NOTICE](NOTICE) for copyright and attribution information
+
