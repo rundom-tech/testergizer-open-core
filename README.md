@@ -98,3 +98,30 @@ testergizer flaky artifacts/ --out artifacts/flaky.json
 ```
 
 A test/step is considered **flaky** if it has at least one pass and one fail across the provided runs.
+
+## Scope and boundaries
+
+Testergizer Open Core intentionally focuses on **execution, validation, and analysis**.
+
+Included in Open Core:
+- JSON-native test execution
+- Strict suite and results schemas
+- Deterministic run artifacts
+- Step-level retries with failure classification
+- CLI tooling for run, validate, diff, and flaky analysis
+- CI-first behavior and exit codes
+
+Out of scope for Open Core:
+- UI dashboards
+- Test recorder
+- Visual assertions
+- AI-based healing or selector repair
+- Cloud or remote execution
+- Team management and governance features
+
+For a clear explanation of the Open Core vs commercial boundary, see:  
+**[Open Core vs Pro — Scope and Boundaries](PRO-BOUNDARY.md)**
+
+Maintenance policy for the v0.1.x line is documented here:  
+**[Open Core Maintenance Policy](MAINTENANCE.md)**
+
