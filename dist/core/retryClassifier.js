@@ -7,7 +7,7 @@ function classifyRetry(err) {
         return "timeout";
     if (/assertion failed/i.test(msg))
         return "assertion";
-    if (/page\.goto|navigation/i.test(msg))
+    if (/page\.goto|net::|navigation/i.test(msg))
         return "navigation";
     return "unknown";
 }

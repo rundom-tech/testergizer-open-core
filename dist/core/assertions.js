@@ -1,6 +1,9 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.runAssertion = runAssertion;
+function timeoutOpt(step) {
+    return step?.timeoutMs ? { timeout: Number(step.timeoutMs) } : undefined;
+}
 const assertions = {
     exists: async (page, step) => {
         const el = await page.$(step.selector);
@@ -8,10 +11,10 @@ const assertions = {
             throw new Error(`Assertion failed: element does not exist (${step.selector})`);
     },
     visible: async (page, step) => {
-        await page.waitForSelector(step.selector, { state: "visible" });
+        await page.waitForSelector(step.selector, { state: "visible", ...(timeoutOpt(step) ?? {}) });
     },
     hidden: async (page, step) => {
-        await page.waitForSelector(step.selector, { state: "hidden" });
+        await page.waitForSelector(step.selector, { state: "hidden", ...(timeoutOpt(step) ?? {}) });
     },
     textContains: async (page, step) => {
         const el = await page.$(step.selector);
@@ -45,7 +48,7 @@ const assertions = {
         if (!el)
             throw new Error(`Assertion failed: element not found (${step.selector})`);
         if (!step.attribute)
-            throw new Error(`Assertion failed: attributeEquals requires "attribute" field`);
+            throw new Error(`Assertion failed: attributeEquals requires "attribute"`);
         const attr = await el.getAttribute(step.attribute);
         if (attr !== step.value) {
             throw new Error(`Assertion failed: attribute "${step.attribute}" expected "${step.value}", got "${attr}"`);
