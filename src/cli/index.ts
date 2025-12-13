@@ -68,6 +68,36 @@ export async function cli() {
       process.exit(0);
     }
 
+    case "validate": {
+      const file = args[1];
+      if (!file) {
+        console.error("Error: validate requires a JSON file path");
+        process.exit(1);
+      }
+
+      const fs = require("fs");
+      const raw = fs.readFileSync(file, "utf-8");
+      const json = JSON.parse(raw);
+
+      if (file.includes("results")) {
+        const { validateResults } = require("../core/validateResults");
+        validateResults(json);
+        console.log("✔ Results schema valid");
+        process.exit(0);
+      }
+
+      if (file.includes("suite") || file.endsWith(".json")) {
+        const { validateSuite } = require("../core/validateSuite");
+        validateSuite(json);
+        console.log("✔ Suite schema valid");
+        process.exit(0);
+      }
+
+      console.error("Unknown validation target");
+      process.exit(1);
+    }
+
+
     case "--help":
     case "-h":
     case "help":
