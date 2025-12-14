@@ -1,8 +1,24 @@
 import fs from "fs";
 import path from "path";
-import { chromium, firefox, webkit } from "playwright";
+import { chromium, firefox, webkit, BrowserType } from "playwright";
 import { validateSuite } from "./validateSuite";
 import { runAssertion } from "./assertions";
+
+/**
+ * RunnerOptions is part of the internal contract used by the CLI.
+ * Keep this type stable within the v0.1.x line.
+ */
+export interface RunnerOptions {
+  headed?: boolean;
+  slowMo?: number;
+  browser?: "chromium" | "firefox" | "webkit" | string;
+  screenshotOnFail?: boolean;
+
+  // Step retries
+  stepRetries?: number;            // Retry attempts per eligible step (default: 0)
+  retrySteps?: string[];           // If provided, only retry these step IDs
+  retryDelayMs?: number;           // Delay between retry attempts
+}
 
 function sanitizeId(input: string): string {
   return input
@@ -12,23 +28,27 @@ function sanitizeId(input: string): string {
 }
 
 function formatTimestamp(iso: string): string {
-  return iso
-    .replace(/[:]/g, "")
-    .replace(/\..+/, "")
-    .replace("T", "-");
+  // 2025-03-08T09:14:23.123Z -> 20250308-091423
+  const noMs = iso.replace(/\..+/, "").replace(/Z$/, "");
+  const [date, time] = noMs.split("T");
+  return `${date.replace(/-/g, "")}-${time.replace(/:/g, "")}`;
+}
+
+function pickBrowserType(name?: string): BrowserType {
+  const n = (name || "chromium").toLowerCase();
+  if (n === "firefox") return firefox;
+  if (n === "webkit") return webkit;
+  return chromium;
+}
+
+function shouldRetryStep(stepId: string, retrySteps?: string[]): boolean {
+  if (!retrySteps || retrySteps.length === 0) return true;
+  return retrySteps.includes(stepId);
 }
 
 export async function runSuiteFromFile(
   suitePath: string,
-  options: {
-    headed?: boolean;
-    slowMo?: number;
-    browser?: string;
-    screenshotOnFail?: boolean;
-    stepRetries?: number;
-    retrySteps?: string[];
-    retryDelayMs?: number;
-  } = {}
+  options: RunnerOptions = {}
 ) {
   const raw = fs.readFileSync(suitePath, "utf-8");
   const suite = JSON.parse(raw);
@@ -42,12 +62,7 @@ export async function runSuiteFromFile(
     suite.suiteId ||
     sanitizeId(suite.suiteName || "suite");
 
-  const browserType =
-    options.browser === "firefox"
-      ? firefox
-      : options.browser === "webkit"
-      ? webkit
-      : chromium;
+  const browserType = pickBrowserType(options.browser);
 
   const browser = await browserType.launch({
     headless: !options.headed,
@@ -87,15 +102,19 @@ export async function runSuiteFromFile(
     for (const step of test.steps) {
       if (step.disabled) continue;
 
+      const stepId = step.id || "";
+
       const stepResult: any = {
-        id: step.id || "",
+        id: stepId,
         action: step.action,
         status: "passed",
         attempts: 0,
         attemptErrors: []
       };
 
-      const maxRetries = options.stepRetries || 0;
+      const configuredRetries = options.stepRetries ?? 0;
+      const eligibleForRetry = !!stepId && shouldRetryStep(stepId, options.retrySteps);
+      const maxRetries = eligibleForRetry ? configuredRetries : 0;
 
       for (let attempt = 0; attempt <= maxRetries; attempt++) {
         stepResult.attempts++;
@@ -104,13 +123,16 @@ export async function runSuiteFromFile(
             await page.goto(step.url, { waitUntil: step.waitUntil || "load" });
           } else if (step.action === "assert") {
             await runAssertion(page, step);
+          } else {
+            throw new Error(`Unknown step action: ${step.action}`);
           }
           break;
         } catch (err: any) {
           stepResult.attemptErrors.push({
-            reason: err.name || "error",
-            message: err.message || String(err)
+            reason: err?.name || "error",
+            message: err?.message || String(err)
           });
+
           if (attempt === maxRetries) {
             stepResult.status = "failed";
             testResult.status = "failed";
