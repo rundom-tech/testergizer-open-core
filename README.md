@@ -80,21 +80,33 @@ When a step passes after retries, the results report marks it as:
 - `"attempts": >1`
 - `"flaky": true`
 
-## Artifacts
+## Artifacts and results
 
-- `artifacts/results.json`
-- `artifacts/*-failure.png` (when `--screenshot-on-fail` is enabled)
+Each execution produces a **deterministic, append-only results artifact**.
+
+Results are organized per suite and timestamped to support
+historical inspection, diffing, and flaky test analysis.
+
+```
+artifacts/<suiteId>/results_<YYYYMMDD-HHMMSS>.json
+```
+
+Key properties:
+- Results are **never overwritten**
+- Each suite has its own results directory
+- Filenames are derived from the run start time
+- Artifacts are safe for CI, automation, and long-term analysis
 
 ## Diff two runs (by test/step IDs)
 
 ```bash
-testergizer diff artifacts/results.json artifacts/results.prev.json --out artifacts/diff.json
+testergizer diff artifacts/<suiteId>/results_*.json --out artifacts/diff.json
 ```
 
 ## Flaky detection across many runs
 
 ```bash
-testergizer flaky artifacts/ --out artifacts/flaky.json
+testergizer flaky artifacts/<suiteId>/ --out artifacts/flaky.json
 ```
 
 A test/step is considered **flaky** if it has at least one pass and one fail across the provided runs.
@@ -105,7 +117,11 @@ Testergizer includes built-in schema validation for both test suites and results
 
 ```bash
 testergizer validate tests/login.saucedemo.json
-testergizer validate artifacts/results.json
+testergizer validate artifacts/<suiteId>/results_*.json
+```
+
+Validation is intended to enforce contracts in CI pipelines and to
+guarantee that generated artifacts remain compatible with analysis tools.
 
 ## Scope and boundaries
 
@@ -139,4 +155,3 @@ Testergizer Open Core is licensed under the **Apache License, Version 2.0**.
 
 - See [LICENSE](LICENSE) for the full license text
 - See [NOTICE](NOTICE) for copyright and attribution information
-

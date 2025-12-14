@@ -200,6 +200,9 @@ Examples:
   testergizer run tests/login.saucedemo.json --step-retries 2 --retry-steps login-button-value --retry-delay-ms 200
   testergizer diff artifacts/results.json artifacts/results.prev.json --out artifacts/diff.json
   testergizer flaky artifacts/ --out artifacts/flaky.json
+    testergizer validate tests/login.saucedemo.json
+  testergizer validate artifacts/results.json
+
 `);
 }
 
