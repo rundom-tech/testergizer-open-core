@@ -6,18 +6,19 @@ import { runAssertion } from "./assertions";
 
 /**
  * RunnerOptions is part of the internal contract used by the CLI.
- * Keep this type stable within the v0.1.x line.
+ * Both `headed` and `headless` are supported for compatibility.
  */
 export interface RunnerOptions {
   headed?: boolean;
+  headless?: boolean; // accepted for backward / CLI compatibility
   slowMo?: number;
   browser?: "chromium" | "firefox" | "webkit" | string;
   screenshotOnFail?: boolean;
 
   // Step retries
-  stepRetries?: number;            // Retry attempts per eligible step (default: 0)
-  retrySteps?: string[];           // If provided, only retry these step IDs
-  retryDelayMs?: number;           // Delay between retry attempts
+  stepRetries?: number;
+  retrySteps?: string[];
+  retryDelayMs?: number;
 }
 
 function sanitizeId(input: string): string {
@@ -28,7 +29,6 @@ function sanitizeId(input: string): string {
 }
 
 function formatTimestamp(iso: string): string {
-  // 2025-03-08T09:14:23.123Z -> 20250308-091423
   const noMs = iso.replace(/\..+/, "").replace(/Z$/, "");
   const [date, time] = noMs.split("T");
   return `${date.replace(/-/g, "")}-${time.replace(/:/g, "")}`;
@@ -64,8 +64,14 @@ export async function runSuiteFromFile(
 
   const browserType = pickBrowserType(options.browser);
 
+  // Resolve headless mode safely
+  const headless =
+    typeof options.headless === "boolean"
+      ? options.headless
+      : !options.headed;
+
   const browser = await browserType.launch({
-    headless: !options.headed,
+    headless,
     slowMo: options.slowMo
   });
 
