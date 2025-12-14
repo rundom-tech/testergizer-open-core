@@ -188,6 +188,9 @@ Diff options:
 Flaky options:
   --out <path>                               Output file (default: artifacts/flaky.json)
 
+Validate args:
+  validate <file.json>                      Validate a suite or results file against schemas
+
 Schemas:
   schemas/test-suite.v1.json
   schemas/results.v1.json

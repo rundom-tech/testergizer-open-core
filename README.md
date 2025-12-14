@@ -99,6 +99,14 @@ testergizer flaky artifacts/ --out artifacts/flaky.json
 
 A test/step is considered **flaky** if it has at least one pass and one fail across the provided runs.
 
+### Validation
+
+Testergizer includes built-in schema validation for both test suites and results artifacts.
+
+```bash
+testergizer validate tests/login.saucedemo.json
+testergizer validate artifacts/results.json
+
 ## Scope and boundaries
 
 Testergizer Open Core intentionally focuses on **execution, validation, and analysis**.
