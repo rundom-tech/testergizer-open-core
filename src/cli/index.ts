@@ -4,7 +4,7 @@ import { runSuiteFromFile, RunnerOptions } from "../core/runner";
 import { validateSuite } from "../core/validateSuite";
 import { validateResults } from "../core/validateResults";
 import { diffResults, writeDiff } from "../tools/diff";
-import { detectFlaky, writeFlaky } from "../tools/flaky";
+import { detectFlaky } from "../tools/flaky";
 
 function printUsage() {
   console.log(`
@@ -17,7 +17,7 @@ Commands:
   run <suite.json>                           Run a Testergizer suite
   validate <file.json>                      Validate a suite or results file
   diff <resultsA.json> <resultsB.json>      Diff two results files
-  flaky <fileOrDir>                         Detect flaky tests/steps
+  flaky <fileOrDir> [more...]               Detect flaky tests/steps
 
 Run options:
   --headed
@@ -98,9 +98,9 @@ export function cli() {
       const json = JSON.parse(raw);
 
       if (json.tests && json.summary) {
-        validateResults(json); // throws on failure
+        validateResults(json);
       } else {
-        validateSuite(json);   // throws on failure
+        validateSuite(json);
       }
     } catch (err) {
       ok = false;
@@ -111,24 +111,32 @@ export function cli() {
   }
 
   if (cmd === "diff") {
-    const [a, b] = args;
+    const [a, b, ...rest] = args;
     if (!a || !b) {
       console.error("Missing results files");
       process.exit(1);
     }
+
+    const outIdx = rest.indexOf("--out");
+    const outPath =
+      outIdx >= 0 ? rest[outIdx + 1] : path.join("artifacts", "diff.json");
+
     const diff = diffResults(a, b);
-    writeDiff(diff);
+    writeDiff(outPath, diff);
     return;
   }
 
   if (cmd === "flaky") {
-    const target = args[0];
-    if (!target) {
-      console.error("Missing path");
+    if (args.length === 0) {
+      console.error("Missing path(s)");
       process.exit(1);
     }
-    const flaky = detectFlaky(target);
-    writeFlaky(flaky);
+
+    const flaky = detectFlaky(args);
+    const outPath = path.join("artifacts", "flaky.json");
+    fs.mkdirSync(path.dirname(outPath), { recursive: true });
+    fs.writeFileSync(outPath, JSON.stringify(flaky, null, 2), "utf-8");
+    console.log(`Flaky report written to ${outPath}`);
     return;
   }
 
