@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.cli = cli;
 const fs_1 = __importDefault(require("fs"));
+const path_1 = __importDefault(require("path"));
 const runner_1 = require("../core/runner");
 const validateSuite_1 = require("../core/validateSuite");
 const validateResults_1 = require("../core/validateResults");
@@ -21,7 +22,7 @@ Commands:
   run <suite.json>                           Run a Testergizer suite
   validate <file.json>                      Validate a suite or results file
   diff <resultsA.json> <resultsB.json>      Diff two results files
-  flaky <fileOrDir>                         Detect flaky tests/steps
+  flaky <fileOrDir> [more...]               Detect flaky tests/steps
 
 Run options:
   --headed
@@ -90,10 +91,10 @@ function cli() {
             const raw = fs_1.default.readFileSync(filePath, "utf-8");
             const json = JSON.parse(raw);
             if (json.tests && json.summary) {
-                (0, validateResults_1.validateResults)(json); // throws on failure
+                (0, validateResults_1.validateResults)(json);
             }
             else {
-                (0, validateSuite_1.validateSuite)(json); // throws on failure
+                (0, validateSuite_1.validateSuite)(json);
             }
         }
         catch (err) {
@@ -103,23 +104,27 @@ function cli() {
         process.exit(ok ? 0 : 1);
     }
     if (cmd === "diff") {
-        const [a, b] = args;
+        const [a, b, ...rest] = args;
         if (!a || !b) {
             console.error("Missing results files");
             process.exit(1);
         }
+        const outIdx = rest.indexOf("--out");
+        const outPath = outIdx >= 0 ? rest[outIdx + 1] : path_1.default.join("artifacts", "diff.json");
         const diff = (0, diff_1.diffResults)(a, b);
-        (0, diff_1.writeDiff)(diff);
+        (0, diff_1.writeDiff)(outPath, diff);
         return;
     }
     if (cmd === "flaky") {
-        const target = args[0];
-        if (!target) {
-            console.error("Missing path");
+        if (args.length === 0) {
+            console.error("Missing path(s)");
             process.exit(1);
         }
-        const flaky = (0, flaky_1.detectFlaky)(target);
-        (0, flaky_1.writeFlaky)(flaky);
+        const flaky = (0, flaky_1.detectFlaky)(args);
+        const outPath = path_1.default.join("artifacts", "flaky.json");
+        fs_1.default.mkdirSync(path_1.default.dirname(outPath), { recursive: true });
+        fs_1.default.writeFileSync(outPath, JSON.stringify(flaky, null, 2), "utf-8");
+        console.log(`Flaky report written to ${outPath}`);
         return;
     }
     printUsage();
