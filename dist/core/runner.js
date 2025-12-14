@@ -16,10 +16,23 @@ function sanitizeId(input) {
         .replace(/(^-|-$)/g, "");
 }
 function formatTimestamp(iso) {
-    return iso
-        .replace(/[:]/g, "")
-        .replace(/\..+/, "")
-        .replace("T", "-");
+    // 2025-03-08T09:14:23.123Z -> 20250308-091423
+    const noMs = iso.replace(/\..+/, "").replace(/Z$/, "");
+    const [date, time] = noMs.split("T");
+    return `${date.replace(/-/g, "")}-${time.replace(/:/g, "")}`;
+}
+function pickBrowserType(name) {
+    const n = (name || "chromium").toLowerCase();
+    if (n === "firefox")
+        return playwright_1.firefox;
+    if (n === "webkit")
+        return playwright_1.webkit;
+    return playwright_1.chromium;
+}
+function shouldRetryStep(stepId, retrySteps) {
+    if (!retrySteps || retrySteps.length === 0)
+        return true;
+    return retrySteps.includes(stepId);
 }
 async function runSuiteFromFile(suitePath, options = {}) {
     const raw = fs_1.default.readFileSync(suitePath, "utf-8");
@@ -29,11 +42,7 @@ async function runSuiteFromFile(suitePath, options = {}) {
     const suiteId = suite.id ||
         suite.suiteId ||
         sanitizeId(suite.suiteName || "suite");
-    const browserType = options.browser === "firefox"
-        ? playwright_1.firefox
-        : options.browser === "webkit"
-            ? playwright_1.webkit
-            : playwright_1.chromium;
+    const browserType = pickBrowserType(options.browser);
     const browser = await browserType.launch({
         headless: !options.headed,
         slowMo: options.slowMo
@@ -68,14 +77,17 @@ async function runSuiteFromFile(suitePath, options = {}) {
         for (const step of test.steps) {
             if (step.disabled)
                 continue;
+            const stepId = step.id || "";
             const stepResult = {
-                id: step.id || "",
+                id: stepId,
                 action: step.action,
                 status: "passed",
                 attempts: 0,
                 attemptErrors: []
             };
-            const maxRetries = options.stepRetries || 0;
+            const configuredRetries = options.stepRetries ?? 0;
+            const eligibleForRetry = !!stepId && shouldRetryStep(stepId, options.retrySteps);
+            const maxRetries = eligibleForRetry ? configuredRetries : 0;
             for (let attempt = 0; attempt <= maxRetries; attempt++) {
                 stepResult.attempts++;
                 try {
@@ -85,12 +97,15 @@ async function runSuiteFromFile(suitePath, options = {}) {
                     else if (step.action === "assert") {
                         await (0, assertions_1.runAssertion)(page, step);
                     }
+                    else {
+                        throw new Error(`Unknown step action: ${step.action}`);
+                    }
                     break;
                 }
                 catch (err) {
                     stepResult.attemptErrors.push({
-                        reason: err.name || "error",
-                        message: err.message || String(err)
+                        reason: err?.name || "error",
+                        message: err?.message || String(err)
                     });
                     if (attempt === maxRetries) {
                         stepResult.status = "failed";
