@@ -16,7 +16,6 @@ function sanitizeId(input) {
         .replace(/(^-|-$)/g, "");
 }
 function formatTimestamp(iso) {
-    // 2025-03-08T09:14:23.123Z -> 20250308-091423
     const noMs = iso.replace(/\..+/, "").replace(/Z$/, "");
     const [date, time] = noMs.split("T");
     return `${date.replace(/-/g, "")}-${time.replace(/:/g, "")}`;
@@ -29,10 +28,13 @@ function pickBrowserType(name) {
         return playwright_1.webkit;
     return playwright_1.chromium;
 }
-function shouldRetryStep(stepId, retrySteps) {
-    if (!retrySteps || retrySteps.length === 0)
+function resolveRetryStepIds(opts) {
+    return opts.retrySteps ?? opts.retryStepIds;
+}
+function shouldRetryStep(stepId, retryIds) {
+    if (!retryIds || retryIds.length === 0)
         return true;
-    return retrySteps.includes(stepId);
+    return retryIds.includes(stepId);
 }
 async function runSuiteFromFile(suitePath, options = {}) {
     const raw = fs_1.default.readFileSync(suitePath, "utf-8");
@@ -43,12 +45,16 @@ async function runSuiteFromFile(suitePath, options = {}) {
         suite.suiteId ||
         sanitizeId(suite.suiteName || "suite");
     const browserType = pickBrowserType(options.browser);
+    const headless = typeof options.headless === "boolean"
+        ? options.headless
+        : !options.headed;
     const browser = await browserType.launch({
-        headless: !options.headed,
+        headless,
         slowMo: options.slowMo
     });
     const context = await browser.newContext();
     const page = await context.newPage();
+    const retryIds = resolveRetryStepIds(options);
     const results = {
         schemaVersion: "v1",
         runId: `${suiteId}-${Date.now()}`,
@@ -86,7 +92,7 @@ async function runSuiteFromFile(suitePath, options = {}) {
                 attemptErrors: []
             };
             const configuredRetries = options.stepRetries ?? 0;
-            const eligibleForRetry = !!stepId && shouldRetryStep(stepId, options.retrySteps);
+            const eligibleForRetry = !!stepId && shouldRetryStep(stepId, retryIds);
             const maxRetries = eligibleForRetry ? configuredRetries : 0;
             for (let attempt = 0; attempt <= maxRetries; attempt++) {
                 stepResult.attempts++;
