@@ -6,18 +6,25 @@ import { runAssertion } from "./assertions";
 
 /**
  * RunnerOptions is part of the internal contract used by the CLI.
- * Both `headed` and `headless` are supported for compatibility.
+ * Backward-compatible aliases are supported to avoid breaking the CLI.
  */
 export interface RunnerOptions {
   headed?: boolean;
-  headless?: boolean; // accepted for backward / CLI compatibility
+  headless?: boolean;
+
   slowMo?: number;
   browser?: "chromium" | "firefox" | "webkit" | string;
   screenshotOnFail?: boolean;
 
   // Step retries
   stepRetries?: number;
+
+  // Preferred name
   retrySteps?: string[];
+
+  // Backward / CLI alias
+  retryStepIds?: string[];
+
   retryDelayMs?: number;
 }
 
@@ -41,9 +48,13 @@ function pickBrowserType(name?: string): BrowserType {
   return chromium;
 }
 
-function shouldRetryStep(stepId: string, retrySteps?: string[]): boolean {
-  if (!retrySteps || retrySteps.length === 0) return true;
-  return retrySteps.includes(stepId);
+function resolveRetryStepIds(opts: RunnerOptions): string[] | undefined {
+  return opts.retrySteps ?? opts.retryStepIds;
+}
+
+function shouldRetryStep(stepId: string, retryIds?: string[]): boolean {
+  if (!retryIds || retryIds.length === 0) return true;
+  return retryIds.includes(stepId);
 }
 
 export async function runSuiteFromFile(
@@ -64,7 +75,6 @@ export async function runSuiteFromFile(
 
   const browserType = pickBrowserType(options.browser);
 
-  // Resolve headless mode safely
   const headless =
     typeof options.headless === "boolean"
       ? options.headless
@@ -77,6 +87,8 @@ export async function runSuiteFromFile(
 
   const context = await browser.newContext();
   const page = await context.newPage();
+
+  const retryIds = resolveRetryStepIds(options);
 
   const results: any = {
     schemaVersion: "v1",
@@ -119,7 +131,7 @@ export async function runSuiteFromFile(
       };
 
       const configuredRetries = options.stepRetries ?? 0;
-      const eligibleForRetry = !!stepId && shouldRetryStep(stepId, options.retrySteps);
+      const eligibleForRetry = !!stepId && shouldRetryStep(stepId, retryIds);
       const maxRetries = eligibleForRetry ? configuredRetries : 0;
 
       for (let attempt = 0; attempt <= maxRetries; attempt++) {
