@@ -2,15 +2,38 @@
 
 Open-core engine for Testergizer: JSON test definitions, runner, assertions, CLI, and basic analysis tools.
 
-## Install
+## Quick start (npm)
 
+### Install Testergizer Open Core globally
+
+```bash
+npm install -g testergizer-open-core
+npx playwright install
+```
+
+### Verify the installation
+
+After installing, you can verify that Testergizer is available on your system:
+
+```bash
+testergizer --help
+```
+
+If the command prints the Testergizer CLI help, the installation was successful.
+
+
+You can also check the installed version:
+```bash
+npm view testergizer-open-core version
+```
+
+## Install
 ```bash
 npm install
 npx playwright install
 ```
 
 ## Build
-
 ```bash
 npm run build
 ```
