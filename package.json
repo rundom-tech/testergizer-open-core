@@ -1,10 +1,9 @@
 {
   "name": "testergizer-open-core",
-  "version": "0.1.0",
-  "description": "Testergizer open-core engine: JSON locator model, core runner, and base CLI.",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "version": "0.1.1",
+  "description": "Testergizer Open Core: a deterministic test execution engine with JSON-defined suites, CLI runner, and analysis tooling (results, diff, flaky).",
   "license": "Apache-2.0",
+  "author": "RunDOM Technologies",
   "bin": {
     "testergizer": "bin/testergizer.js"
   },
@@ -21,7 +20,17 @@
     "open-core",
     "testergizer"
   ],
-  "author": "",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rundom-tech/testergizer-open-core"
+  },
+  "files": [
+    "dist",
+    "bin",
+    "schemas",
+    "README.md",
+    "LICENSE.txt"
+  ],
   "dependencies": {
     "ajv": "^8.17.1",
     "fast-glob": "^3.3.3",
