@@ -4,7 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.cli = cli;
-console.log(">>> USING MODIFIED CLI <<<");
+console.log("Running CLI...");
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
 const runner_1 = require("../core/runner");
@@ -12,7 +12,22 @@ const validateSuite_1 = require("../core/validateSuite");
 const validateResults_1 = require("../core/validateResults");
 const diff_1 = require("../tools/diff");
 const flaky_1 = require("../tools/flaky");
-const resolveInputs_1 = require("./resolveInputs");
+function sanitizeId(input) {
+    return String(input || "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/(^-|-$)/g, "");
+}
+function formatTimestamp(iso) {
+    // 2025-12-15T04:07:33.123Z -> 20251215-040733
+    const noMs = iso.replace(/\..+/, "").replace(/Z$/, "");
+    const parts = noMs.split("T");
+    const date = parts[0];
+    const time = parts[1];
+    if (!date || !time)
+        return String(Date.now());
+    return `${date.replace(/-/g, "")}-${time.replace(/:/g, "")}`;
+}
 function printUsage() {
     console.log(`
 Testergizer — AI-assisted test execution engine
@@ -28,6 +43,7 @@ Commands:
 
 Run options:
   --headed
+  --headless
   --slow-mo <ms>
   --browser <name>
   --screenshot-on-fail
@@ -37,9 +53,15 @@ Retry options:
   --retry-steps <id1,id2,...>
   --retry-step-ids <id1,id2,...>
   --retry-delay-ms <ms>
+
+Diff options:
+  --out <path>                               Output file (default: artifacts/diff.json)
+
+Flaky options:
+  --out <path>                               Output file (default: artifacts/<suiteId>/flaky_<suiteId>_<timestamp>.json)
 `);
 }
-async function cli() {
+function cli() {
     const [, , cmd, ...args] = process.argv;
     if (!cmd) {
         printUsage();
@@ -83,24 +105,21 @@ async function cli() {
         return;
     }
     if (cmd === "validate") {
-        if (args.length === 0) {
+        const filePath = args[0];
+        if (!filePath) {
             console.error("Missing file path");
             process.exit(1);
         }
         let ok = true;
         try {
-            const files = await (0, resolveInputs_1.resolveInputFiles)(args);
-            for (const filePath of files) {
-                const raw = fs_1.default.readFileSync(filePath, "utf-8");
-                const json = JSON.parse(raw);
-                if (json.tests && json.summary) {
-                    (0, validateResults_1.validateResults)(json);
-                }
-                else {
-                    (0, validateSuite_1.validateSuite)(json);
-                }
+            const raw = fs_1.default.readFileSync(filePath, "utf-8");
+            const json = JSON.parse(raw);
+            if (json.tests && json.summary) {
+                (0, validateResults_1.validateResults)(json);
             }
-            console.log(`✔ Validated ${files.length} file(s) successfully`);
+            else {
+                (0, validateSuite_1.validateSuite)(json);
+            }
         }
         catch (err) {
             ok = false;
@@ -115,21 +134,38 @@ async function cli() {
             process.exit(1);
         }
         const outIdx = rest.indexOf("--out");
-        const outPath = outIdx >= 0 ? rest[outIdx + 1] : path_1.default.join("artifacts", "diff.json");
+        const outOverride = outIdx >= 0 ? rest[outIdx + 1] : undefined;
         const diff = (0, diff_1.diffResults)(a, b);
-        (0, diff_1.writeDiff)(outPath, diff);
+        const suiteIdRaw = diff.suiteId ?? "unknown";
+        const suiteId = sanitizeId(suiteIdRaw) || "unknown";
+        const ts = formatTimestamp(diff.timestamp ?? new Date().toISOString());
+        const outPath = outOverride
+            ? path_1.default.resolve(process.cwd(), outOverride)
+            : path_1.default.join("artifacts", suiteId, `diff_${suiteId}_${ts}.json`);
+        fs_1.default.mkdirSync(path_1.default.dirname(outPath), { recursive: true });
+        fs_1.default.writeFileSync(outPath, JSON.stringify(diff, null, 2), "utf-8");
+        console.log(`Diff written to ${outPath}`);
         return;
     }
     if (cmd === "flaky") {
-        if (args.length === 0) {
+        const rest = [...args];
+        const outIdx = rest.indexOf("--out");
+        const outOverride = outIdx >= 0 ? rest[outIdx + 1] : undefined;
+        const inputs = outIdx >= 0 ? rest.filter((_, i) => i !== outIdx && i !== outIdx + 1) : rest;
+        if (inputs.length === 0) {
             console.error("Missing path(s)");
             process.exit(1);
         }
-        const flaky = (0, flaky_1.detectFlaky)(args);
-        const outPath = path_1.default.join("artifacts", "flaky.json");
+        const analysis = (0, flaky_1.detectFlaky)(inputs);
+        const suiteIdRaw = analysis.suiteId ?? "unknown";
+        const suiteId = sanitizeId(suiteIdRaw) || "unknown";
+        const ts = formatTimestamp(analysis.timestamp ?? new Date().toISOString());
+        const outPath = outOverride
+            ? path_1.default.resolve(process.cwd(), outOverride)
+            : path_1.default.join("artifacts", suiteId, `flaky_${suiteId}_${ts}.json`);
         fs_1.default.mkdirSync(path_1.default.dirname(outPath), { recursive: true });
-        fs_1.default.writeFileSync(outPath, JSON.stringify(flaky, null, 2), "utf-8");
-        console.log(`Flaky report written to ${outPath}`);
+        fs_1.default.writeFileSync(outPath, JSON.stringify(analysis, null, 2), "utf-8");
+        console.log(`Flaky analysis written to ${outPath}`);
         return;
     }
     printUsage();

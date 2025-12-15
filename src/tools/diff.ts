@@ -3,7 +3,10 @@ import path from "path";
 
 type AnyObj = Record<string, any>;
 
-function indexBy<T extends AnyObj>(arr: T[], keyFn: (x: T) => string): Record<string, T> {
+function indexBy<T extends AnyObj>(
+  arr: T[],
+  keyFn: (x: T) => string
+): Record<string, T> {
   const out: Record<string, T> = {};
   for (const item of arr) out[keyFn(item)] = item;
   return out;
@@ -20,16 +23,49 @@ function lastReason(step: AnyObj): string | null {
   return last?.reason ?? null;
 }
 
+/**
+ * Canonical suiteId extraction (must match runner + flaky).
+ */
+function extractSuiteId(run: AnyObj): string | undefined {
+  return (
+    run?.meta?.suite?.id ||   // canonical
+    run?.suiteId ||           // legacy / future
+    run?.meta?.suiteId ||
+    run?.suite?.id ||
+    run?.suite?.suiteId ||
+    undefined
+  );
+}
+
 export function diffResults(aPath: string, bPath: string): AnyObj {
   const a = JSON.parse(fs.readFileSync(aPath, "utf-8"));
   const b = JSON.parse(fs.readFileSync(bPath, "utf-8"));
 
+  // ---- derive suiteId ----
+  const suiteIds = Array.from(
+    new Set(
+      [a, b].map(r => extractSuiteId(r)).filter(Boolean) as string[]
+    )
+  );
+
+  const suiteId =
+    suiteIds.length === 1
+      ? suiteIds[0]
+      : suiteIds.length > 1
+        ? "mixed"
+        : "unknown";
+
+  const timestamp = new Date().toISOString();
+
+  // ---- existing diff logic ----
   const aTests = a.tests ?? [];
   const bTests = b.tests ?? [];
   const aIdx = indexBy(aTests, testKey);
   const bIdx = indexBy(bTests, testKey);
 
-  const allTestKeys = Array.from(new Set([...Object.keys(aIdx), ...Object.keys(bIdx)])).sort();
+  const allTestKeys = Array.from(
+    new Set([...Object.keys(aIdx), ...Object.keys(bIdx)])
+  ).sort();
 
   const testDiffs: AnyObj[] = [];
   const stepChanges: AnyObj[] = [];
@@ -48,50 +84,88 @@ export function diffResults(aPath: string, bPath: string): AnyObj {
     }
 
     if (at.status !== bt.status) {
-      testDiffs.push({ test: tk, change: "status", from: at.status, to: bt.status });
+      testDiffs.push({
+        test: tk,
+        change: "status",
+        from: at.status,
+        to: bt.status
+      });
     }
 
     const aSteps = at.steps ?? [];
     const bSteps = bt.steps ?? [];
     const aS = indexBy(aSteps, (s) => String(s.id));
     const bS = indexBy(bSteps, (s) => String(s.id));
-    const allStepIds = Array.from(new Set([...Object.keys(aS), ...Object.keys(bS)])).sort();
+    const allStepIds = Array.from(
+      new Set([...Object.keys(aS), ...Object.keys(bS)])
+    ).sort();
 
     for (const sid of allStepIds) {
       const as = aS[sid];
       const bs = bS[sid];
 
       if (!as) {
-        stepChanges.push({ key: `${tk}::${sid}`, change: "added", status: bs.status });
+        stepChanges.push({
+          key: `${tk}::${sid}`,
+          change: "added",
+          status: bs.status
+        });
         continue;
       }
       if (!bs) {
-        stepChanges.push({ key: `${tk}::${sid}`, change: "removed", status: as.status });
+        stepChanges.push({
+          key: `${tk}::${sid}`,
+          change: "removed",
+          status: as.status
+        });
         continue;
       }
 
       if (as.status !== bs.status) {
-        stepChanges.push({ key: `${tk}::${sid}`, change: "status", from: as.status, to: bs.status });
+        stepChanges.push({
+          key: `${tk}::${sid}`,
+          change: "status",
+          from: as.status,
+          to: bs.status
+        });
       } else if ((as.attempts ?? 1) !== (bs.attempts ?? 1)) {
-        stepChanges.push({ key: `${tk}::${sid}`, change: "attempts", from: as.attempts ?? 1, to: bs.attempts ?? 1 });
+        stepChanges.push({
+          key: `${tk}::${sid}`,
+          change: "attempts",
+          from: as.attempts ?? 1,
+          to: bs.attempts ?? 1
+        });
       }
 
       const ar = lastReason(as);
       const br = lastReason(bs);
       if (ar && br && ar !== br) {
-        stepChanges.push({ key: `${tk}::${sid}`, change: "retry-reason", from: ar, to: br });
+        stepChanges.push({
+          key: `${tk}::${sid}`,
+          change: "retry-reason",
+          from: ar,
+          to: br
+        });
       }
     }
   }
 
+  // ---- standardized envelope ----
   return {
     schemaVersion: "1.0",
     type: "results-diff",
-    a: { path: aPath, runId: a.runId, startedAt: a.startedAt },
-    b: { path: bPath, runId: b.runId, startedAt: b.startedAt },
+    suiteId,
+    timestamp,
+    inputs: {
+      a: aPath,
+      b: bPath
+    },
     tests: testDiffs,
     steps: stepChanges,
-    summary: { testChanges: testDiffs.length, stepChanges: stepChanges.length }
+    summary: {
+      testChanges: testDiffs.length,
+      stepChanges: stepChanges.length
+    }
   };
 }
 

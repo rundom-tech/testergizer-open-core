@@ -1,3 +1,4 @@
+console.log("Running CLI...");
 import fs from "fs";
 import path from "path";
 import { runSuiteFromFile, RunnerOptions } from "../core/runner";
@@ -5,7 +6,23 @@ import { validateSuite } from "../core/validateSuite";
 import { validateResults } from "../core/validateResults";
 import { diffResults, writeDiff } from "../tools/diff";
 import { detectFlaky } from "../tools/flaky";
-import { resolveInputFiles } from "./resolveInputs";
+
+function sanitizeId(input: string): string {
+  return String(input || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+}
+
+function formatTimestamp(iso: string): string {
+  // 2025-12-15T04:07:33.123Z -> 20251215-040733
+  const noMs = iso.replace(/\..+/, "").replace(/Z$/, "");
+  const parts = noMs.split("T");
+  const date = parts[0];
+  const time = parts[1];
+  if (!date || !time) return String(Date.now());
+  return `${date.replace(/-/g, "")}-${time.replace(/:/g, "")}`;
+}
 
 function printUsage() {
   console.log(`
@@ -22,6 +39,7 @@ Commands:
 
 Run options:
   --headed
+  --headless
   --slow-mo <ms>
   --browser <name>
   --screenshot-on-fail
@@ -31,10 +49,16 @@ Retry options:
   --retry-steps <id1,id2,...>
   --retry-step-ids <id1,id2,...>
   --retry-delay-ms <ms>
+
+Diff options:
+  --out <path>                               Output file (default: artifacts/diff.json)
+
+Flaky options:
+  --out <path>                               Output file (default: artifacts/<suiteId>/flaky_<suiteId>_<timestamp>.json)
 `);
 }
 
-export async function cli() {
+export function cli() {
   const [, , cmd, ...args] = process.argv;
 
   if (!cmd) {
@@ -87,36 +111,29 @@ export async function cli() {
   }
 
   if (cmd === "validate") {
-  if (args.length === 0) {
-    console.error("Missing file path");
-    process.exit(1);
-  }
-
-  let ok = true;
-
-  try {
-  const files = await resolveInputFiles(args);
-
-  for (const filePath of files) {
-    const raw = fs.readFileSync(filePath, "utf-8");
-    const json = JSON.parse(raw);
-
-    if (json.tests && json.summary) {
-      validateResults(json);
-    } else {
-      validateSuite(json);
+    const filePath = args[0];
+    if (!filePath) {
+      console.error("Missing file path");
+      process.exit(1);
     }
+
+    let ok = true;
+    try {
+      const raw = fs.readFileSync(filePath, "utf-8");
+      const json = JSON.parse(raw);
+
+      if (json.tests && json.summary) {
+        validateResults(json);
+      } else {
+        validateSuite(json);
+      }
+    } catch (err) {
+      ok = false;
+      console.error(err instanceof Error ? err.message : err);
+    }
+
+    process.exit(ok ? 0 : 1);
   }
-
-  console.log(`✔ Validated ${files.length} file(s) successfully`);
-} catch (err) {
-  ok = false;
-  console.error(err instanceof Error ? err.message : err);
-}
-
-  process.exit(ok ? 0 : 1);
-}
-
 
   if (cmd === "diff") {
     const [a, b, ...rest] = args;
@@ -126,25 +143,54 @@ export async function cli() {
     }
 
     const outIdx = rest.indexOf("--out");
-    const outPath =
-      outIdx >= 0 ? rest[outIdx + 1] : path.join("artifacts", "diff.json");
+    const outOverride = outIdx >= 0 ? rest[outIdx + 1] : undefined;
 
     const diff = diffResults(a, b);
-    writeDiff(outPath, diff);
+
+    const suiteIdRaw = diff.suiteId ?? "unknown";
+    const suiteId = sanitizeId(suiteIdRaw) || "unknown";
+    const ts = formatTimestamp(diff.timestamp ?? new Date().toISOString());
+
+    const outPath = outOverride
+      ? path.resolve(process.cwd(), outOverride)
+      : path.join(
+          "artifacts",
+          suiteId,
+          `diff_${suiteId}_${ts}.json`
+        );
+
+    fs.mkdirSync(path.dirname(outPath), { recursive: true });
+    fs.writeFileSync(outPath, JSON.stringify(diff, null, 2), "utf-8");
+
+    console.log(`Diff written to ${outPath}`);
     return;
   }
 
+
   if (cmd === "flaky") {
-    if (args.length === 0) {
+    const rest = [...args];
+    const outIdx = rest.indexOf("--out");
+    const outOverride = outIdx >= 0 ? rest[outIdx + 1] : undefined;
+    const inputs = outIdx >= 0 ? rest.filter((_, i) => i !== outIdx && i !== outIdx + 1) : rest;
+
+    if (inputs.length === 0) {
       console.error("Missing path(s)");
       process.exit(1);
     }
 
-    const flaky = detectFlaky(args);
-    const outPath = path.join("artifacts", "flaky.json");
+    const analysis = detectFlaky(inputs);
+
+    const suiteIdRaw = analysis.suiteId ?? "unknown";
+    const suiteId = sanitizeId(suiteIdRaw) || "unknown";
+    const ts = formatTimestamp(analysis.timestamp ?? new Date().toISOString());
+
+    const outPath = outOverride
+      ? path.resolve(process.cwd(), outOverride)
+      : path.join("artifacts", suiteId, `flaky_${suiteId}_${ts}.json`);
+
     fs.mkdirSync(path.dirname(outPath), { recursive: true });
-    fs.writeFileSync(outPath, JSON.stringify(flaky, null, 2), "utf-8");
-    console.log(`Flaky report written to ${outPath}`);
+    fs.writeFileSync(outPath, JSON.stringify(analysis, null, 2), "utf-8");
+    console.log(`Flaky analysis written to ${outPath}`);
     return;
   }
 
