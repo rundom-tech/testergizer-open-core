@@ -1,4 +1,3 @@
-console.log("Running CLI...");
 import fs from "fs";
 import path from "path";
 import { runSuiteFromFile, RunnerOptions } from "../core/runner";
