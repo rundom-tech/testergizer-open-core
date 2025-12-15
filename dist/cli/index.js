@@ -4,6 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.cli = cli;
+console.log(">>> USING MODIFIED CLI <<<");
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
 const runner_1 = require("../core/runner");
@@ -11,6 +12,7 @@ const validateSuite_1 = require("../core/validateSuite");
 const validateResults_1 = require("../core/validateResults");
 const diff_1 = require("../tools/diff");
 const flaky_1 = require("../tools/flaky");
+const resolveInputs_1 = require("./resolveInputs");
 function printUsage() {
     console.log(`
 Testergizer — AI-assisted test execution engine
@@ -37,7 +39,7 @@ Retry options:
   --retry-delay-ms <ms>
 `);
 }
-function cli() {
+async function cli() {
     const [, , cmd, ...args] = process.argv;
     if (!cmd) {
         printUsage();
@@ -81,21 +83,24 @@ function cli() {
         return;
     }
     if (cmd === "validate") {
-        const filePath = args[0];
-        if (!filePath) {
+        if (args.length === 0) {
             console.error("Missing file path");
             process.exit(1);
         }
         let ok = true;
         try {
-            const raw = fs_1.default.readFileSync(filePath, "utf-8");
-            const json = JSON.parse(raw);
-            if (json.tests && json.summary) {
-                (0, validateResults_1.validateResults)(json);
+            const files = await (0, resolveInputs_1.resolveInputFiles)(args);
+            for (const filePath of files) {
+                const raw = fs_1.default.readFileSync(filePath, "utf-8");
+                const json = JSON.parse(raw);
+                if (json.tests && json.summary) {
+                    (0, validateResults_1.validateResults)(json);
+                }
+                else {
+                    (0, validateSuite_1.validateSuite)(json);
+                }
             }
-            else {
-                (0, validateSuite_1.validateSuite)(json);
-            }
+            console.log(`✔ Validated ${files.length} file(s) successfully`);
         }
         catch (err) {
             ok = false;

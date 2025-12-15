@@ -1,3 +1,5 @@
+console.log(">>> USING MODIFIED CLI <<<");
+
 import fs from "fs";
 import path from "path";
 import { runSuiteFromFile, RunnerOptions } from "../core/runner";
@@ -5,6 +7,7 @@ import { validateSuite } from "../core/validateSuite";
 import { validateResults } from "../core/validateResults";
 import { diffResults, writeDiff } from "../tools/diff";
 import { detectFlaky } from "../tools/flaky";
+import { resolveInputFiles } from "./resolveInputs";
 
 function printUsage() {
   console.log(`
@@ -33,7 +36,7 @@ Retry options:
 `);
 }
 
-export function cli() {
+export async function cli() {
   const [, , cmd, ...args] = process.argv;
 
   if (!cmd) {
@@ -86,29 +89,36 @@ export function cli() {
   }
 
   if (cmd === "validate") {
-    const filePath = args[0];
-    if (!filePath) {
-      console.error("Missing file path");
-      process.exit(1);
-    }
-
-    let ok = true;
-    try {
-      const raw = fs.readFileSync(filePath, "utf-8");
-      const json = JSON.parse(raw);
-
-      if (json.tests && json.summary) {
-        validateResults(json);
-      } else {
-        validateSuite(json);
-      }
-    } catch (err) {
-      ok = false;
-      console.error(err instanceof Error ? err.message : err);
-    }
-
-    process.exit(ok ? 0 : 1);
+  if (args.length === 0) {
+    console.error("Missing file path");
+    process.exit(1);
   }
+
+  let ok = true;
+
+  try {
+  const files = await resolveInputFiles(args);
+
+  for (const filePath of files) {
+    const raw = fs.readFileSync(filePath, "utf-8");
+    const json = JSON.parse(raw);
+
+    if (json.tests && json.summary) {
+      validateResults(json);
+    } else {
+      validateSuite(json);
+    }
+  }
+
+  console.log(`✔ Validated ${files.length} file(s) successfully`);
+} catch (err) {
+  ok = false;
+  console.error(err instanceof Error ? err.message : err);
+}
+
+  process.exit(ok ? 0 : 1);
+}
+
 
   if (cmd === "diff") {
     const [a, b, ...rest] = args;

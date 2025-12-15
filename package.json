@@ -24,6 +24,7 @@
   "author": "",
   "dependencies": {
     "ajv": "^8.17.1",
+    "fast-glob": "^3.3.3",
     "playwright": "^1.49.0"
   },
   "devDependencies": {

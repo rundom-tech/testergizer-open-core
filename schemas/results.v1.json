@@ -20,6 +20,10 @@
     "runId": {
       "type": "string"
     },
+    "suiteId": {
+    "type": "string",
+    "description": "Identifier of the suite that produced these results"
+    },
     "suite": {
       "type": "string"
     },

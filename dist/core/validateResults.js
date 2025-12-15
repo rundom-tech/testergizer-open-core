@@ -10,8 +10,13 @@ const ajv = new ajv_1.default({ allErrors: true, strict: true });
 const validate = ajv.compile(results_v1_json_1.default);
 function validateResults(results) {
     if (!validate(results)) {
-        const errors = (validate.errors ?? []);
-        const msg = errors.map(e => `${e.instancePath || "/"} ${e.message}`).join("\n");
+        /*const msg = validate.errors
+          ?.map(e => `${e.instancePath} ${e.message}`)
+          .join("\n");
+        throw new Error(`Results schema validation failed:\n${msg}`);*/
+        const msg = validate.errors
+            ?.map(e => `${e.instancePath} ${e.message} ${JSON.stringify(e.params)}`)
+            .join("\n");
         throw new Error(`Results schema validation failed:\n${msg}`);
     }
 }
