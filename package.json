@@ -1,5 +1,5 @@
 {
-  "name": "testergizer-open-core",
+  "name": "@rundom-tech/testergizer-open-core",
   "version": "0.1.1",
   "description": "Testergizer Open Core: a deterministic test execution engine with JSON-defined suites, CLI runner, and analysis tooling (results, diff, flaky).",
   "license": "Apache-2.0",

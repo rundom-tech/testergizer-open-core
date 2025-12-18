@@ -2,6 +2,14 @@
 
 Open-core engine for Testergizer: JSON test definitions, runner, assertions, CLI, and basic analysis tools.
 
+
+## Documentation
+
+Design notes, schemas, and architectural decisions are documented in the GitHub Wiki:
+
+https://github.com/rundom-tech/testergizer-open-core/wiki
+
+
 ## Quick start (npm)
 
 ### Install Testergizer Open Core globally
@@ -27,22 +35,26 @@ You can also check the installed version:
 npm view testergizer-open-core version
 ```
 
+
 ## Install
 ```bash
 npm install
 npx playwright install
 ```
 
+
 ## Build
 ```bash
 npm run build
 ```
+
 
 ## Link CLI (development)
 
 ```bash
 npm link
 ```
+
 
 ## JSON schemas (v1)
 
@@ -52,6 +64,7 @@ npm link
 ### Versioning
 
 Suites may include a `version` field. If omitted, the runner assumes `"1.0"`.
+
 
 ## Step IDs (traceability)
 
@@ -69,6 +82,7 @@ Add a stable `id` per step in your suite JSON:
 
 If `id` is omitted, the runner emits fallback IDs: `step-1`, `step-2`, ...
 
+
 ## Run
 
 ```bash
@@ -77,6 +91,7 @@ testergizer run tests/login.saucedemo.json --headed --slow-mo 200
 testergizer run tests/login.saucedemo.json --browser firefox
 testergizer run tests/login.saucedemo.json --screenshot-on-fail
 ```
+
 
 ## Step retries (keyed by step ID)
 
@@ -103,6 +118,7 @@ When a step passes after retries, the results report marks it as:
 - `"attempts": >1`
 - `"flaky": true`
 
+
 ## Artifacts and results
 
 Each execution produces a **deterministic, append-only results artifact**.
@@ -120,11 +136,13 @@ Key properties:
 - Filenames are derived from the run start time
 - Artifacts are safe for CI, automation, and long-term analysis
 
+
 ## Diff two runs (by test/step IDs)
 
 ```bash
 testergizer diff artifacts/<suiteId>/results_*.json --out artifacts/diff.json
 ```
+
 
 ## Flaky detection across many runs
 
@@ -145,6 +163,7 @@ testergizer validate artifacts/<suiteId>/results_*.json
 
 Validation is intended to enforce contracts in CI pipelines and to
 guarantee that generated artifacts remain compatible with analysis tools.
+
 
 ## Scope and boundaries
 
@@ -171,6 +190,7 @@ For a clear explanation of the Open Core vs commercial boundary, see:
 
 Maintenance policy for the v0.1.x line is documented here:  
 **[Open Core Maintenance Policy](MAINTENANCE.md)**
+
 
 ## License and copyright
 
