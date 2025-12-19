@@ -191,6 +191,7 @@ For a clear explanation of the Open Core vs commercial boundary, see:
 Maintenance policy for the v0.1.x line is documented here:  
 **[Open Core Maintenance Policy](MAINTENANCE.md)**
 
+Architectural principles, design decisions, and contribution boundaries are documented in the GitHub Wiki.
 
 ## License and copyright
 
