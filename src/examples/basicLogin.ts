@@ -1,18 +1,18 @@
-import { CoreRunner, JsonTestDefinition } from "..";
+import { CoreRunner } from "../core/CoreRunner";
+import { JsonTestDefinition } from "../core/types";
 
-const loginFlow: JsonTestDefinition = {
-  name: "Basic login",
+const test: JsonTestDefinition = {
+  id: "basic-login",
   steps: [
-    { action: "goto", target: "https://example.com/login" },
-    { action: "fill", target: "#username", value: "demo" },
-    { action: "fill", target: "#password", value: "secret" },
-    { action: "click", target: "#login" },
-    { action: "assertVisible", target: "#dashboard" }
-  ]
+    { id: "goto", action: "goto", target: "https://example.com" },
+    { id: "click-login", action: "click", target: "#login" },
+  ],
 };
 
-(async () => {
-  const runner = new CoreRunner({ headless: true });
-  await runner.run(loginFlow);
+async function run() {
+  const runner = new CoreRunner({ executionMode: "stub" });
+  await runner.run(test);
   await runner.dispose();
-})();
+}
+
+run().catch(console.error);

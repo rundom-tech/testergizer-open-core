@@ -4,12 +4,6 @@ export interface CoreRunnerOptions {
   headless?: boolean;
   slowMoMs?: number;
   baseUrl?: string;
-
-  /**
-   * Execution backend selection.
-   * - "playwright": real browser execution (default)
-   * - "stub": no-op execution for pipeline / contract validation
-   */
   executionMode?: ExecutionMode;
 }
 

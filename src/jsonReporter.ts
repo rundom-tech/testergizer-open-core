@@ -36,7 +36,7 @@ export function emitResults(run: Run) {
       status: test.status,
       steps: test.steps.map((step: Step) => ({
         id: step.id,
-        action: step.action,
+        action: step.action.toUpperCase(),
         status: step.status,
         attempts: step.attempts,
         attemptErrors: step.attemptErrors ?? []

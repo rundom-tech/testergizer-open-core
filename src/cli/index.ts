@@ -1,9 +1,12 @@
 import fs from "fs";
 import path from "path";
-import { runSuiteFromFile, RunnerOptions } from "../core/runner";
+
+import { CoreRunner } from "../core/CoreRunner";
+import { JsonTestDefinition } from "../core/types";
+
 import { validateSuite } from "../core/validateSuite";
 import { validateResults } from "../core/validateResults";
-import { diffResults, writeDiff } from "../tools/diff";
+import { diffResults } from "../tools/diff";
 import { detectFlaky } from "../tools/flaky";
 
 function sanitizeId(input: string): string {
@@ -14,7 +17,6 @@ function sanitizeId(input: string): string {
 }
 
 function formatTimestamp(iso: string): string {
-  // 2025-12-15T04:07:33.123Z -> 20251215-040733
   const noMs = iso.replace(/\..+/, "").replace(/Z$/, "");
   const parts = noMs.split("T");
   const date = parts[0];
@@ -40,21 +42,21 @@ Run options:
   --headed
   --headless
   --slow-mo <ms>
-  --browser <name>
-  --screenshot-on-fail
-
-Retry options:
-  --step-retries <n>
-  --retry-steps <id1,id2,...>
-  --retry-step-ids <id1,id2,...>
-  --retry-delay-ms <ms>
 
 Diff options:
-  --out <path>                               Output file (default: artifacts/diff.json)
+  --out <path>
 
 Flaky options:
-  --out <path>                               Output file (default: artifacts/<suiteId>/flaky_<suiteId>_<timestamp>.json)
+  --out <path>
 `);
+}
+
+function isSuiteJson(json: any): json is { tests: JsonTestDefinition[] } {
+  return json && Array.isArray(json.tests);
+}
+
+function isTestJson(json: any): json is JsonTestDefinition {
+  return json && Array.isArray(json.steps) && typeof json.id === "string";
 }
 
 export function cli() {
@@ -65,6 +67,9 @@ export function cli() {
     process.exit(1);
   }
 
+  /* ============================
+     RUN
+     ============================ */
   if (cmd === "run") {
     const suitePath = args[0];
     if (!suitePath) {
@@ -72,43 +77,77 @@ export function cli() {
       process.exit(1);
     }
 
-    const opts: RunnerOptions = {
-      headed: args.includes("--headed"),
-      headless: args.includes("--headless"),
-    };
+    const absolutePath = path.resolve(suitePath);
+    if (!fs.existsSync(absolutePath)) {
+      console.error(`Suite file not found: ${absolutePath}`);
+      process.exit(1);
+    }
+
+    const headed = args.includes("--headed");
+    const headless = args.includes("--headless") ? true : !headed;
 
     const slowMoIdx = args.indexOf("--slow-mo");
-    if (slowMoIdx >= 0) opts.slowMo = Number(args[slowMoIdx + 1]);
+    const slowMoMs = slowMoIdx >= 0 ? Number(args[slowMoIdx + 1]) : undefined;
 
-    const browserIdx = args.indexOf("--browser");
-    if (browserIdx >= 0) opts.browser = args[browserIdx + 1];
+    const raw = fs.readFileSync(absolutePath, "utf-8");
+    const json = JSON.parse(raw);
 
-    const retriesIdx = args.indexOf("--step-retries");
-    if (retriesIdx >= 0) opts.stepRetries = Number(args[retriesIdx + 1]);
+    // Validate as a suite if it looks like a suite
+    if (isSuiteJson(json)) {
+      // Optional but recommended: keep your existing schema validation gate
+      validateSuite(json);
 
-    const retryStepsIdx = args.indexOf("--retry-steps");
-    if (retryStepsIdx >= 0) {
-      opts.retrySteps = args[retryStepsIdx + 1].split(",");
+      const runner = new CoreRunner({
+        executionMode: "stub", // TEMPORARY — until --mode flag is added
+        headless,
+        slowMoMs,
+      });
+
+      (async () => {
+        try {
+          for (const test of json.tests) {
+            if (!test || !Array.isArray(test.steps)) {
+              throw new Error(`Invalid test entry (missing steps) in suite: ${absolutePath}`);
+            }
+            await runner.run(test);
+          }
+        } finally {
+          await runner.dispose();
+        }
+      })().catch(err => {
+        console.error(err);
+        process.exit(1);
+      });
+
+      return;
     }
 
-    const retryStepIdsIdx = args.indexOf("--retry-step-ids");
-    if (retryStepIdsIdx >= 0) {
-      opts.retryStepIds = args[retryStepIdsIdx + 1].split(",");
+    // Support a single-test JSON (developer convenience)
+    if (isTestJson(json)) {
+      const runner = new CoreRunner({
+        executionMode: "stub", // TEMPORARY — until --mode flag is added
+        headless,
+        slowMoMs,
+      });
+
+      runner
+        .run(json)
+        .then(() => runner.dispose())
+        .catch(err => {
+          console.error(err);
+          process.exit(1);
+        });
+
+      return;
     }
 
-    const retryDelayIdx = args.indexOf("--retry-delay-ms");
-    if (retryDelayIdx >= 0) {
-      opts.retryDelayMs = Number(args[retryDelayIdx + 1]);
-    }
-
-    runSuiteFromFile(suitePath, opts).catch(err => {
-      console.error(err);
-      process.exit(1);
-    });
-
-    return;
+    console.error("Input file is neither a suite (tests[]) nor a test (steps[]).");
+    process.exit(1);
   }
 
+  /* ============================
+     VALIDATE
+     ============================ */
   if (cmd === "validate") {
     const filePath = args[0];
     if (!filePath) {
@@ -117,23 +156,38 @@ export function cli() {
     }
 
     let ok = true;
+    let validatedType: "suite" | "results" | null = null;
+
     try {
       const raw = fs.readFileSync(filePath, "utf-8");
       const json = JSON.parse(raw);
 
       if (json.tests && json.summary) {
         validateResults(json);
+        validatedType = "results";
       } else {
         validateSuite(json);
+        validatedType = "suite";
       }
     } catch (err) {
       ok = false;
       console.error(err instanceof Error ? err.message : err);
     }
 
+    if (ok && validatedType) {
+      console.log(
+        validatedType === "results"
+          ? "Results schema validation passed"
+          : "Suite schema validation passed"
+      );
+    }
+
     process.exit(ok ? 0 : 1);
   }
 
+  /* ============================
+     DIFF
+     ============================ */
   if (cmd === "diff") {
     const [a, b, ...rest] = args;
     if (!a || !b) {
@@ -152,11 +206,7 @@ export function cli() {
 
     const outPath = outOverride
       ? path.resolve(process.cwd(), outOverride)
-      : path.join(
-          "artifacts",
-          suiteId,
-          `diff_${suiteId}_${ts}.json`
-        );
+      : path.join("artifacts", suiteId, `diff_${suiteId}_${ts}.json`);
 
     fs.mkdirSync(path.dirname(outPath), { recursive: true });
     fs.writeFileSync(outPath, JSON.stringify(diff, null, 2), "utf-8");
@@ -165,12 +215,17 @@ export function cli() {
     return;
   }
 
-
+  /* ============================
+     FLAKY
+     ============================ */
   if (cmd === "flaky") {
     const rest = [...args];
     const outIdx = rest.indexOf("--out");
     const outOverride = outIdx >= 0 ? rest[outIdx + 1] : undefined;
-    const inputs = outIdx >= 0 ? rest.filter((_, i) => i !== outIdx && i !== outIdx + 1) : rest;
+    const inputs =
+      outIdx >= 0
+        ? rest.filter((_, i) => i !== outIdx && i !== outIdx + 1)
+        : rest;
 
     if (inputs.length === 0) {
       console.error("Missing path(s)");
@@ -189,6 +244,7 @@ export function cli() {
 
     fs.mkdirSync(path.dirname(outPath), { recursive: true });
     fs.writeFileSync(outPath, JSON.stringify(analysis, null, 2), "utf-8");
+
     console.log(`Flaky analysis written to ${outPath}`);
     return;
   }

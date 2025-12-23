@@ -1,7 +1,15 @@
 import Ajv, { ErrorObject } from "ajv";
-import schema from "../../schemas/test-suite.v1.json";
+import addFormats from "ajv-formats";
+import schema from "../../schemas/suite.schema.json";
 
-const ajv = new Ajv({ allErrors: true, strict: true });
+const ajv = new Ajv({
+  allErrors: true,
+  strict: true,
+  allowUnionTypes: true
+});
+
+addFormats(ajv);
+
 const validate = ajv.compile(schema);
 
 export function validateSuite(suite: unknown) {

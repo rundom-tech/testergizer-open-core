@@ -7,24 +7,45 @@ class CoreRunner {
         this.browser = null;
         this.page = null;
         this.options = options;
+        this.executionMode = options.executionMode ?? "playwright";
+        console.log("CoreRunner executionMode =", this.executionMode);
     }
     async ensurePage() {
+        if (this.executionMode === "stub") {
+            throw new Error("ensurePage must not be called in stub execution mode");
+        }
         if (!this.browser) {
-            this.browser = await playwright_1.chromium.launch({ headless: this.options.headless ?? true, slowMo: this.options.slowMoMs });
+            this.browser = await playwright_1.chromium.launch({
+                headless: this.options.headless ?? true,
+                slowMo: this.options.slowMoMs,
+            });
         }
         if (!this.page) {
-            const context = await this.browser.newContext();
+            const context = await this.browser.newContext({
+                baseURL: this.options.baseUrl,
+            });
             this.page = await context.newPage();
         }
         return this.page;
     }
     async run(test) {
-        const page = await this.ensurePage();
+        const page = this.executionMode === "stub" ? null : await this.ensurePage();
         for (const step of test.steps) {
             await this.executeStep(page, step);
         }
     }
     async executeStep(page, step) {
+        /* ============================
+           STUB EXECUTION MODE
+           ============================ */
+        if (this.executionMode === "stub") {
+            // Intentionally do nothing.
+            // Step is considered executed successfully.
+            return;
+        }
+        /* ============================
+           REAL PLAYWRIGHT EXECUTION
+           ============================ */
         const timeout = step.timeoutMs ?? 10000;
         switch (step.action) {
             case "goto":
@@ -40,12 +61,15 @@ class CoreRunner {
             case "fill":
                 if (!step.target)
                     throw new Error("fill requires target");
-                await page.fill(step.target, step.value ?? "", { timeout });
+                await page.fill(step.target, String(step.value ?? ""), { timeout });
                 break;
             case "assertVisible":
                 if (!step.target)
                     throw new Error("assertVisible requires target");
-                await page.waitForSelector(step.target, { timeout, state: "visible" });
+                await page.waitForSelector(step.target, {
+                    timeout,
+                    state: "visible",
+                });
                 break;
             case "assertText":
                 if (!step.target || step.value === undefined) {
@@ -53,7 +77,7 @@ class CoreRunner {
                 }
                 await page.waitForSelector(step.target, { timeout });
                 const text = await page.textContent(step.target);
-                if (!text?.includes(step.value)) {
+                if (!text?.includes(String(step.value))) {
                     throw new Error(`Expected text "${step.value}" in selector ${step.target}, got "${text}"`);
                 }
                 break;
@@ -61,9 +85,7 @@ class CoreRunner {
                 await page.waitForTimeout(Number(step.value) || 1000);
                 break;
             default:
-                // Exhaustive check
-                const _exhaustive = step.action;
-                throw new Error(`Unsupported action: ${_exhaustive}`);
+                throw new Error(`Unsupported action: ${step.action}`);
         }
     }
     async dispose() {

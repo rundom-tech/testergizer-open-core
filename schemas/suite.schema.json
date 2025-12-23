@@ -1,0 +1,57 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://testergizer.dev/schemas/suite.schema.json",
+  "title": "Testergizer Open Core Suite Schema",
+  "type": "object",
+  "required": ["version", "suiteId", "tests"],
+  "additionalProperties": false,
+  "properties": {
+    "version": { "type": "string" },
+    "suiteId": { "type": "string" },
+    "suiteName": { "type": "string" },
+    "tests": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/definitions/test" }
+    }
+  },
+  "definitions": {
+    "test": {
+      "type": "object",
+      "required": ["id", "steps"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "steps": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/definitions/step" }
+        }
+      }
+    },
+    "step": {
+      "type": "object",
+      "required": ["id", "action"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "action": {
+          "type": "string",
+          "enum": [
+            "goto","click","doubleClick","rightClick","hover",
+            "mouseDown","mouseUp","drag","drop",
+            "type","fill","clear","keyDown","keyUp","press",
+            "focus","blur","select","assert","wait"
+          ]
+        },
+        "selector": { "type": "string" },
+        "url": { "type": "string", "format": "uri" },
+        "value": { "type": ["string","number"] },
+        "key": { "type": "string" },
+        "assert": { "type": "string" },
+        "timeoutMs": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}
