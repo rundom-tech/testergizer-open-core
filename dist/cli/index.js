@@ -99,7 +99,6 @@ function cli() {
                             throw new Error(`Invalid test entry (missing steps) in suite: ${absolutePath}`);
                         }
                         await runner.run(test);
-                        console.log(`Executed test: ${test.id}`);
                     }
                 }
                 finally {
