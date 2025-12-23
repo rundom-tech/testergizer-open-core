@@ -1,20 +1,7 @@
-export type TestStatus = "passed" | "failed" | "skipped";
-export type StepStatus = "passed" | "failed" | "skipped";
 import { ExecutionMode } from "./types";
 
-export type TestDomain =
-  | "ui"
-  | "api"
-  | "system";
-
-export type StepDomain =
-  | "ui"
-  | "api"
-  | "fs"
-  | "db"
-  | "queue"
-  | "external"
-  | "other";
+export type TestStatus = "passed" | "failed" | "skipped";
+export type StepStatus = "passed" | "failed" | "skipped";
 
 export interface StepError {
   message: string;
@@ -25,7 +12,7 @@ export interface StepError {
 export interface StepResult {
   id: string;
   action: string;
-  domain?: StepDomain;
+  domain?: string;
   status: StepStatus;
   attempts: number;
   errors: StepError[];
@@ -37,10 +24,30 @@ export interface StepResult {
 export interface TestResult {
   id: string;
   name?: string;
-  testDomain: TestDomain;
+  testDomain: "ui" | "api" | "system";
   executionMode: ExecutionMode;
   status: TestStatus;
   startedAt: string;
   endedAt: string;
   steps: StepResult[];
+}
+
+export interface RunSummary {
+  total: number;
+  passed: number;
+  failed: number;
+  skipped: number;
+}
+
+export interface RunResult {
+  schemaVersion: "v1";
+  runId: string;
+  suiteId: string;
+  suiteName?: string;
+  suitePath?: string;
+  executionMode: ExecutionMode;
+  startedAt: string;
+  endedAt: string;
+  tests: TestResult[];
+  summary: RunSummary;
 }

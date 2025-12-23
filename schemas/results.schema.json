@@ -2,11 +2,27 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://testergizer.dev/schemas/results.schema.json",
   "type": "object",
-  "required": ["schemaVersion", "runId", "startedAt", "endedAt", "tests", "summary"],
+  "required": [
+    "schemaVersion",
+    "runId",
+    "suiteId",
+    "executionMode",
+    "startedAt",
+    "endedAt",
+    "tests",
+    "summary"
+  ],
   "additionalProperties": false,
   "properties": {
     "schemaVersion": { "type": "string", "const": "v1" },
     "runId": { "type": "string" },
+    "suiteId": { "type": "string" },
+    "suiteName": { "type": "string" },
+    "suitePath": { "type": "string" },
+    "executionMode": {
+      "type": "string",
+      "enum": ["stub", "verify", "update", "execute"]
+    },
     "startedAt": { "type": "string", "format": "date-time" },
     "endedAt": { "type": "string", "format": "date-time" },
     "tests": {
@@ -18,12 +34,29 @@
   "$defs": {
     "testResult": {
       "type": "object",
-      "required": ["id", "testDomain", "executionMode", "status", "startedAt", "endedAt", "steps"],
+      "required": [
+        "id",
+        "testDomain",
+        "executionMode",
+        "status",
+        "startedAt",
+        "endedAt",
+        "steps"
+      ],
       "properties": {
         "id": { "type": "string" },
-        "testDomain": { "type": "string", "enum": ["ui", "api", "system"] },
-        "executionMode": { "type": "string", "enum": ["stub", "verify", "update", "execute"] },
-        "status": { "type": "string", "enum": ["passed", "failed", "skipped"] },
+        "testDomain": {
+          "type": "string",
+          "enum": ["ui", "api", "system"]
+        },
+        "executionMode": {
+          "type": "string",
+          "enum": ["stub", "verify", "update", "execute"]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["passed", "failed", "skipped"]
+        },
         "startedAt": { "type": "string", "format": "date-time" },
         "endedAt": { "type": "string", "format": "date-time" },
         "steps": {
@@ -34,11 +67,23 @@
     },
     "stepResult": {
       "type": "object",
-      "required": ["id", "action", "status", "attempts", "errors", "startedAt", "endedAt", "durationMs"],
+      "required": [
+        "id",
+        "action",
+        "status",
+        "attempts",
+        "errors",
+        "startedAt",
+        "endedAt",
+        "durationMs"
+      ],
       "properties": {
         "id": { "type": "string" },
         "action": { "type": "string" },
-        "status": { "type": "string", "enum": ["passed", "failed", "skipped"] },
+        "status": {
+          "type": "string",
+          "enum": ["passed", "failed", "skipped"]
+        },
         "attempts": { "type": "integer" },
         "errors": { "type": "array" },
         "startedAt": { "type": "string", "format": "date-time" },
