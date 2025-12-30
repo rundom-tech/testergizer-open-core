@@ -8,6 +8,7 @@ import { validateSuite } from "../core/validateSuite";
 import { validateResults } from "../core/validateResults";
 import { diffResults } from "../tools/diff";
 import { detectFlaky } from "../tools/flaky";
+import { runSuiteFromFile } from "./runSuiteFromFile";
 
 function sanitizeId(input: string): string {
   return String(input || "")
@@ -77,73 +78,25 @@ export function cli() {
       process.exit(1);
     }
 
-    const absolutePath = path.resolve(suitePath);
-    if (!fs.existsSync(absolutePath)) {
-      console.error(`Suite file not found: ${absolutePath}`);
-      process.exit(1);
-    }
-
-    const headed = args.includes("--headed");
-    const headless = args.includes("--headless") ? true : !headed;
-
-    const slowMoIdx = args.indexOf("--slow-mo");
-    const slowMoMs = slowMoIdx >= 0 ? Number(args[slowMoIdx + 1]) : undefined;
-
-    const raw = fs.readFileSync(absolutePath, "utf-8");
-    const json = JSON.parse(raw);
-
-    // Validate as a suite if it looks like a suite
-    if (isSuiteJson(json)) {
-      // Optional but recommended: keep your existing schema validation gate
-      validateSuite(json);
-
-      const runner = new CoreRunner({
-        executionMode: "stub", // TEMPORARY — until --mode flag is added
-        headless,
-        slowMoMs,
-      });
-
-      (async () => {
-        try {
-          for (const test of json.tests) {
-            if (!test || !Array.isArray(test.steps)) {
-              throw new Error(`Invalid test entry (missing steps) in suite: ${absolutePath}`);
-            }
-            await runner.run(test);
-          }
-        } finally {
-          await runner.dispose();
-        }
-      })().catch(err => {
+    runSuiteFromFile(suitePath, {
+      executionMode: "stub", // TEMPORARY
+      headless: !args.includes("--headed"),
+      slowMo: (() => {
+        const idx = args.indexOf("--slow-mo");
+        return idx >= 0 ? Number(args[idx + 1]) : undefined;
+      })(),
+    })
+      .then(runResult => {
+        console.log(JSON.stringify(runResult, null, 2));
+      })
+      .catch(err => {
         console.error(err);
         process.exit(1);
       });
 
-      return;
-    }
-
-    // Support a single-test JSON (developer convenience)
-    if (isTestJson(json)) {
-      const runner = new CoreRunner({
-        executionMode: "stub", // TEMPORARY — until --mode flag is added
-        headless,
-        slowMoMs,
-      });
-
-      runner
-        .run(json)
-        .then(() => runner.dispose())
-        .catch(err => {
-          console.error(err);
-          process.exit(1);
-        });
-
-      return;
-    }
-
-    console.error("Input file is neither a suite (tests[]) nor a test (steps[]).");
-    process.exit(1);
+    return;
   }
+
 
   /* ============================
      VALIDATE

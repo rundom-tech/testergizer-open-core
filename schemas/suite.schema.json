@@ -1,5 +1,5 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://testergizer.dev/schemas/suite.schema.json",
   "title": "Testergizer Open Core Suite Schema",
   "type": "object",

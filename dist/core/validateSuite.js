@@ -4,10 +4,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.validateSuite = validateSuite;
-const ajv_1 = __importDefault(require("ajv"));
+const _2020_1 = __importDefault(require("ajv/dist/2020"));
 const ajv_formats_1 = __importDefault(require("ajv-formats"));
 const suite_schema_json_1 = __importDefault(require("../../schemas/suite.schema.json"));
-const ajv = new ajv_1.default({
+const ajv = new _2020_1.default({
     allErrors: true,
     strict: true,
     allowUnionTypes: true

@@ -1,4 +1,5 @@
 import fs from "fs";
+import path from "path";
 import { CoreRunner } from "../core/CoreRunner";
 import { JsonTestDefinition } from "../core/types";
 import { RunResult } from "../core/resultTypes";
@@ -8,6 +9,14 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
+function formatTimestamp(iso: string): string {
+  // 2025-12-30T23:35:58.613Z → 20251230-233558
+  return iso
+    .replace(/\..+/, "")
+    .replace("T", "-")
+    .replace(/[:Z]/g, "");
+}
+
 export async function runSuiteFromFile(
   suitePath: string,
   options: any = {}
@@ -15,8 +24,14 @@ export async function runSuiteFromFile(
   const raw = fs.readFileSync(suitePath, "utf-8");
   const suite = JSON.parse(raw);
 
+  if (!suite.suiteId || !Array.isArray(suite.tests)) {
+    throw new Error("Invalid suite file: missing suiteId or tests[]");
+  }
+
+  const executionMode = options.executionMode ?? "stub";
+
   const runner = new CoreRunner({
-    executionMode: options.executionMode ?? "stub",
+    executionMode,
     headless: options.headless,
     slowMoMs: options.slowMo
   });
@@ -28,6 +43,8 @@ export async function runSuiteFromFile(
     const result = await runner.run(test);
     testResults.push(result);
   }
+
+  await runner.dispose();
 
   const endedAt = nowIso();
 
@@ -44,13 +61,28 @@ export async function runSuiteFromFile(
     suiteId: suite.suiteId,
     suiteName: suite.suiteName,
     suitePath,
-    executionMode: options.executionMode ?? "stub",
+    executionMode,
     startedAt,
     endedAt,
     tests: testResults,
     summary
   };
 
+  // 1. Validate against strict schema
   validateResults(runResult);
+
+  // 2. Persist to disk (CLI responsibility)
+  const ts = formatTimestamp(startedAt);
+  const outDir = path.join("artifacts", suite.suiteId);
+  const outFile = path.join(
+    outDir,
+    `run_${suite.suiteId}_${ts}.json`
+  );
+
+  fs.mkdirSync(outDir, { recursive: true });
+  fs.writeFileSync(outFile, JSON.stringify(runResult, null, 2), "utf-8");
+
+  console.log(`Run results written to ${outFile}`);
+
   return runResult;
 }

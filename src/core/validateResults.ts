@@ -1,7 +1,14 @@
-import Ajv from "ajv";
-import schema from "../../schemas/results.v1.json";
+import Ajv from "ajv/dist/2020";
+import addFormats from "ajv-formats";
+import schema from "../../schemas/results.schema.json";
 
-const ajv = new Ajv({ allErrors: true, strict: true });
+const ajv = new Ajv({ 
+  allErrors: true, 
+  strict: true 
+});
+
+addFormats(ajv);
+
 const validate = ajv.compile(schema);
 
 export function validateResults(results: any) {

@@ -4,10 +4,15 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.validateResults = validateResults;
-const ajv_1 = __importDefault(require("ajv"));
-const results_v1_json_1 = __importDefault(require("../../schemas/results.v1.json"));
-const ajv = new ajv_1.default({ allErrors: true, strict: true });
-const validate = ajv.compile(results_v1_json_1.default);
+const _2020_1 = __importDefault(require("ajv/dist/2020"));
+const ajv_formats_1 = __importDefault(require("ajv-formats"));
+const results_schema_json_1 = __importDefault(require("../../schemas/results.schema.json"));
+const ajv = new _2020_1.default({
+    allErrors: true,
+    strict: true
+});
+(0, ajv_formats_1.default)(ajv);
+const validate = ajv.compile(results_schema_json_1.default);
 function validateResults(results) {
     if (!validate(results)) {
         /*const msg = validate.errors

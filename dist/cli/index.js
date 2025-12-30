@@ -6,11 +6,11 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.cli = cli;
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
-const CoreRunner_1 = require("../core/CoreRunner");
 const validateSuite_1 = require("../core/validateSuite");
 const validateResults_1 = require("../core/validateResults");
 const diff_1 = require("../tools/diff");
 const flaky_1 = require("../tools/flaky");
+const runSuiteFromFile_1 = require("./runSuiteFromFile");
 function sanitizeId(input) {
     return String(input || "")
         .toLowerCase()
@@ -72,62 +72,22 @@ function cli() {
             console.error("Missing suite path");
             process.exit(1);
         }
-        const absolutePath = path_1.default.resolve(suitePath);
-        if (!fs_1.default.existsSync(absolutePath)) {
-            console.error(`Suite file not found: ${absolutePath}`);
+        (0, runSuiteFromFile_1.runSuiteFromFile)(suitePath, {
+            executionMode: "stub", // TEMPORARY
+            headless: !args.includes("--headed"),
+            slowMo: (() => {
+                const idx = args.indexOf("--slow-mo");
+                return idx >= 0 ? Number(args[idx + 1]) : undefined;
+            })(),
+        })
+            .then(runResult => {
+            console.log(JSON.stringify(runResult, null, 2));
+        })
+            .catch(err => {
+            console.error(err);
             process.exit(1);
-        }
-        const headed = args.includes("--headed");
-        const headless = args.includes("--headless") ? true : !headed;
-        const slowMoIdx = args.indexOf("--slow-mo");
-        const slowMoMs = slowMoIdx >= 0 ? Number(args[slowMoIdx + 1]) : undefined;
-        const raw = fs_1.default.readFileSync(absolutePath, "utf-8");
-        const json = JSON.parse(raw);
-        // Validate as a suite if it looks like a suite
-        if (isSuiteJson(json)) {
-            // Optional but recommended: keep your existing schema validation gate
-            (0, validateSuite_1.validateSuite)(json);
-            const runner = new CoreRunner_1.CoreRunner({
-                executionMode: "stub", // TEMPORARY — until --mode flag is added
-                headless,
-                slowMoMs,
-            });
-            (async () => {
-                try {
-                    for (const test of json.tests) {
-                        if (!test || !Array.isArray(test.steps)) {
-                            throw new Error(`Invalid test entry (missing steps) in suite: ${absolutePath}`);
-                        }
-                        await runner.run(test);
-                    }
-                }
-                finally {
-                    await runner.dispose();
-                }
-            })().catch(err => {
-                console.error(err);
-                process.exit(1);
-            });
-            return;
-        }
-        // Support a single-test JSON (developer convenience)
-        if (isTestJson(json)) {
-            const runner = new CoreRunner_1.CoreRunner({
-                executionMode: "stub", // TEMPORARY — until --mode flag is added
-                headless,
-                slowMoMs,
-            });
-            runner
-                .run(json)
-                .then(() => runner.dispose())
-                .catch(err => {
-                console.error(err);
-                process.exit(1);
-            });
-            return;
-        }
-        console.error("Input file is neither a suite (tests[]) nor a test (steps[]).");
-        process.exit(1);
+        });
+        return;
     }
     /* ============================
        VALIDATE

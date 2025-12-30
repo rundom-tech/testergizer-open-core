@@ -1,4 +1,4 @@
-import Ajv, { ErrorObject } from "ajv";
+import Ajv, { ErrorObject } from "ajv/dist/2020";
 import addFormats from "ajv-formats";
 import schema from "../../schemas/suite.schema.json";
 
