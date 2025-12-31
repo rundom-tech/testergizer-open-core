@@ -12,7 +12,7 @@ It intentionally prioritizes execution semantics, determinism, and result contra
 - Unified all test execution under a single orchestration layer (`CoreRunner`).
 - Introduced explicit **execution modes** as a first-class concept:
   - `stub` (deterministic, non-interactive)
-  - future-facing modes: `verify`, `update`, `execute`
+  - future-facing modes: `execute`, `baseline`
 - Established an executor abstraction to decouple orchestration from step semantics.
 - Defined a stable, schema-validated **RunResult model** capturing:
   - execution mode
@@ -37,7 +37,7 @@ It intentionally prioritizes execution semantics, determinism, and result contra
 ### Changed
 - Refactored execution architecture to unify all test execution under `CoreRunner`.
 - CLI `run` command now delegates execution exclusively to `CoreRunner`; legacy step execution logic is no longer used.
-- Introduced execution modes (`stub`, future-facing `verify`, `update`, `execute`) with deterministic `stub` as the initial implementation.
+- Introduced execution modes (`stub`, future-facing `execute`, `baseline`) with deterministic `stub` as the initial implementation.
 - Established executor abstraction to decouple step semantics from orchestration.
 - Defined a stable, schema-validated `RunResult` contract capturing execution mode, test domain, timing, and step outcomes.
 

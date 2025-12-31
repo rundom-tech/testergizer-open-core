@@ -77,8 +77,7 @@ Execution mode is **part of the execution contract** and is recorded in the resu
 |-----|--------|
 | `stub` | Deterministic structural execution. |
 | `execute` | Real execution against the target system. |
-| `verify` | Reserved for future deterministic verification modes. |
-| `update` | Reserved for future baseline update flows. |
+| `baseline` | Reserved for future baseline update flows. |
 
 ---
 

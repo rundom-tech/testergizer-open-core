@@ -1,8 +1,7 @@
 export type ExecutionMode =
   | "stub"
-  | "verify"
-  | "update"
-  | "execute";
+  | "execute"
+  | "baseline";
 
 
 export interface CoreRunnerOptions {

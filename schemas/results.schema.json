@@ -21,7 +21,7 @@
     "suitePath": { "type": "string" },
     "executionMode": {
       "type": "string",
-      "enum": ["stub", "verify", "update", "execute"]
+      "enum": ["stub", "execute", "baseline"]
     },
     "startedAt": { "type": "string", "format": "date-time" },
     "endedAt": { "type": "string", "format": "date-time" },
@@ -51,7 +51,7 @@
         },
         "executionMode": {
           "type": "string",
-          "enum": ["stub", "verify", "update", "execute"]
+          "enum": ["stub", "execute", "baseline"]
         },
         "status": {
           "type": "string",

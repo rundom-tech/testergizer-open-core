@@ -34,7 +34,7 @@ Usage:
   testergizer <command> [args] [options]
 
 Commands:
-  run <suite.json>                           Run a Testergizer suite
+  run <suite.json>                          Run a Testergizer suite
   validate <file.json>                      Validate a suite or results file
   diff <resultsA.json> <resultsB.json>      Diff two results files
   flaky <fileOrDir> [more...]               Detect flaky tests/steps
