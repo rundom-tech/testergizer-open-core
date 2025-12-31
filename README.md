@@ -33,7 +33,7 @@ Testergizer Open Core is built around the following principles:
 
 ## Documentation
 
-Design notes, schemas, and architectural decisions are documented in the GitHub Wiki:
+Design notes and architectural discussions are being consolidated in the GitHub Wiki:
 
 https://github.com/rundom-tech/testergizer-open-core/wiki
 
