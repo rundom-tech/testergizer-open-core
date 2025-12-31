@@ -7,16 +7,12 @@ exports.validateSuite = validateSuite;
 const _2020_1 = __importDefault(require("ajv/dist/2020"));
 const ajv_formats_1 = __importDefault(require("ajv-formats"));
 const suite_schema_json_1 = __importDefault(require("../../schemas/suite.schema.json"));
-const ajv = new _2020_1.default({
-    allErrors: true,
-    strict: true,
-    allowUnionTypes: true
-});
+const ajv = new _2020_1.default({ allErrors: true, strict: true, allowUnionTypes: true });
 (0, ajv_formats_1.default)(ajv);
 const validate = ajv.compile(suite_schema_json_1.default);
 function validateSuite(suite) {
     if (!validate(suite)) {
-        const errors = (validate.errors ?? []);
+        const errors = validate.errors ?? [];
         const msg = errors.map(e => `${e.instancePath || "/"} ${e.message}`).join("\n");
         throw new Error(`Suite schema validation failed:\n${msg}`);
     }

@@ -6,11 +6,15 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.cli = cli;
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
+const fast_glob_1 = __importDefault(require("fast-glob"));
+const runSuiteFromFile_1 = require("./runSuiteFromFile");
 const validateSuite_1 = require("../core/validateSuite");
 const validateResults_1 = require("../core/validateResults");
 const diff_1 = require("../tools/diff");
 const flaky_1 = require("../tools/flaky");
-const runSuiteFromFile_1 = require("./runSuiteFromFile");
+/* ---------------------------------- */
+/* helpers                             */
+/* ---------------------------------- */
 function sanitizeId(input) {
     return String(input || "")
         .toLowerCase()
@@ -19,79 +23,80 @@ function sanitizeId(input) {
 }
 function formatTimestamp(iso) {
     const noMs = iso.replace(/\..+/, "").replace(/Z$/, "");
-    const parts = noMs.split("T");
-    const date = parts[0];
-    const time = parts[1];
+    const [date, time] = noMs.split("T");
     if (!date || !time)
         return String(Date.now());
     return `${date.replace(/-/g, "")}-${time.replace(/:/g, "")}`;
 }
+function expandInputs(inputs) {
+    return inputs.flatMap(input => input.includes("*") ? fast_glob_1.default.sync(input, { onlyFiles: true }) : [input]);
+}
 function printUsage() {
     console.log(`
-Testergizer — AI-assisted test execution engine
+Testergizer Open Core
 
 Usage:
   testergizer <command> [args] [options]
 
 Commands:
-  run <suite.json>                           Run a Testergizer suite
-  validate <file.json>                      Validate a suite or results file
-  diff <resultsA.json> <resultsB.json>      Diff two results files
-  flaky <fileOrDir> [more...]               Detect flaky tests/steps
+  run <suite.json>
+  validate <file.json>
+  diff <resultsA> <resultsB>
+  flaky <fileOrDir> [more...]
 
 Run options:
+  --mode <stub|execute>
   --headed
   --headless
   --slow-mo <ms>
+  --base-url <url>
 
-Diff options:
-  --out <path>
-
-Flaky options:
+Diff / Flaky options:
   --out <path>
 `);
 }
-function isSuiteJson(json) {
-    return json && Array.isArray(json.tests);
-}
-function isTestJson(json) {
-    return json && Array.isArray(json.steps) && typeof json.id === "string";
-}
-function cli() {
+/* ---------------------------------- */
+/* CLI                                 */
+/* ---------------------------------- */
+async function cli() {
     const [, , cmd, ...args] = process.argv;
     if (!cmd) {
         printUsage();
         process.exit(1);
     }
-    /* ============================
-       RUN
-       ============================ */
+    /* ---------- run ---------- */
     if (cmd === "run") {
         const suitePath = args[0];
         if (!suitePath) {
             console.error("Missing suite path");
             process.exit(1);
         }
-        (0, runSuiteFromFile_1.runSuiteFromFile)(suitePath, {
-            executionMode: "stub", // TEMPORARY
-            headless: !args.includes("--headed"),
-            slowMo: (() => {
-                const idx = args.indexOf("--slow-mo");
-                return idx >= 0 ? Number(args[idx + 1]) : undefined;
-            })(),
-        })
-            .then(runResult => {
-            console.log(JSON.stringify(runResult, null, 2));
-        })
-            .catch(err => {
-            console.error(err);
+        const opts = {};
+        const modeIdx = args.indexOf("--mode");
+        if (modeIdx >= 0) {
+            opts.executionMode = args[modeIdx + 1];
+        }
+        if (args.includes("--headed"))
+            opts.headless = false;
+        if (args.includes("--headless"))
+            opts.headless = true;
+        const slowMoIdx = args.indexOf("--slow-mo");
+        if (slowMoIdx >= 0)
+            opts.slowMo = Number(args[slowMoIdx + 1]);
+        const baseUrlIdx = args.indexOf("--base-url");
+        if (baseUrlIdx >= 0)
+            opts.baseUrl = String(args[baseUrlIdx + 1]);
+        try {
+            const { runResult, outPath } = await (0, runSuiteFromFile_1.runSuiteFromFile)(suitePath, opts);
+            console.log(`Results written to ${outPath}`);
+            process.exit(runResult.summary.failed > 0 ? 10 : 0);
+        }
+        catch (err) {
+            console.error(err instanceof Error ? err.message : err);
             process.exit(1);
-        });
-        return;
+        }
     }
-    /* ============================
-       VALIDATE
-       ============================ */
+    /* ---------- validate ---------- */
     if (cmd === "validate") {
         const filePath = args[0];
         if (!filePath) {
@@ -123,32 +128,33 @@ function cli() {
         }
         process.exit(ok ? 0 : 1);
     }
-    /* ============================
-       DIFF
-       ============================ */
+    /* ---------- diff ---------- */
     if (cmd === "diff") {
         const [a, b, ...rest] = args;
         if (!a || !b) {
-            console.error("Missing results files");
+            console.error("Missing diff inputs");
             process.exit(1);
         }
         const outIdx = rest.indexOf("--out");
         const outOverride = outIdx >= 0 ? rest[outIdx + 1] : undefined;
-        const diff = (0, diff_1.diffResults)(a, b);
-        const suiteIdRaw = diff.suiteId ?? "unknown";
-        const suiteId = sanitizeId(suiteIdRaw) || "unknown";
+        const aFiles = expandInputs([a]);
+        const bFiles = expandInputs([b]);
+        if (!aFiles.length || !bFiles.length) {
+            console.error("No matching result files found");
+            process.exit(1);
+        }
+        const diff = (0, diff_1.diffResults)(aFiles, bFiles);
+        const suiteId = sanitizeId(diff.suiteId ?? "unknown");
         const ts = formatTimestamp(diff.timestamp ?? new Date().toISOString());
         const outPath = outOverride
             ? path_1.default.resolve(process.cwd(), outOverride)
             : path_1.default.join("artifacts", suiteId, `diff_${suiteId}_${ts}.json`);
         fs_1.default.mkdirSync(path_1.default.dirname(outPath), { recursive: true });
-        fs_1.default.writeFileSync(outPath, JSON.stringify(diff, null, 2), "utf-8");
+        (0, diff_1.writeDiff)(outPath, diff);
         console.log(`Diff written to ${outPath}`);
-        return;
+        process.exit(0);
     }
-    /* ============================
-       FLAKY
-       ============================ */
+    /* ---------- flaky ---------- */
     if (cmd === "flaky") {
         const rest = [...args];
         const outIdx = rest.indexOf("--out");
@@ -156,13 +162,13 @@ function cli() {
         const inputs = outIdx >= 0
             ? rest.filter((_, i) => i !== outIdx && i !== outIdx + 1)
             : rest;
-        if (inputs.length === 0) {
-            console.error("Missing path(s)");
+        const files = expandInputs(inputs);
+        if (!files.length) {
+            console.error("No matching result files found");
             process.exit(1);
         }
-        const analysis = (0, flaky_1.detectFlaky)(inputs);
-        const suiteIdRaw = analysis.suiteId ?? "unknown";
-        const suiteId = sanitizeId(suiteIdRaw) || "unknown";
+        const analysis = (0, flaky_1.detectFlaky)(files);
+        const suiteId = sanitizeId(analysis.suiteId ?? "unknown");
         const ts = formatTimestamp(analysis.timestamp ?? new Date().toISOString());
         const outPath = outOverride
             ? path_1.default.resolve(process.cwd(), outOverride)
@@ -170,9 +176,10 @@ function cli() {
         fs_1.default.mkdirSync(path_1.default.dirname(outPath), { recursive: true });
         fs_1.default.writeFileSync(outPath, JSON.stringify(analysis, null, 2), "utf-8");
         console.log(`Flaky analysis written to ${outPath}`);
-        return;
+        process.exit(0);
     }
     printUsage();
     process.exit(1);
 }
+// eslint-disable-next-line @typescript-eslint/no-floating-promises
 cli();

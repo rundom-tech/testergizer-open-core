@@ -1,0 +1,29 @@
+{
+  "schemaVersion": "v1",
+  "suiteId": "demosauce-e2e",
+  "suiteName": "SauceDemo E2E",
+  "baseUrl": "https://www.saucedemo.com/",
+  "tests": [
+    {
+      "id": "login-success",
+      "name": "Login success",
+      "testDomain": "ui",
+      "steps": [
+        { "id": "goto-login", "action": "goto", "target": "https://www.saucedemo.com/" },
+        { "id": "fill-username", "action": "fill", "target": "#user-name", "value": "standard_user" },
+        { "id": "fill-password", "action": "fill", "target": "#password", "value": "secret_sauce" },
+        { "id": "submit-login", "action": "click", "target": "#login-button" },
+        { "id": "assert-inventory", "action": "assertVisible", "target": "#inventory_container" }
+      ]
+    },
+    {
+      "id": "logout",
+      "name": "Logout",
+      "testDomain": "ui",
+      "steps": [
+        { "id": "open-menu", "action": "click", "target": "#react-burger-menu-btn" },
+        { "id": "logout-click", "action": "click", "target": "#logout_sidebar_link" }
+      ]
+    }
+  ]
+}

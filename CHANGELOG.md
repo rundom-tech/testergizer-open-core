@@ -4,6 +4,31 @@ All notable changes to this project will be documented in this file.
 
 ## [v1.0.0] – 2025-12-31 — Open Core Foundation
 
+### Added
+- Deterministic execution foundation with explicit execution modes.
+- Stub execution mode enabling safe, side-effect-free runs.
+- Strict, validated results model with per-test and per-step evidence.
+- Deterministic artifact generation suitable for CI and long-term analysis.
+- Cross-platform CLI support with explicit glob expansion for diff and flaky analysis.
+
+### Changed
+- Refactored execution architecture to center all orchestration in `CoreRunner`.
+- Unified execution semantics across CLI, runner, and tools.
+- Diff tooling upgraded to support multi-run, aggregate comparisons.
+- CLI normalized input handling (paths, directories, globs) across commands.
+
+### Fixed
+- Eliminated platform-specific glob resolution issues (Windows / PowerShell).
+- Removed legacy single-file assumptions from diff tooling.
+
+### Notes
+- This release establishes the **foundation layer only**.
+- Execution semantics beyond stub mode are intentionally minimal.
+- Visualization, dashboards, AI-assistance, and convenience features are out of scope.
+
+
+## [v1.0.0] – 2025-12-31 — Open Core Foundation
+
 ### Overview
 This release establishes the **Testergizer Open Core foundation**.
 It intentionally prioritizes execution semantics, determinism, and result contracts over feature breadth or convenience.

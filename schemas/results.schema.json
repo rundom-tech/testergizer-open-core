@@ -9,6 +9,7 @@
     "executionMode",
     "startedAt",
     "endedAt",
+    "durationMs",
     "tests",
     "summary"
   ],
@@ -19,16 +20,11 @@
     "suiteId": { "type": "string" },
     "suiteName": { "type": "string" },
     "suitePath": { "type": "string" },
-    "executionMode": {
-      "type": "string",
-      "enum": ["stub", "execute", "baseline"]
-    },
+    "executionMode": { "type": "string", "enum": ["stub", "execute", "baseline"] },
     "startedAt": { "type": "string", "format": "date-time" },
     "endedAt": { "type": "string", "format": "date-time" },
-    "tests": {
-      "type": "array",
-      "items": { "$ref": "#/$defs/testResult" }
-    },
+    "durationMs": { "type": "integer", "minimum": 0 },
+    "tests": { "type": "array", "items": { "$ref": "#/$defs/testResult" } },
     "summary": { "$ref": "#/$defs/runSummary" }
   },
   "$defs": {
@@ -41,28 +37,20 @@
         "status",
         "startedAt",
         "endedAt",
+        "durationMs",
         "steps"
       ],
+      "additionalProperties": false,
       "properties": {
         "id": { "type": "string" },
-        "testDomain": {
-          "type": "string",
-          "enum": ["ui", "api", "system"]
-        },
-        "executionMode": {
-          "type": "string",
-          "enum": ["stub", "execute", "baseline"]
-        },
-        "status": {
-          "type": "string",
-          "enum": ["passed", "failed", "skipped"]
-        },
+        "name": { "type": "string" },
+        "testDomain": { "type": "string", "enum": ["ui", "api", "system"] },
+        "executionMode": { "type": "string", "enum": ["stub", "execute", "baseline"] },
+        "status": { "type": "string", "enum": ["passed", "failed", "skipped"] },
         "startedAt": { "type": "string", "format": "date-time" },
         "endedAt": { "type": "string", "format": "date-time" },
-        "steps": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/stepResult" }
-        }
+        "durationMs": { "type": "integer", "minimum": 0 },
+        "steps": { "type": "array", "items": { "$ref": "#/$defs/stepResult" } }
       }
     },
     "stepResult": {
@@ -77,28 +65,39 @@
         "endedAt",
         "durationMs"
       ],
+      "additionalProperties": false,
       "properties": {
         "id": { "type": "string" },
         "action": { "type": "string" },
-        "status": {
-          "type": "string",
-          "enum": ["passed", "failed", "skipped"]
+        "status": { "type": "string", "enum": ["passed", "failed", "skipped"] },
+        "attempts": { "type": "integer", "minimum": 1 },
+        "errors": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["reason", "message"],
+            "additionalProperties": false,
+            "properties": {
+              "reason": { "type": "string" },
+              "message": { "type": "string" },
+              "stack": { "type": "string" }
+            }
+          }
         },
-        "attempts": { "type": "integer" },
-        "errors": { "type": "array" },
         "startedAt": { "type": "string", "format": "date-time" },
         "endedAt": { "type": "string", "format": "date-time" },
-        "durationMs": { "type": "integer" }
+        "durationMs": { "type": "integer", "minimum": 0 }
       }
     },
     "runSummary": {
       "type": "object",
       "required": ["total", "passed", "failed", "skipped"],
+      "additionalProperties": false,
       "properties": {
-        "total": { "type": "integer" },
-        "passed": { "type": "integer" },
-        "failed": { "type": "integer" },
-        "skipped": { "type": "integer" }
+        "total": { "type": "integer", "minimum": 0 },
+        "passed": { "type": "integer", "minimum": 0 },
+        "failed": { "type": "integer", "minimum": 0 },
+        "skipped": { "type": "integer", "minimum": 0 }
       }
     }
   }

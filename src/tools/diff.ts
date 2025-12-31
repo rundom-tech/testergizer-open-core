@@ -1,175 +1,142 @@
 import fs from "fs";
 import path from "path";
 
-type AnyObj = Record<string, any>;
+/* ---------------------------------- */
+/* Types                               */
+/* ---------------------------------- */
 
-function indexBy<T extends AnyObj>(
-  arr: T[],
-  keyFn: (x: T) => string
-): Record<string, T> {
-  const out: Record<string, T> = {};
-  for (const item of arr) out[keyFn(item)] = item;
-  return out;
+type StepStatus = "passed" | "failed" | "skipped";
+
+interface StepResult {
+  id: string;
+  status: StepStatus;
 }
 
-function testKey(t: AnyObj): string {
-  return String(t.id ?? t.name);
+interface TestResult {
+  id: string;
+  status: StepStatus;
+  steps: StepResult[];
 }
 
-function lastReason(step: AnyObj): string | null {
-  const errs = step?.attemptErrors;
-  if (!Array.isArray(errs) || errs.length === 0) return null;
-  const last = errs[errs.length - 1];
-  return last?.reason ?? null;
+interface RunResult {
+  suiteId?: string;
+  startedAt?: string;
+  tests: TestResult[];
 }
 
-/**
- * Canonical suiteId extraction (must match runner + flaky).
- */
-function extractSuiteId(run: AnyObj): string | undefined {
-  return (
-    run?.meta?.suite?.id ||   // canonical
-    run?.suiteId ||           // legacy / future
-    run?.meta?.suiteId ||
-    run?.suite?.id ||
-    run?.suite?.suiteId ||
-    undefined
-  );
+interface DiffEntry {
+  testId: string;
+  stepId?: string;
+  statusA: StepStatus | "missing";
+  statusB: StepStatus | "missing";
 }
 
-export function diffResults(aPath: string, bPath: string): AnyObj {
-  const a = JSON.parse(fs.readFileSync(aPath, "utf-8"));
-  const b = JSON.parse(fs.readFileSync(bPath, "utf-8"));
+export interface DiffResult {
+  suiteId?: string;
+  timestamp: string;
+  differences: DiffEntry[];
+}
 
-  // ---- derive suiteId ----
-  const suiteIds = Array.from(
-    new Set(
-      [a, b].map(r => extractSuiteId(r)).filter(Boolean) as string[]
-    )
-  );
+/* ---------------------------------- */
+/* Helpers                             */
+/* ---------------------------------- */
 
-  const suiteId =
-    suiteIds.length === 1
-      ? suiteIds[0]
-      : suiteIds.length > 1
-        ? "mixed"
-        : "unknown";
+function loadResult(filePath: string): RunResult {
+  const raw = fs.readFileSync(filePath, "utf-8");
+  return JSON.parse(raw);
+}
 
-  const timestamp = new Date().toISOString();
+function indexResults(files: string[]): Map<string, Map<string | null, StepStatus>> {
+  const index = new Map<string, Map<string | null, StepStatus>>();
 
-  // ---- existing diff logic ----
-  const aTests = a.tests ?? [];
-  const bTests = b.tests ?? [];
-  const aIdx = indexBy(aTests, testKey);
-  const bIdx = indexBy(bTests, testKey);
+  for (const file of files) {
+    const run = loadResult(file);
 
-  const allTestKeys = Array.from(
-    new Set([...Object.keys(aIdx), ...Object.keys(bIdx)])
-  ).sort();
-
-  const testDiffs: AnyObj[] = [];
-  const stepChanges: AnyObj[] = [];
-
-  for (const tk of allTestKeys) {
-    const at = aIdx[tk];
-    const bt = bIdx[tk];
-
-    if (!at) {
-      testDiffs.push({ test: tk, change: "added", status: bt.status });
-      continue;
-    }
-    if (!bt) {
-      testDiffs.push({ test: tk, change: "removed", status: at.status });
-      continue;
-    }
-
-    if (at.status !== bt.status) {
-      testDiffs.push({
-        test: tk,
-        change: "status",
-        from: at.status,
-        to: bt.status
-      });
-    }
-
-    const aSteps = at.steps ?? [];
-    const bSteps = bt.steps ?? [];
-    const aS = indexBy(aSteps, (s) => String(s.id));
-    const bS = indexBy(bSteps, (s) => String(s.id));
-    const allStepIds = Array.from(
-      new Set([...Object.keys(aS), ...Object.keys(bS)])
-    ).sort();
-
-    for (const sid of allStepIds) {
-      const as = aS[sid];
-      const bs = bS[sid];
-
-      if (!as) {
-        stepChanges.push({
-          key: `${tk}::${sid}`,
-          change: "added",
-          status: bs.status
-        });
-        continue;
-      }
-      if (!bs) {
-        stepChanges.push({
-          key: `${tk}::${sid}`,
-          change: "removed",
-          status: as.status
-        });
-        continue;
+    for (const test of run.tests) {
+      const testKey = test.id;
+      if (!index.has(testKey)) {
+        index.set(testKey, new Map());
       }
 
-      if (as.status !== bs.status) {
-        stepChanges.push({
-          key: `${tk}::${sid}`,
-          change: "status",
-          from: as.status,
-          to: bs.status
-        });
-      } else if ((as.attempts ?? 1) !== (bs.attempts ?? 1)) {
-        stepChanges.push({
-          key: `${tk}::${sid}`,
-          change: "attempts",
-          from: as.attempts ?? 1,
-          to: bs.attempts ?? 1
-        });
-      }
+      // Test-level status (null stepId)
+      index.get(testKey)!.set(null, test.status);
 
-      const ar = lastReason(as);
-      const br = lastReason(bs);
-      if (ar && br && ar !== br) {
-        stepChanges.push({
-          key: `${tk}::${sid}`,
-          change: "retry-reason",
-          from: ar,
-          to: br
+      for (const step of test.steps ?? []) {
+        index.get(testKey)!.set(step.id, step.status);
+      }
+    }
+  }
+
+  return index;
+}
+
+/* ---------------------------------- */
+/* Public API                          */
+/* ---------------------------------- */
+
+export function diffResults(
+  aFiles: string[],
+  bFiles: string[]
+): DiffResult {
+  if (!aFiles.length || !bFiles.length) {
+    throw new Error("diffResults requires non-empty file lists");
+  }
+
+  const indexA = indexResults(aFiles);
+  const indexB = indexResults(bFiles);
+
+  const allTests = new Set<string>([
+    ...indexA.keys(),
+    ...indexB.keys()
+  ]);
+
+  const differences: DiffEntry[] = [];
+
+  for (const testId of allTests) {
+    const stepsA = indexA.get(testId) ?? new Map();
+    const stepsB = indexB.get(testId) ?? new Map();
+
+    const allSteps = new Set<string | null>([
+      ...stepsA.keys(),
+      ...stepsB.keys()
+    ]);
+
+    for (const stepId of allSteps) {
+      const statusA = stepsA.get(stepId) ?? "missing";
+      const statusB = stepsB.get(stepId) ?? "missing";
+
+      if (statusA !== statusB) {
+        differences.push({
+          testId,
+          stepId: stepId ?? undefined,
+          statusA,
+          statusB
         });
       }
     }
   }
 
-  // ---- standardized envelope ----
+  // Try to infer suiteId from first file
+  let suiteId: string | undefined;
+  try {
+    const first = loadResult(aFiles[0]);
+    suiteId = first.suiteId;
+  } catch {
+    suiteId = undefined;
+  }
+
   return {
-    schemaVersion: "1.0",
-    type: "results-diff",
     suiteId,
-    timestamp,
-    inputs: {
-      a: aPath,
-      b: bPath
-    },
-    tests: testDiffs,
-    steps: stepChanges,
-    summary: {
-      testChanges: testDiffs.length,
-      stepChanges: stepChanges.length
-    }
+    timestamp: new Date().toISOString(),
+    differences
   };
 }
 
-export function writeDiff(outPath: string, diff: AnyObj) {
+/* ---------------------------------- */
+/* Writer                              */
+/* ---------------------------------- */
+
+export function writeDiff(outPath: string, diff: DiffResult): void {
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
   fs.writeFileSync(outPath, JSON.stringify(diff, null, 2), "utf-8");
 }

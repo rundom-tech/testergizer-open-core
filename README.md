@@ -79,6 +79,8 @@ Execution mode is **part of the execution contract** and is recorded in the resu
 | `execute` | Real execution against the target system. |
 | `baseline` | Reserved for future baseline update flows. |
 
+Execution modes in Open Core are explicit and deterministic. stub mode is provided as a developer tool for validating test structure, execution flow, and artifact integrity without interacting with real systems.
+
 ---
 
 ## Configuration scope
