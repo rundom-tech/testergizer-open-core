@@ -1,0 +1,8 @@
+{
+  "id": "auth/logout",
+  "reusable": true,
+  "steps": [
+    { "type": "click", "target": "menu.button" },
+    { "type": "click", "target": "menu.logout" }
+  ]
+}

@@ -1,0 +1,217 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  schedule:
+    # Nightly run at 02:00 UTC
+    - cron: "0 2 * * *"
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    if: github.event_name != 'schedule'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+
+      - run: npm ci
+      - run: npm run build
+
+  test:
+    name: Platform Tests
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name != 'schedule'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+
+      - run: npm ci
+      - run: npm run test:all
+
+  coverage:
+    name: Coverage (diagnostic)
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name != 'schedule'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+
+      - run: npm ci
+
+      - name: Run tests with coverage (non-gating)
+        run: |
+          npx c8 npm run test:node || true
+
+      - name: Upload to Codecov (non-gating)
+        uses: codecov/codecov-action@v4
+        with:
+          directory: coverage
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  nightly-matrix:
+    name: Nightly Matrix
+    runs-on: ${{ matrix.os }}
+    if: github.event_name == 'schedule'
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: ["18", "20"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - run: npm ci
+      - run: npm run build
+      - run: npm run test:all
+
+  nightly-failure-issue:
+    name: Nightly Failure Issue (deduped)
+    runs-on: ubuntu-latest
+    needs: nightly-matrix
+    if: github.event_name == 'schedule' && failure()
+
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const title = "🚨 Nightly CI failed";
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const runUrl = `https://github.com/${owner}/${repo}/actions/runs/${context.runId}`;
+
+            const issues = await github.rest.issues.listForRepo({
+              owner,
+              repo,
+              state: "open",
+              labels: "nightly,ci"
+            });
+
+            const existing = issues.data.find(i => i.title === title);
+
+            if (existing) {
+              console.log("Nightly failure issue already exists. Skipping creation.");
+              return;
+            }
+
+            await github.rest.issues.create({
+              owner,
+              repo,
+              title,
+              body: `Nightly CI matrix failed.\n\nRun: ${runUrl}`,
+              labels: ["ci", "nightly"]
+            });
+
+  nightly-recovery-close:
+    name: Close Nightly Failure Issue on Recovery
+    runs-on: ubuntu-latest
+    needs: nightly-matrix
+    if: github.event_name == 'schedule' && success()
+
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const title = "🚨 Nightly CI failed";
+
+            const issues = await github.rest.issues.listForRepo({
+              owner,
+              repo,
+              state: "open",
+              labels: "nightly,ci"
+            });
+
+            const existing = issues.data.find(i => i.title === title);
+
+            if (!existing) {
+              console.log("No nightly failure issue to close.");
+              return;
+            }
+
+            await github.rest.issues.update({
+              owner,
+              repo,
+              issue_number: existing.number,
+              state: "closed"
+            });
+
+  nightly-root-cause-label:
+    name: Nightly Root Cause Label (node-version)
+    runs-on: ubuntu-latest
+    needs: nightly-matrix
+    if: github.event_name == 'schedule' && failure()
+
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const title = "🚨 Nightly CI failed";
+
+            const jobs = await github.rest.actions.listJobsForWorkflowRun({
+              owner,
+              repo,
+              run_id: context.runId
+            });
+
+            // Deterministic rule:
+            // Node 18 succeeds AND Node 20 fails
+            const node18Ok = jobs.data.jobs.some(j =>
+              j.name.endsWith(", 18)") && j.conclusion === "success"
+            );
+
+            const node20Fail = jobs.data.jobs.some(j =>
+              j.name.endsWith(", 20)") && j.conclusion === "failure"
+            );
+
+            if (!node18Ok || !node20Fail) {
+              console.log("Node-version rule not satisfied. No label applied.");
+              return;
+            }
+
+            const issues = await github.rest.issues.listForRepo({
+              owner,
+              repo,
+              state: "open",
+              labels: "nightly,ci"
+            });
+
+            const issue = issues.data.find(i => i.title === title);
+            if (!issue) {
+              console.log("No nightly failure issue found.");
+              return;
+            }
+
+            await github.rest.issues.addLabels({
+              owner,
+              repo,
+              issue_number: issue.number,
+              labels: ["root:node-version"]
+            });

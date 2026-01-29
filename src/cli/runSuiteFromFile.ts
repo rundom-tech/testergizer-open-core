@@ -1,113 +1,198 @@
 import fs from "fs";
 import path from "path";
+
 import { CoreRunner } from "../core/CoreRunner";
-import { JsonSuite, ExecutionMode } from "../core/types";
-import { RunResult, TestResult } from "../core/resultTypes";
-import { validateResults } from "../core/validateResults";
-import { validateSuite } from "../core/validateSuite";
+import { JsonReporter } from "../tools/jsonReporter";
 
-export interface RunnerOptions {
-  executionMode?: ExecutionMode;
-  headless?: boolean;
-  slowMo?: number;
-  baseUrl?: string;
-  stepRetries?: number;
-  retryStepIds?: string[];
-  retryDelayMs?: number;
+import {
+  resolveRootContext,
+  parseInjectedSecrets,
+  interpolateDeepStrict
+} from "./resolveInputs";
+
+import {
+  validateExecutableDoc,
+  validateIncludesAgainstRegistry,
+  validateInterpolationCompleteness,
+  throwIfIssues
+} from "./validate";
+
+import type { JsonTestDefinition } from "../core/types";
+
+/**
+ * Public, frozen API.
+ * Used by platform tests and programmatic callers.
+ * DO NOT change this signature.
+ */
+export interface RunSuiteOptions {
+  executionMode?: "stub" | "real";
+  artifactsDir?: string;
 }
 
-function nowIso(): string {
-  return new Date().toISOString();
+/**
+ * Internal executable document shape (JSON-based).
+ */
+interface ExecutableDoc {
+  id: string;
+  reusable?: boolean;
+  context?: Record<string, any>;
+  steps: any[];
 }
 
-function sanitizeId(input: string): string {
-  return String(input || "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
+/* ============================================================
+ * Helpers
+ * ============================================================ */
+
+function loadJson(filePath: string): ExecutableDoc {
+  const raw = fs.readFileSync(filePath, "utf-8");
+  return JSON.parse(raw);
 }
 
-function formatTimestamp(iso: string): string {
-  // 2025-12-15T04:07:33.123Z -> 20251215-040733
-  const noMs = iso.replace(/\..+/, "").replace(/Z$/, "");
-  const [date, time] = noMs.split("T");
-  if (!date || !time) return String(Date.now());
-  return `${date.replace(/-/g, "")}-${time.replace(/:/g, "")}`;
+function loadAllExecutables(dir: string): Map<string, ExecutableDoc> {
+  const map = new Map<string, ExecutableDoc>();
+
+  if (!fs.existsSync(dir)) return map;
+
+  const entries = fs.readdirSync(dir, { withFileTypes: true });
+
+  for (const e of entries) {
+    const full = path.join(dir, e.name);
+
+    if (e.isDirectory()) {
+      for (const [k, v] of loadAllExecutables(full)) {
+        map.set(k, v);
+      }
+    } else if (e.isFile() && e.name.endsWith(".json")) {
+      const doc = loadJson(full);
+      if (map.has(doc.id)) {
+        throw new Error(`Duplicate executable id: ${doc.id}`);
+      }
+      map.set(doc.id, doc);
+    }
+  }
+
+  return map;
 }
 
-function durationMs(startIso: string, endIso: string): number {
-  const s = Date.parse(startIso);
-  const e = Date.parse(endIso);
-  if (!Number.isFinite(s) || !Number.isFinite(e)) return 0;
-  return Math.max(0, e - s);
+function expandIncludes(
+  root: ExecutableDoc,
+  registry: Map<string, ExecutableDoc>
+): ExecutableDoc {
+  const expandedSteps: any[] = [];
+
+  for (const step of root.steps) {
+    if (step?.type === "include") {
+      const ref = step.ref;
+      const target = registry.get(ref);
+
+      if (!target) {
+        throw new Error(`Include reference not found: ${ref}`);
+      }
+      if (!target.reusable) {
+        throw new Error(`Include target is not reusable: ${ref}`);
+      }
+      if (target.steps.some((s) => s?.type === "include")) {
+        throw new Error(`Reusable "${ref}" must not contain include steps`);
+      }
+
+      expandedSteps.push(...target.steps);
+    } else {
+      expandedSteps.push(step);
+    }
+  }
+
+  return {
+    id: root.id,
+    reusable: false,
+    context: root.context,
+    steps: expandedSteps
+  };
 }
+
+/* ============================================================
+ * Public entrypoint (signature preserved)
+ * ============================================================ */
 
 export async function runSuiteFromFile(
   suitePath: string,
-  options: RunnerOptions = {}
-): Promise<{ runResult: RunResult; outPath: string }> {
-  const raw = fs.readFileSync(suitePath, "utf-8");
-  const suite = JSON.parse(raw) as JsonSuite;
+  options: RunSuiteOptions = {}
+) {
+  const executionMode = options.executionMode ?? "real";
+  const sandbox = executionMode === "stub";
+  const outputDir = options.artifactsDir ?? "artifacts";
 
-  // Validate suite early for deterministic failure
-  validateSuite(suite);
+  const rootPath = path.resolve(suitePath);
+  const root = loadJson(rootPath);
 
-  const executionMode = options.executionMode ?? "stub";
+  // ── validation: root executable ───────────────────────────
+  throwIfIssues(validateExecutableDoc(root, rootPath));
 
-  const runner = new CoreRunner({
-    executionMode,
-    headless: options.headless,
-    slowMoMs: options.slowMo,
-    baseUrl: options.baseUrl ?? suite.baseUrl,
-    stepRetries: options.stepRetries,
-    retryStepIds: options.retryStepIds,
-    retryDelayMs: options.retryDelayMs,
-  });
-
-  const startedAt = nowIso();
-  const tests: TestResult[] = [];
-
-  try {
-    for (const test of suite.tests ?? []) {
-      const tr = await runner.run(test);
-      tests.push(tr);
-    }
-  } finally {
-    await runner.dispose();
+  if (root.reusable) {
+    throw new Error(`Reusable executable cannot be run directly: ${root.id}`);
   }
 
-  const endedAt = nowIso();
+  // ── load reusable flows ───────────────────────────────────
+  const flowsDir = path.resolve("flows");
+  const registry = loadAllExecutables(flowsDir);
 
-  const summary = {
-    total: tests.length,
-    passed: tests.filter(t => t.status === "passed").length,
-    failed: tests.filter(t => t.status === "failed").length,
-    skipped: tests.filter(t => t.status === "skipped").length,
+  for (const doc of registry.values()) {
+    throwIfIssues(validateExecutableDoc(doc));
+    if (!doc.reusable) {
+      throw new Error(`Non-reusable executable found in flows registry`);
+    }
+  }
+
+  // ── validate includes ─────────────────────────────────────
+  throwIfIssues(
+    validateIncludesAgainstRegistry({
+      doc: root,
+      registry,
+      filePath: rootPath
+    })
+  );
+
+  // ── expand includes ───────────────────────────────────────
+  const expanded = expandIncludes(root, registry);
+
+  // ── validate interpolation completeness ───────────────────
+  throwIfIssues(
+    validateInterpolationCompleteness({
+      doc: expanded,
+      contextKeys: new Set(Object.keys(expanded.context ?? {})),
+      filePath: rootPath
+    })
+  );
+
+  // ── resolve context + secrets ─────────────────────────────
+  const resolvedContext = resolveRootContext({
+    context: expanded.context,
+    sandbox,
+    injectedSecrets: parseInjectedSecrets([])
+  });
+
+  // ── interpolate steps ─────────────────────────────────────
+  const interpolatedSteps = interpolateDeepStrict(
+    expanded.steps,
+    resolvedContext.values
+  );
+
+  // ── build Core test definition ────────────────────────────
+  const testDef: JsonTestDefinition = {
+    id: expanded.id,
+    steps: interpolatedSteps
   };
 
-  const runResult: RunResult = {
-    schemaVersion: "v1",
-    runId: `${suite.suiteId}-${Date.now()}`,
-    suiteId: suite.suiteId,
-    suiteName: suite.suiteName,
-    suitePath,
-    executionMode,
-    startedAt,
-    endedAt,
-    durationMs: durationMs(startedAt, endedAt),
-    tests,
-    summary,
-  };
+  // ── execute ───────────────────────────────────────────────
+  const runner = new CoreRunner();
+  const results = await runner.run(testDef);
 
-  validateResults(runResult);
+  // ── report (masked) ───────────────────────────────────────
+  const reporter = new JsonReporter({
+    outputDir,
+    secretVars: resolvedContext.secretVars
+  });
 
-  const safeSuiteId = sanitizeId(suite.suiteId) || "unknown";
-  const ts = formatTimestamp(startedAt);
-  const outDir = path.join("artifacts", safeSuiteId);
-  const outPath = path.join(outDir, `results_${ts}.json`);
+  reporter.write("results.json", results);
 
-  fs.mkdirSync(outDir, { recursive: true });
-  fs.writeFileSync(outPath, JSON.stringify(runResult, null, 2), "utf-8");
-
-  return { runResult, outPath };
+  return results;
 }

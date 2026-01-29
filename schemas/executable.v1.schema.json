@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://testergizer.dev/schemas/executable.v1.schema.json",
+  "title": "Testergizer Executable v1",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["id", "steps"],
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "reusable": { "type": "boolean", "default": false },
+
+    "context": {
+      "type": "object",
+      "propertyNames": { "pattern": "^[A-Z][A-Z0-9_]*$" },
+      "additionalProperties": {
+        "oneOf": [
+          { "type": "string" },
+          { "type": "number" },
+          { "type": "boolean" },
+          { "type": "null" },
+          {
+            "type": "object",
+            "required": ["$secret"],
+            "additionalProperties": false,
+            "properties": {
+              "$secret": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" }
+            }
+          }
+        ]
+      }
+    },
+
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "type": { "type": "string" },
+          "ref": { "type": "string" }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "type": { "const": "include" } }, "required": ["type"] },
+            "then": { "required": ["ref"], "additionalProperties": true }
+          }
+        ]
+      }
+    }
+  },
+
+  "allOf": [
+    {
+      "if": {
+        "properties": { "reusable": { "const": true } },
+        "required": ["reusable"]
+      },
+      "then": {
+        "not": { "required": ["context"] }
+      }
+    }
+  ]
+}
