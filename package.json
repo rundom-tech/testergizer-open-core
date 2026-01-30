@@ -4,25 +4,17 @@
   "description": "Testergizer Open Core: a deterministic test execution engine with JSON-defined suites, CLI runner, and analysis tooling (results, diff, flaky).",
   "license": "Apache-2.0",
   "author": "RunDOM Technologies",
-
   "bin": {
     "testergizer": "bin/testergizer.js"
   },
-
   "scripts": {
     "build": "tsc -p tsconfig.json",
-
     "test": "node dist/examples/runExample.js || echo \"No tests yet.\"",
-
     "test:platform": "npm run test:node",
-
     "test:node": "node --test tests/executable",
-
     "test:all": "npm run build && npm run test:platform",
-
     "lint": "echo \"Add your linter of choice (ESLint, etc.)\""
   },
-
   "keywords": [
     "qa",
     "testing",
@@ -31,12 +23,10 @@
     "open-core",
     "testergizer"
   ],
-
   "repository": {
     "type": "git",
     "url": "https://github.com/rundom-tech/testergizer-open-core"
   },
-
   "files": [
     "dist",
     "bin",
@@ -44,19 +34,17 @@
     "README.md",
     "LICENSE.txt"
   ],
-
   "dependencies": {
+    "@playwright/test": "^1.58.0",
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
     "fast-glob": "^3.3.3",
     "playwright": "^1.49.0"
   },
-
   "devDependencies": {
     "@types/node": "^20.19.26",
     "typescript": "^5.7.0"
   },
-
   "engines": {
     "node": ">=18"
   }
