@@ -1,6 +1,20 @@
 import { ExecutionMode, TestDomain } from "./types";
 
-export type Status = "passed" | "failed" | "skipped";
+/**
+ * Evidence semantics (Open Core)
+ *
+ * Playwright-aligned terminology:
+ * - Test-level field name: result
+ * - Allowed values: passed | failed | aborted
+ *
+ * Notes:
+ * - Steps keep a simple passed/failed status.
+ * - aborted is reserved for infra/runtime interruption where the test did not
+ *   reach a meaningful conclusion.
+ */
+
+export type StepStatus = "passed" | "failed";
+export type TestResultValue = "passed" | "failed" | "aborted";
 
 export interface StepError {
   reason: string;
@@ -11,7 +25,7 @@ export interface StepError {
 export interface StepResult {
   id: string;
   action: string;
-  status: Status;
+  status: StepStatus;
   attempts: number;
   errors: StepError[];
   startedAt: string;
@@ -24,10 +38,20 @@ export interface TestResult {
   name?: string;
   testDomain: TestDomain;
   executionMode: ExecutionMode;
-  status: Status;
+
+  /** Playwright-aligned outcome */
+  result: TestResultValue;
+
+  /** Playwright project id (for now: browserName) */
+  projectId: string;
+
   startedAt: string;
   endedAt: string;
   durationMs: number;
+
+  /** Populated mainly for aborted */
+  errors?: StepError[];
+
   steps: StepResult[];
 }
 
@@ -35,19 +59,27 @@ export interface RunSummary {
   total: number;
   passed: number;
   failed: number;
-  skipped: number;
+  aborted: number;
 }
 
 export interface RunResult {
   schemaVersion: "v1";
-  runId: string;
+
   suiteId: string;
-  suiteName: string;
+  suiteName?: string;
   suitePath: string;
+
+  runId: string; // ISO timestamp
+
   executionMode: ExecutionMode;
+
+  /** Playwright project id (for now: browserName) */
+  projectId: string;
+
   startedAt: string;
   endedAt: string;
   durationMs: number;
+
   tests: TestResult[];
   summary: RunSummary;
 }

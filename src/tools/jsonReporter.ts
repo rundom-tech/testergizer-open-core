@@ -21,7 +21,6 @@ function sanitize(value: any, secretVars?: Set<string>): any {
   if (value === null || value === undefined) return value;
 
   if (typeof value === "string") {
-    // Direct secret masking (v1 guarantee)
     if (secretVars && secretVars.has(value)) {
       return MASK;
     }
@@ -35,12 +34,7 @@ function sanitize(value: any, secretVars?: Set<string>): any {
   if (typeof value === "object") {
     const out: Record<string, any> = {};
     for (const [k, v] of Object.entries(value)) {
-      // Common payload/value fields that may carry secrets
-      if (
-        typeof v === "string" &&
-        secretVars &&
-        secretVars.has(v)
-      ) {
+      if (typeof v === "string" && secretVars && secretVars.has(v)) {
         out[k] = MASK;
       } else {
         out[k] = sanitize(v, secretVars);

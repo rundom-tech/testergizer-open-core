@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "v1",
+  "suiteId": "smoke",
+  "suiteName": "Smoke Tests",
+  "tests": [
+    {
+      "id": "basic-test",
+      "reusable": false,
+      "steps": [
+        { "type": "log", "message": "hello world" }
+      ]
+    }
+  ]
+}

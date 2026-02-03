@@ -1,14 +1,32 @@
-import { chromium, Browser, Page } from "playwright";
+// src/core/CoreRunner.ts
+
 import {
+  chromium,
+  firefox,
+  webkit,
+  type Browser,
+  type BrowserType,
+  type Page
+} from "playwright";
+
+import type {
   CoreRunnerOptions,
   ExecutionMode,
   JsonTestDefinition,
-  JsonStep,
+  JsonStep
 } from "./types";
+
 import { PlaywrightExecutor } from "./executors/PlaywrightExecutor";
-import { StepExecutor } from "./executors/StepExecutor";
+import type { StepExecutor } from "./executors/StepExecutor";
 import { StubExecutor } from "./executors/StubExecutor";
-import { StepResult, TestResult, StepError } from "./resultTypes";
+
+import type {
+  StepError,
+  StepResult,
+  StepStatus,
+  TestResult,
+  TestResultValue
+} from "./resultTypes";
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -21,10 +39,17 @@ function durationMs(startIso: string, endIso: string): number {
   return Math.max(0, e - s);
 }
 
-export class CoreRunner {
-  private browser: Browser | null = null;
-  private page: Page | null = null;
+function pickBrowserType(name?: string): {
+  projectId: string;
+  browserType: BrowserType;
+} {
+  const n = (name || "chromium").toLowerCase();
+  if (n === "firefox") return { projectId: "firefox", browserType: firefox };
+  if (n === "webkit") return { projectId: "webkit", browserType: webkit };
+  return { projectId: "chromium", browserType: chromium };
+}
 
+export class CoreRunner {
   private readonly options: CoreRunnerOptions;
   private readonly executionMode: ExecutionMode;
   private readonly executor: StepExecutor;
@@ -32,129 +57,131 @@ export class CoreRunner {
   constructor(options: CoreRunnerOptions = {}) {
     this.options = options;
     this.executionMode = options.executionMode ?? "stub";
-
-    this.executor = this.executionMode === "stub" ? new StubExecutor() : new PlaywrightExecutor();
+    this.executor =
+      this.executionMode === "stub"
+        ? new StubExecutor()
+        : new PlaywrightExecutor();
   }
 
-  private async ensurePage(): Promise<Page> {
-    if (this.executionMode === "stub") {
-      throw new Error("ensurePage must not be called in stub execution mode");
-    }
-
-    if (!this.browser) {
-      this.browser = await chromium.launch({
-        headless: this.options.headless ?? true,
-        slowMo: this.options.slowMoMs,
-      });
-    }
-
-    if (!this.page) {
-      const context = await this.browser.newContext({
-        baseURL: this.options.baseUrl,
-      });
-      this.page = await context.newPage();
-    }
-
-    return this.page;
-  }
-
+  /**
+   * Execute exactly one test.
+   * Owns its browser lifecycle.
+   */
   async run(test: JsonTestDefinition): Promise<TestResult> {
     const testStartedAt = nowIso();
 
-    const page = this.executionMode === "stub" ? null : await this.ensurePage();
+    const { projectId, browserType } = pickBrowserType(
+      this.options.browserName
+    );
 
-    const stepRetries = Math.max(0, Number(this.options.stepRetries ?? 0));
-    const retryOnly = Array.isArray(this.options.retryStepIds) && this.options.retryStepIds.length > 0;
-    const retrySet = new Set((this.options.retryStepIds ?? []).map(String));
-    const retryDelayMs = Math.max(0, Number(this.options.retryDelayMs ?? 0));
+    let browser: Browser | null = null;
+    let page: Page | null = null;
 
     const stepResults: StepResult[] = [];
+    const testErrors: StepError[] = [];
 
     let testFailed = false;
+    let aborted: StepError | null = null;
 
-    for (const step of test.steps ?? []) {
-      const shouldRetryThis = !retryOnly || retrySet.has(step.id);
-      const maxAttempts = 1 + (shouldRetryThis ? stepRetries : 0);
+    try {
+      if (this.executionMode !== "stub") {
+        browser = await browserType.launch({
+          headless: this.options.headless ?? true,
+          slowMo: this.options.slowMoMs
+        });
 
-      const stepStartedAt = nowIso();
-      const errors: StepError[] = [];
+        const context = await browser.newContext({
+          baseURL: this.options.baseUrl
+        });
 
-      let attempts = 0;
-      let stepStatus: "passed" | "failed" = "passed";
-
-      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-        attempts = attempt;
-        try {
-          await this.executor.execute(step, page);
-          stepStatus = "passed";
-          break;
-        } catch (err) {
-          stepStatus = "failed";
-          errors.push(this.toStepError(err));
-
-          if (attempt < maxAttempts && retryDelayMs > 0) {
-            await new Promise(res => setTimeout(res, retryDelayMs));
-          }
-        }
+        page = await context.newPage();
       }
 
-      const stepEndedAt = nowIso();
+      for (const step of test.steps ?? []) {
+        const stepStartedAt = nowIso();
+        const errors: StepError[] = [];
+        let status: StepStatus = "passed";
 
-      const sr: StepResult = {
-        id: step.id,
-        action: step.action,
-        status: stepStatus,
-        attempts,
-        errors,
-        startedAt: stepStartedAt,
-        endedAt: stepEndedAt,
-        durationMs: durationMs(stepStartedAt, stepEndedAt),
-      };
+        try {
+          await this.executor.execute(step as JsonStep, page);
+        } catch (err) {
+          status = "failed";
+          errors.push(this.toStepError(err));
+          testFailed = true;
+        }
 
-      stepResults.push(sr);
+        const stepEndedAt = nowIso();
 
-      if (stepStatus === "failed") {
-        testFailed = true;
+        stepResults.push({
+          id: step.id,
+          action: step.action,
+          status,
+          attempts: 1,
+          errors,
+          startedAt: stepStartedAt,
+          endedAt: stepEndedAt,
+          durationMs: durationMs(stepStartedAt, stepEndedAt)
+        });
+      }
+    } catch (err) {
+      aborted = this.toStepError(err);
+      testErrors.push(aborted);
+    } finally {
+      if (browser) {
+        try {
+          await browser.close();
+        } catch (err) {
+          if (!aborted) {
+            aborted = this.toStepError(err);
+            testErrors.push(aborted);
+          }
+        }
       }
     }
 
     const testEndedAt = nowIso();
 
-    const tr: TestResult = {
+    const result: TestResultValue = aborted
+      ? "aborted"
+      : testFailed
+      ? "failed"
+      : "passed";
+
+    return {
       id: test.id,
       name: test.name,
       testDomain: test.testDomain ?? "system",
       executionMode: this.executionMode,
-      status: testFailed ? "failed" : "passed",
+      projectId,
+      result,
       startedAt: testStartedAt,
       endedAt: testEndedAt,
       durationMs: durationMs(testStartedAt, testEndedAt),
-      steps: stepResults,
+      errors: testErrors.length ? testErrors : undefined,
+      steps: stepResults
     };
+  }
 
-    return tr;
+  /**
+   * Compatibility shim.
+   * CoreRunner no longer owns long-lived resources.
+   */
+  async dispose(): Promise<void> {
+    // no-op by design
   }
 
   private toStepError(err: unknown): StepError {
     if (err instanceof Error) {
       return {
         reason: err.name || "Error",
-        message: err.message || String(err),
-        stack: err.stack,
+        message: err.message,
+        stack: err.stack
       };
     }
 
     return {
       reason: "Error",
-      message: typeof err === "string" ? err : JSON.stringify(err),
+      message: typeof err === "string" ? err : JSON.stringify(err)
     };
-  }
-
-  async dispose(): Promise<void> {
-    if (this.browser) {
-      await this.browser.close();
-      this.browser = null;
-      this.page = null;
-    }
   }
 }

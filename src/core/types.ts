@@ -46,6 +46,9 @@ export interface CoreRunnerOptions {
   baseUrl?: string;
   executionMode?: ExecutionMode;
 
+  /** Playwright browser family (maps to Playwright project semantics) */
+  browserName?: "chromium" | "firefox" | "webkit";
+
   /** Step retry configuration (Open Core) */
   stepRetries?: number;
   /** If provided, retry only these step IDs */

@@ -1,5 +1,4 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://testergizer.dev/schemas/executable.v1.schema.json",
   "title": "Testergizer Executable v1",
   "type": "object",

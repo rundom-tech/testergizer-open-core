@@ -17,7 +17,9 @@ import {
   throwIfIssues
 } from "./validate";
 
-import type { JsonTestDefinition } from "../core/types";
+import type { ExecutableDoc } from "./validate";
+import type { JsonTestDefinition, ExecutionMode } from "../core/types";
+import type { RunResult, TestResult } from "../core/resultTypes";
 
 /**
  * Public, frozen API.
@@ -25,32 +27,85 @@ import type { JsonTestDefinition } from "../core/types";
  * DO NOT change this signature.
  */
 export interface RunSuiteOptions {
-  executionMode?: "stub" | "real";
+  executionMode?: ExecutionMode;
   artifactsDir?: string;
+
+  // Forwarded to CoreRunner
+  headless?: boolean;
+  slowMoMs?: number;
+  baseUrl?: string;
+
+  /** Playwright project semantics (for now: browser family) */
+  browserName?: "chromium" | "firefox" | "webkit";
 }
 
 /**
- * Internal executable document shape (JSON-based).
+ * Minimal SuiteDoc (group of tests), still supports inline executables for demos.
+ * Canonical long-term: tests referenced by file (string / ref / path).
  */
-interface ExecutableDoc {
-  id: string;
-  reusable?: boolean;
+type SuiteTestRef = string | { ref: string } | { path: string };
+type SuiteTestEntry = ExecutableDoc | SuiteTestRef;
+
+interface SuiteDoc {
+  schemaVersion: "v1";
+  suiteId: string;
+  suiteName?: string;
+  baseUrl?: string;
   context?: Record<string, any>;
-  steps: any[];
+  tests: SuiteTestEntry[];
+}
+
+/* ============================================================
+ * Type guards
+ * ============================================================ */
+
+function isObject(v: any): v is Record<string, any> {
+  return v !== null && typeof v === "object" && !Array.isArray(v);
+}
+
+function isExecutableLike(v: any): v is ExecutableDoc {
+  return isObject(v) && typeof v.id === "string" && Array.isArray((v as any).steps);
+}
+
+function isSuiteDoc(v: any): v is SuiteDoc {
+  return (
+    isObject(v) &&
+    v.schemaVersion === "v1" &&
+    typeof v.suiteId === "string" &&
+    Array.isArray(v.tests)
+  );
 }
 
 /* ============================================================
  * Helpers
  * ============================================================ */
 
-function loadJson(filePath: string): ExecutableDoc {
+function loadJson(filePath: string): any {
   const raw = fs.readFileSync(filePath, "utf-8");
   return JSON.parse(raw);
 }
 
+/**
+ * Folder-safe runId derived from ISO:
+ * 2026-02-02T19:53:40.412Z -> 2026-02-02T19-53-40-412Z
+ */
+function runIdToFolderName(runIdIso: string): string {
+  return runIdIso.replace(/:/g, "-").replace(/\./g, "-");
+}
+
+function nowIso(): string {
+  return new Date().toISOString();
+}
+
+function durationMs(startIso: string, endIso: string): number {
+  const s = Date.parse(startIso);
+  const e = Date.parse(endIso);
+  if (!Number.isFinite(s) || !Number.isFinite(e)) return 0;
+  return Math.max(0, e - s);
+}
+
 function loadAllExecutables(dir: string): Map<string, ExecutableDoc> {
   const map = new Map<string, ExecutableDoc>();
-
   if (!fs.existsSync(dir)) return map;
 
   const entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -59,14 +114,10 @@ function loadAllExecutables(dir: string): Map<string, ExecutableDoc> {
     const full = path.join(dir, e.name);
 
     if (e.isDirectory()) {
-      for (const [k, v] of loadAllExecutables(full)) {
-        map.set(k, v);
-      }
+      for (const [k, v] of loadAllExecutables(full)) map.set(k, v);
     } else if (e.isFile() && e.name.endsWith(".json")) {
-      const doc = loadJson(full);
-      if (map.has(doc.id)) {
-        throw new Error(`Duplicate executable id: ${doc.id}`);
-      }
+      const doc = loadJson(full) as ExecutableDoc;
+      if (map.has(doc.id)) throw new Error(`Duplicate executable id: ${doc.id}`);
       map.set(doc.id, doc);
     }
   }
@@ -74,10 +125,11 @@ function loadAllExecutables(dir: string): Map<string, ExecutableDoc> {
   return map;
 }
 
-function expandIncludes(
-  root: ExecutableDoc,
-  registry: Map<string, ExecutableDoc>
-): ExecutableDoc {
+/**
+ * Include expansion is linear and deterministic.
+ * (Reusable flows must not include other flows.)
+ */
+function expandIncludes(root: ExecutableDoc, registry: Map<string, ExecutableDoc>): ExecutableDoc {
   const expandedSteps: any[] = [];
 
   for (const step of root.steps) {
@@ -85,12 +137,9 @@ function expandIncludes(
       const ref = step.ref;
       const target = registry.get(ref);
 
-      if (!target) {
-        throw new Error(`Include reference not found: ${ref}`);
-      }
-      if (!target.reusable) {
-        throw new Error(`Include target is not reusable: ${ref}`);
-      }
+      if (!target) throw new Error(`Include reference not found: ${ref}`);
+      if (!target.reusable) throw new Error(`Include target is not reusable: ${ref}`);
+
       if (target.steps.some((s) => s?.type === "include")) {
         throw new Error(`Reusable "${ref}" must not contain include steps`);
       }
@@ -109,90 +158,316 @@ function expandIncludes(
   };
 }
 
+/**
+ * Normalize suite test entry into an ExecutableDoc + a diagnostic filePath.
+ */
+function normalizeSuiteTestEntry(params: {
+  entry: SuiteTestEntry;
+  suiteDir: string;
+  suiteFilePath: string;
+  index: number;
+}): { doc: ExecutableDoc; filePath: string } {
+  const { entry, suiteDir, suiteFilePath, index } = params;
+
+  if (isExecutableLike(entry)) {
+    return { doc: entry, filePath: `${suiteFilePath}#tests[${index}]` };
+  }
+
+  if (typeof entry === "string") {
+    const testPath = path.resolve(suiteDir, `${entry}.json`);
+    return { doc: loadJson(testPath) as ExecutableDoc, filePath: testPath };
+  }
+
+  if (isObject(entry) && typeof (entry as any).path === "string") {
+    const testPath = path.resolve(suiteDir, (entry as any).path);
+    return { doc: loadJson(testPath) as ExecutableDoc, filePath: testPath };
+  }
+
+  if (isObject(entry) && typeof (entry as any).ref === "string") {
+    const testPath = path.resolve(suiteDir, `${(entry as any).ref}.json`);
+    return { doc: loadJson(testPath) as ExecutableDoc, filePath: testPath };
+  }
+
+  throw new Error(`Invalid suite test entry at index ${index}: ${JSON.stringify(entry)}`);
+}
+
 /* ============================================================
- * Public entrypoint (signature preserved)
+ * Execute one test (validate raw JSON once, expand includes for execution)
  * ============================================================ */
 
-export async function runSuiteFromFile(
-  suitePath: string,
-  options: RunSuiteOptions = {}
-) {
-  const executionMode = options.executionMode ?? "real";
-  const sandbox = executionMode === "stub";
-  const outputDir = options.artifactsDir ?? "artifacts";
+async function runOneTest(params: {
+  suiteId: string;
+  runIdIso: string;
+  suiteContext: Record<string, any>;
+  suiteBaseUrl?: string;
 
-  const rootPath = path.resolve(suitePath);
-  const root = loadJson(rootPath);
+  doc: ExecutableDoc;
+  filePath: string;
 
-  // ── validation: root executable ───────────────────────────
-  throwIfIssues(validateExecutableDoc(root, rootPath));
+  registry: Map<string, ExecutableDoc>;
+  options: RunSuiteOptions;
+  artifactsBaseDir: string;
+}): Promise<TestResult> {
+  const {
+    suiteId,
+    runIdIso,
+    suiteContext,
+    suiteBaseUrl,
+    doc,
+    filePath,
+    registry,
+    options,
+    artifactsBaseDir
+  } = params;
 
-  if (root.reusable) {
-    throw new Error(`Reusable executable cannot be run directly: ${root.id}`);
+  // Validate raw JSON once (per executable)
+  throwIfIssues(validateExecutableDoc(doc, filePath));
+  if (doc.reusable) {
+    throw new Error(`Reusable executable cannot be run directly: ${doc.id}`);
   }
 
-  // ── load reusable flows ───────────────────────────────────
-  const flowsDir = path.resolve("flows");
-  const registry = loadAllExecutables(flowsDir);
-
-  for (const doc of registry.values()) {
-    throwIfIssues(validateExecutableDoc(doc));
-    if (!doc.reusable) {
-      throw new Error(`Non-reusable executable found in flows registry`);
-    }
-  }
-
-  // ── validate includes ─────────────────────────────────────
+  // Validate include references (mechanical integrity)
   throwIfIssues(
     validateIncludesAgainstRegistry({
-      doc: root,
+      doc,
       registry,
-      filePath: rootPath
+      filePath
     })
   );
 
-  // ── expand includes ───────────────────────────────────────
-  const expanded = expandIncludes(root, registry);
+  // Merge suite context -> test context (test overrides)
+  const effectiveContext: Record<string, any> = {
+    ...(suiteContext ?? {}),
+    ...(doc.context ?? {})
+  };
 
-  // ── validate interpolation completeness ───────────────────
+  // Expand includes linearly for execution
+  const expanded = expandIncludes(
+    {
+      ...doc,
+      reusable: false,
+      context: effectiveContext
+    },
+    registry
+  );
+
+  // Validate interpolation completeness (execution-preflight)
   throwIfIssues(
     validateInterpolationCompleteness({
       doc: expanded,
       contextKeys: new Set(Object.keys(expanded.context ?? {})),
-      filePath: rootPath
+      filePath
     })
   );
 
-  // ── resolve context + secrets ─────────────────────────────
+  // Resolve context + secrets
+  const sandbox = options.executionMode === "stub";
   const resolvedContext = resolveRootContext({
     context: expanded.context,
     sandbox,
     injectedSecrets: parseInjectedSecrets([])
   });
 
-  // ── interpolate steps ─────────────────────────────────────
-  const interpolatedSteps = interpolateDeepStrict(
-    expanded.steps,
-    resolvedContext.values
-  );
+  // Interpolate steps
+  const interpolatedSteps = interpolateDeepStrict(expanded.steps, resolvedContext.values);
 
-  // ── build Core test definition ────────────────────────────
+  // Build Core test definition
   const testDef: JsonTestDefinition = {
     id: expanded.id,
     steps: interpolatedSteps
   };
 
-  // ── execute ───────────────────────────────────────────────
-  const runner = new CoreRunner();
-  const results = await runner.run(testDef);
+  // baseUrl inheritance: CLI overrides suite overrides nothing
+  const effectiveBaseUrl = options.baseUrl ?? suiteBaseUrl;
 
-  // ── report (masked) ───────────────────────────────────────
+  // Execute (one browser per test is enforced inside CoreRunner)
+  const runner = new CoreRunner({
+    executionMode: options.executionMode ?? "stub",
+    headless: options.headless,
+    slowMoMs: options.slowMoMs,
+    baseUrl: effectiveBaseUrl,
+    browserName: options.browserName
+  });
+
+  const testResult = await runner.run(testDef);
+
+  // Write artifact: artifacts/<suiteId>/<runId>/<projectId>/<testId>/result.json
+  const runFolder = runIdToFolderName(runIdIso);
+  const outDir = path.join(
+    artifactsBaseDir,
+    suiteId,
+    runFolder,
+    testResult.projectId,
+    testResult.id
+  );
+
   const reporter = new JsonReporter({
-    outputDir,
+    outputDir: outDir,
     secretVars: resolvedContext.secretVars
   });
 
-  reporter.write("results.json", results);
+  // Envelope is self-describing and Playwright-aligned
+  reporter.write("result.json", {
+    suiteId,
+    runId: runIdIso,
+    projectId: testResult.projectId,
+    testId: testResult.id,
+    executionMode: testResult.executionMode,
+    startedAt: testResult.startedAt,
+    endedAt: testResult.endedAt,
+    durationMs: testResult.durationMs,
+    result: testResult.result,
+    errors: testResult.errors,
+    steps: testResult.steps
+  });
 
-  return results;
+  return testResult;
+}
+
+/* ============================================================
+ * Public entrypoint (signature preserved)
+ * ============================================================ */
+
+export async function runSuiteFromFile(inputPath: string, options: RunSuiteOptions = {}) {
+  const rootPath = path.resolve(inputPath);
+  const root = loadJson(rootPath);
+
+  // Load reusable flows registry once per invocation; validate each once on raw JSON
+  const flowsDir = path.resolve("flows");
+  const registry = loadAllExecutables(flowsDir);
+
+  for (const flow of registry.values()) {
+    throwIfIssues(validateExecutableDoc(flow));
+    if (!flow.reusable) {
+      throw new Error(`Non-reusable executable found in flows registry: ${flow.id}`);
+    }
+  }
+
+  // Determine suite vs single executable
+  const artifactsBaseDir = options.artifactsDir ?? "artifacts";
+
+  if (isSuiteDoc(root)) {
+    const suite: SuiteDoc = root;
+    const suiteDir = path.dirname(rootPath);
+
+    const startedAt = nowIso();
+    const runIdIso = startedAt;
+
+    const suiteContext = suite.context ?? {};
+    const suiteBaseUrl = suite.baseUrl;
+
+    const tests: TestResult[] = [];
+
+    const runStartedAt = startedAt;
+
+    // Execute sequentially (parallelization is a separate decision)
+    for (let i = 0; i < suite.tests.length; i++) {
+      const { doc, filePath } = normalizeSuiteTestEntry({
+        entry: suite.tests[i],
+        suiteDir,
+        suiteFilePath: rootPath,
+        index: i
+      });
+
+      const tr = await runOneTest({
+        suiteId: suite.suiteId,
+        runIdIso,
+        suiteContext,
+        suiteBaseUrl,
+        doc,
+        filePath,
+        registry,
+        options,
+        artifactsBaseDir
+      });
+
+      tests.push(tr);
+    }
+
+    const endedAt = nowIso();
+
+    const summary = {
+      total: tests.length,
+      passed: tests.filter((t) => t.result === "passed").length,
+      failed: tests.filter((t) => t.result === "failed").length,
+      aborted: tests.filter((t) => t.result === "aborted").length
+    };
+
+    // ProjectId at run level:
+    // - if all tests share one project, use it
+    // - else use "mixed"
+    const projectId =
+      tests.length === 0
+        ? (options.browserName ?? "chromium")
+        : tests.every((t) => t.projectId === tests[0].projectId)
+        ? tests[0].projectId
+        : "mixed";
+
+    const runResult: RunResult = {
+      schemaVersion: "v1",
+      suiteId: suite.suiteId,
+      suiteName: suite.suiteName,
+      suitePath: rootPath,
+      runId: runIdIso,
+      executionMode: options.executionMode ?? "stub",
+      projectId,
+      startedAt: runStartedAt,
+      endedAt,
+      durationMs: durationMs(runStartedAt, endedAt),
+      tests,
+      summary
+    };
+
+    // Write run manifest: artifacts/<suiteId>/<runId>/run.json
+    const runFolder = runIdToFolderName(runIdIso);
+    const runOutDir = path.join(artifactsBaseDir, suite.suiteId, runFolder);
+
+    new JsonReporter({ outputDir: runOutDir }).write("run.json", runResult);
+
+    return runResult;
+  }
+
+  // Single executable path (treated as a suite of one with suiteId = "single")
+  const startedAt = nowIso();
+  const runIdIso = startedAt;
+
+  const tr = await runOneTest({
+    suiteId: "single",
+    runIdIso,
+    suiteContext: {},
+    suiteBaseUrl: undefined,
+    doc: root as ExecutableDoc,
+    filePath: rootPath,
+    registry,
+    options,
+    artifactsBaseDir
+  });
+
+  const endedAt = nowIso();
+
+  const runResult: RunResult = {
+    schemaVersion: "v1",
+    suiteId: "single",
+    suiteName: undefined,
+    suitePath: rootPath,
+    runId: runIdIso,
+    executionMode: options.executionMode ?? "stub",
+    projectId: tr.projectId,
+    startedAt,
+    endedAt,
+    durationMs: durationMs(startedAt, endedAt),
+    tests: [tr],
+    summary: {
+      total: 1,
+      passed: tr.result === "passed" ? 1 : 0,
+      failed: tr.result === "failed" ? 1 : 0,
+      aborted: tr.result === "aborted" ? 1 : 0
+    }
+  };
+
+  const runFolder = runIdToFolderName(runIdIso);
+  const runOutDir = path.join(artifactsBaseDir, "single", runFolder);
+  new JsonReporter({ outputDir: runOutDir }).write("run.json", runResult);
+
+  return runResult;
 }
