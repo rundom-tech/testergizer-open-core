@@ -26,9 +26,9 @@ import type {
   StepStatus,
   TestResult,
   TestResultValue,
-  TestAttemptResult,        // CHANGE: attempt-level result
-  InstrumentationState,     // CHANGE: instrumentation facts
-  CacheState                // CHANGE: cache facts
+  TestAttemptResult,
+  InstrumentationState,
+  CacheState
 } from "./resultTypes";
 
 function nowIso(): string {
@@ -69,6 +69,7 @@ export class CoreRunner {
   /**
    * Execute exactly one test.
    * Owns its browser lifecycle.
+   * Retries are handled here, mechanically.
    */
   async run(test: JsonTestDefinition): Promise<TestResult> {
     const testStartedAt = nowIso();
@@ -77,113 +78,137 @@ export class CoreRunner {
       this.options.browserName
     );
 
-    let browser: Browser | null = null;
-    let page: Page | null = null;
+    const attempts: TestAttemptResult[] = [];
 
-    const stepResults: StepResult[] = [];
-    const testErrors: StepError[] = [];
+    // CHANGE: retries are mechanical, default = 1
+    const maxAttempts =
+      this.executionMode === "stub"
+        ? 1
+        : Math.max(1, this.options.retries ?? 1);
 
-    let testFailed = false;
-    let aborted: StepError | null = null;
+    let finalResult: TestResultValue = "passed";
 
-    // CHANGE: single explicit attempt (no retries yet)
-    const attemptNumber = 1;
-    const attemptStartedAt = nowIso();
+    for (let attemptNumber = 1; attemptNumber <= maxAttempts; attemptNumber++) {
+      let browser: Browser | null = null;
+      let page: Page | null = null;
 
-    try {
-      if (this.executionMode !== "stub") {
-        browser = await browserType.launch({
-          headless: this.options.headless ?? true,
-          slowMo: this.options.slowMoMs
-        });
+      const stepResults: StepResult[] = [];
+      const attemptErrors: StepError[] = [];
 
-        const context = await browser.newContext({
-          baseURL: this.options.baseUrl
-        });
+      let attemptFailed = false;
+      let aborted: StepError | null = null;
 
-        page = await context.newPage();
-      }
+      const attemptStartedAt = nowIso();
 
-      for (const step of test.steps ?? []) {
-        const stepStartedAt = nowIso();
-        const errors: StepError[] = [];
-        let status: StepStatus = "passed";
+      try {
+        if (this.executionMode !== "stub") {
+          browser = await browserType.launch({
+            headless: this.options.headless ?? true,
+            slowMo: this.options.slowMoMs
+          });
 
-        try {
-          await this.executor.execute(step as JsonStep, page);
-        } catch (err) {
-          status = "failed";
-          errors.push(this.toStepError(err));
-          testFailed = true;
+          const context = await browser.newContext({
+            baseURL: this.options.baseUrl
+          });
+
+          page = await context.newPage();
         }
 
-        const stepEndedAt = nowIso();
+        for (const step of test.steps ?? []) {
+          const stepStartedAt = nowIso();
+          const errors: StepError[] = [];
+          let status: StepStatus = "passed";
 
-        stepResults.push({
-          id: step.id,
-          action: step.action,
-          status,
-          attempts: 1,
-          errors,
-          startedAt: stepStartedAt,
-          endedAt: stepEndedAt,
-          durationMs: durationMs(stepStartedAt, stepEndedAt)
-        });
-      }
-    } catch (err) {
-      aborted = this.toStepError(err);
-      testErrors.push(aborted);
-    } finally {
-      if (browser) {
-        try {
-          await browser.close();
-        } catch (err) {
-          if (!aborted) {
-            aborted = this.toStepError(err);
-            testErrors.push(aborted);
+          try {
+            await this.executor.execute(step as JsonStep, page);
+          } catch (err) {
+            status = "failed";
+            errors.push(this.toStepError(err));
+            attemptFailed = true;
+          }
+
+          const stepEndedAt = nowIso();
+
+          stepResults.push({
+            id: step.id,
+            action: step.action,
+            status,
+            attempts: 1,
+            errors,
+            startedAt: stepStartedAt,
+            endedAt: stepEndedAt,
+            durationMs: durationMs(stepStartedAt, stepEndedAt)
+          });
+        }
+      } catch (err) {
+        aborted = this.toStepError(err);
+        attemptErrors.push(aborted);
+      } finally {
+        if (browser) {
+          try {
+            await browser.close();
+          } catch (err) {
+            if (!aborted) {
+              aborted = this.toStepError(err);
+              attemptErrors.push(aborted);
+            }
           }
         }
       }
+
+      const attemptEndedAt = nowIso();
+
+      const attemptResult: TestResultValue = aborted
+        ? "aborted"
+        : attemptFailed
+        ? "failed"
+        : "passed";
+
+      // CHANGE: instrumentation facts (still defaults, per attempt)
+      const instrumentation: InstrumentationState | undefined =
+        this.executionMode === "stub"
+          ? undefined
+          : {
+              video: { enabled: false },
+              snapshot: { enabled: false },
+              domSnapshot: { enabled: false }
+            };
+
+      // CHANGE: cache facts (new context per attempt)
+      const cache: CacheState | undefined =
+        this.executionMode === "stub"
+          ? undefined
+          : {
+              mode: "enabled",
+              state: "cold",
+              scope: "browser"
+            };
+
+      attempts.push({
+        attempt: attemptNumber,
+        result: attemptResult,
+        startedAt: attemptStartedAt,
+        endedAt: attemptEndedAt,
+        durationMs: durationMs(attemptStartedAt, attemptEndedAt),
+        instrumentation,
+        cache,
+        errors: attemptErrors.length ? attemptErrors : undefined,
+        steps: stepResults
+      });
+
+      // CHANGE: stop rules are explicit and minimal
+      if (attemptResult === "passed") {
+        finalResult = "passed";
+        break;
+      }
+
+      if (attemptResult === "aborted") {
+        finalResult = "aborted";
+        break;
+      }
+
+      finalResult = "failed";
     }
-
-    const attemptEndedAt = nowIso();
-
-    const attemptResult: TestResultValue = aborted
-      ? "aborted"
-      : testFailed
-      ? "failed"
-      : "passed";
-
-    // CHANGE: record instrumentation facts honestly (known defaults)
-    const instrumentation: InstrumentationState | undefined =
-      this.executionMode === "stub"
-        ? undefined
-        : {
-            video: { enabled: false },        // no video recording today
-            snapshot: { enabled: false },     // no snapshotting today
-            domSnapshot: { enabled: false }   // no DOM snapshotting today
-          };
-
-    // CHANGE: record cache facts honestly (what Core knows)
-    const cache: CacheState | undefined =
-      this.executionMode === "stub"
-        ? undefined
-        : {
-            mode: "enabled",
-            state: "cold",      // new browser context per test
-            scope: "browser"
-          };
-
-    const attempt: TestAttemptResult = {
-      attempt: attemptNumber,
-      result: attemptResult,
-      startedAt: attemptStartedAt,
-      endedAt: attemptEndedAt,
-      durationMs: durationMs(attemptStartedAt, attemptEndedAt),
-      instrumentation,
-      errors: testErrors.length ? testErrors : undefined,
-      steps: stepResults
-    };
 
     const testEndedAt = nowIso();
 
@@ -193,16 +218,11 @@ export class CoreRunner {
       testDomain: test.testDomain ?? "system",
       executionMode: this.executionMode,
       projectId,
-
-      // CHANGE: final outcome is derived from attempts
-      result: attemptResult,
-
+      result: finalResult,
       startedAt: testStartedAt,
       endedAt: testEndedAt,
       durationMs: durationMs(testStartedAt, testEndedAt),
-
-      // CHANGE: explicit attempts array
-      attempts: [attempt]
+      attempts
     };
   }
 

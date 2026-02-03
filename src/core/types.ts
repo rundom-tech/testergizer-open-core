@@ -45,6 +45,7 @@ export interface CoreRunnerOptions {
   slowMoMs?: number;
   baseUrl?: string;
   executionMode?: ExecutionMode;
+  retries?: number;
 
   /** Playwright browser family (maps to Playwright project semantics) */
   browserName?: "chromium" | "firefox" | "webkit";

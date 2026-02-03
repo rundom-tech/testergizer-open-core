@@ -69,7 +69,7 @@ export interface CacheState {
 
 export interface TestAttemptResult {
   attempt: number;
-
+  
   /** Playwright-aligned outcome */
   result: TestResultValue;
 
@@ -83,6 +83,8 @@ export interface TestAttemptResult {
   errors?: StepError[];
 
   steps: StepResult[];
+  cache?: CacheState;
+
 }
 
 /* ============================================================
