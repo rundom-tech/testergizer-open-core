@@ -52,6 +52,25 @@ function pickBrowserType(name?: string): {
   return { projectId: "chromium", browserType: chromium };
 }
 
+/**
+ * Pure helper: compute instrumentation facts per attempt.
+ * No policy inference, only explicit rules.
+ */
+function instrumentationForAttempt(
+  executionMode: ExecutionMode,
+  attemptNumber: number
+): InstrumentationState | undefined {
+  if (executionMode === "stub") return undefined;
+
+  const enabled = attemptNumber > 1;
+
+  return {
+    video: { enabled },
+    snapshot: { enabled },
+    domSnapshot: { enabled }
+  };
+}
+
 export class CoreRunner {
   private readonly options: CoreRunnerOptions;
   private readonly executionMode: ExecutionMode;
@@ -69,7 +88,7 @@ export class CoreRunner {
   /**
    * Execute exactly one test.
    * Owns its browser lifecycle.
-   * Retries are handled here, mechanically.
+   * Retries are handled mechanically.
    */
   async run(test: JsonTestDefinition): Promise<TestResult> {
     const testStartedAt = nowIso();
@@ -80,7 +99,6 @@ export class CoreRunner {
 
     const attempts: TestAttemptResult[] = [];
 
-    // CHANGE: retries are mechanical, default = 1
     const maxAttempts =
       this.executionMode === "stub"
         ? 1
@@ -164,17 +182,11 @@ export class CoreRunner {
         ? "failed"
         : "passed";
 
-      // CHANGE: instrumentation facts (still defaults, per attempt)
-      const instrumentation: InstrumentationState | undefined =
-        this.executionMode === "stub"
-          ? undefined
-          : {
-              video: { enabled: false },
-              snapshot: { enabled: false },
-              domSnapshot: { enabled: false }
-            };
+      const instrumentation = instrumentationForAttempt(
+        this.executionMode,
+        attemptNumber
+      );
 
-      // CHANGE: cache facts (new context per attempt)
       const cache: CacheState | undefined =
         this.executionMode === "stub"
           ? undefined
@@ -196,7 +208,6 @@ export class CoreRunner {
         steps: stepResults
       });
 
-      // CHANGE: stop rules are explicit and minimal
       if (attemptResult === "passed") {
         finalResult = "passed";
         break;
@@ -226,10 +237,6 @@ export class CoreRunner {
     };
   }
 
-  /**
-   * Compatibility shim.
-   * CoreRunner no longer owns long-lived resources.
-   */
   async dispose(): Promise<void> {
     // no-op by design
   }
