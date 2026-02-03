@@ -25,7 +25,10 @@ import type {
   StepResult,
   StepStatus,
   TestResult,
-  TestResultValue
+  TestResultValue,
+  TestAttemptResult,        // CHANGE: attempt-level result
+  InstrumentationState,     // CHANGE: instrumentation facts
+  CacheState                // CHANGE: cache facts
 } from "./resultTypes";
 
 function nowIso(): string {
@@ -83,6 +86,10 @@ export class CoreRunner {
     let testFailed = false;
     let aborted: StepError | null = null;
 
+    // CHANGE: single explicit attempt (no retries yet)
+    const attemptNumber = 1;
+    const attemptStartedAt = nowIso();
+
     try {
       if (this.executionMode !== "stub") {
         browser = await browserType.launch({
@@ -139,13 +146,46 @@ export class CoreRunner {
       }
     }
 
-    const testEndedAt = nowIso();
+    const attemptEndedAt = nowIso();
 
-    const result: TestResultValue = aborted
+    const attemptResult: TestResultValue = aborted
       ? "aborted"
       : testFailed
       ? "failed"
       : "passed";
+
+    // CHANGE: record instrumentation facts honestly (known defaults)
+    const instrumentation: InstrumentationState | undefined =
+      this.executionMode === "stub"
+        ? undefined
+        : {
+            video: { enabled: false },        // no video recording today
+            snapshot: { enabled: false },     // no snapshotting today
+            domSnapshot: { enabled: false }   // no DOM snapshotting today
+          };
+
+    // CHANGE: record cache facts honestly (what Core knows)
+    const cache: CacheState | undefined =
+      this.executionMode === "stub"
+        ? undefined
+        : {
+            mode: "enabled",
+            state: "cold",      // new browser context per test
+            scope: "browser"
+          };
+
+    const attempt: TestAttemptResult = {
+      attempt: attemptNumber,
+      result: attemptResult,
+      startedAt: attemptStartedAt,
+      endedAt: attemptEndedAt,
+      durationMs: durationMs(attemptStartedAt, attemptEndedAt),
+      instrumentation,
+      errors: testErrors.length ? testErrors : undefined,
+      steps: stepResults
+    };
+
+    const testEndedAt = nowIso();
 
     return {
       id: test.id,
@@ -153,12 +193,16 @@ export class CoreRunner {
       testDomain: test.testDomain ?? "system",
       executionMode: this.executionMode,
       projectId,
-      result,
+
+      // CHANGE: final outcome is derived from attempts
+      result: attemptResult,
+
       startedAt: testStartedAt,
       endedAt: testEndedAt,
       durationMs: durationMs(testStartedAt, testEndedAt),
-      errors: testErrors.length ? testErrors : undefined,
-      steps: stepResults
+
+      // CHANGE: explicit attempts array
+      attempts: [attempt]
     };
   }
 

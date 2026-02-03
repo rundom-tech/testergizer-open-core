@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { randomUUID } from "crypto";
 
 import { CoreRunner } from "../core/CoreRunner";
 import { JsonReporter } from "../tools/jsonReporter";
@@ -85,16 +86,12 @@ function loadJson(filePath: string): any {
   return JSON.parse(raw);
 }
 
-/**
- * Folder-safe runId derived from ISO:
- * 2026-02-02T19:53:40.412Z -> 2026-02-02T19-53-40-412Z
- */
-function runIdToFolderName(runIdIso: string): string {
-  return runIdIso.replace(/:/g, "-").replace(/\./g, "-");
-}
-
 function nowIso(): string {
   return new Date().toISOString();
+}
+
+function toDateFolder(iso: string): string {
+  return iso.slice(0, 10); // YYYY-MM-DD
 }
 
 function durationMs(startIso: string, endIso: string): number {
@@ -127,7 +124,6 @@ function loadAllExecutables(dir: string): Map<string, ExecutableDoc> {
 
 /**
  * Include expansion is linear and deterministic.
- * (Reusable flows must not include other flows.)
  */
 function expandIncludes(root: ExecutableDoc, registry: Map<string, ExecutableDoc>): ExecutableDoc {
   const expandedSteps: any[] = [];
@@ -139,7 +135,6 @@ function expandIncludes(root: ExecutableDoc, registry: Map<string, ExecutableDoc
 
       if (!target) throw new Error(`Include reference not found: ${ref}`);
       if (!target.reusable) throw new Error(`Include target is not reusable: ${ref}`);
-
       if (target.steps.some((s) => s?.type === "include")) {
         throw new Error(`Reusable "${ref}" must not contain include steps`);
       }
@@ -158,9 +153,6 @@ function expandIncludes(root: ExecutableDoc, registry: Map<string, ExecutableDoc
   };
 }
 
-/**
- * Normalize suite test entry into an ExecutableDoc + a diagnostic filePath.
- */
 function normalizeSuiteTestEntry(params: {
   entry: SuiteTestEntry;
   suiteDir: string;
@@ -192,25 +184,25 @@ function normalizeSuiteTestEntry(params: {
 }
 
 /* ============================================================
- * Execute one test (validate raw JSON once, expand includes for execution)
+ * Execute one test
  * ============================================================ */
 
 async function runOneTest(params: {
   suiteId: string;
-  runIdIso: string;
+  runId: string;
+  runDateFolder: string;
   suiteContext: Record<string, any>;
   suiteBaseUrl?: string;
-
   doc: ExecutableDoc;
   filePath: string;
-
   registry: Map<string, ExecutableDoc>;
   options: RunSuiteOptions;
   artifactsBaseDir: string;
 }): Promise<TestResult> {
   const {
     suiteId,
-    runIdIso,
+    runId,
+    runDateFolder,
     suiteContext,
     suiteBaseUrl,
     doc,
@@ -220,38 +212,21 @@ async function runOneTest(params: {
     artifactsBaseDir
   } = params;
 
-  // Validate raw JSON once (per executable)
   throwIfIssues(validateExecutableDoc(doc, filePath));
-  if (doc.reusable) {
-    throw new Error(`Reusable executable cannot be run directly: ${doc.id}`);
-  }
+  if (doc.reusable) throw new Error(`Reusable executable cannot be run directly: ${doc.id}`);
 
-  // Validate include references (mechanical integrity)
-  throwIfIssues(
-    validateIncludesAgainstRegistry({
-      doc,
-      registry,
-      filePath
-    })
-  );
+  throwIfIssues(validateIncludesAgainstRegistry({ doc, registry, filePath }));
 
-  // Merge suite context -> test context (test overrides)
   const effectiveContext: Record<string, any> = {
     ...(suiteContext ?? {}),
     ...(doc.context ?? {})
   };
 
-  // Expand includes linearly for execution
   const expanded = expandIncludes(
-    {
-      ...doc,
-      reusable: false,
-      context: effectiveContext
-    },
+    { ...doc, reusable: false, context: effectiveContext },
     registry
   );
 
-  // Validate interpolation completeness (execution-preflight)
   throwIfIssues(
     validateInterpolationCompleteness({
       doc: expanded,
@@ -260,7 +235,6 @@ async function runOneTest(params: {
     })
   );
 
-  // Resolve context + secrets
   const sandbox = options.executionMode === "stub";
   const resolvedContext = resolveRootContext({
     context: expanded.context,
@@ -268,99 +242,57 @@ async function runOneTest(params: {
     injectedSecrets: parseInjectedSecrets([])
   });
 
-  // Interpolate steps
   const interpolatedSteps = interpolateDeepStrict(expanded.steps, resolvedContext.values);
 
-  // Build Core test definition
   const testDef: JsonTestDefinition = {
     id: expanded.id,
     steps: interpolatedSteps
   };
 
-  // baseUrl inheritance: CLI overrides suite overrides nothing
-  const effectiveBaseUrl = options.baseUrl ?? suiteBaseUrl;
-
-  // Execute (one browser per test is enforced inside CoreRunner)
   const runner = new CoreRunner({
     executionMode: options.executionMode ?? "stub",
     headless: options.headless,
     slowMoMs: options.slowMoMs,
-    baseUrl: effectiveBaseUrl,
+    baseUrl: options.baseUrl ?? suiteBaseUrl,
     browserName: options.browserName
   });
 
   const testResult = await runner.run(testDef);
 
-  // Write artifact: artifacts/<suiteId>/<runId>/<projectId>/<testId>/result.json
-  const runFolder = runIdToFolderName(runIdIso);
   const outDir = path.join(
     artifactsBaseDir,
     suiteId,
-    runFolder,
+    runDateFolder,
+    runId,
     testResult.projectId,
     testResult.id
   );
 
-  const reporter = new JsonReporter({
-    outputDir: outDir,
-    secretVars: resolvedContext.secretVars
-  });
-
-  // Envelope is self-describing and Playwright-aligned
-  reporter.write("result.json", {
-    suiteId,
-    runId: runIdIso,
-    projectId: testResult.projectId,
-    testId: testResult.id,
-    executionMode: testResult.executionMode,
-    startedAt: testResult.startedAt,
-    endedAt: testResult.endedAt,
-    durationMs: testResult.durationMs,
-    result: testResult.result,
-    errors: testResult.errors,
-    steps: testResult.steps
-  });
-
+  new JsonReporter({ outputDir: outDir }).write("result.json", testResult);
   return testResult;
 }
 
 /* ============================================================
- * Public entrypoint (signature preserved)
+ * Public entrypoint
  * ============================================================ */
 
 export async function runSuiteFromFile(inputPath: string, options: RunSuiteOptions = {}) {
   const rootPath = path.resolve(inputPath);
   const root = loadJson(rootPath);
 
-  // Load reusable flows registry once per invocation; validate each once on raw JSON
-  const flowsDir = path.resolve("flows");
-  const registry = loadAllExecutables(flowsDir);
-
-  for (const flow of registry.values()) {
-    throwIfIssues(validateExecutableDoc(flow));
-    if (!flow.reusable) {
-      throw new Error(`Non-reusable executable found in flows registry: ${flow.id}`);
-    }
-  }
-
-  // Determine suite vs single executable
   const artifactsBaseDir = options.artifactsDir ?? "artifacts";
+  const executionType = options.executionMode === "stub" ? "stub" : "real";
 
   if (isSuiteDoc(root)) {
-    const suite: SuiteDoc = root;
+    const suite = root as SuiteDoc;
     const suiteDir = path.dirname(rootPath);
 
     const startedAt = nowIso();
-    const runIdIso = startedAt;
-
-    const suiteContext = suite.context ?? {};
-    const suiteBaseUrl = suite.baseUrl;
+    const runId = randomUUID();
+    const runDateFolder = toDateFolder(startedAt);
 
     const tests: TestResult[] = [];
 
-    const runStartedAt = startedAt;
-
-    // Execute sequentially (parallelization is a separate decision)
     for (let i = 0; i < suite.tests.length; i++) {
       const { doc, filePath } = normalizeSuiteTestEntry({
         entry: suite.tests[i],
@@ -371,12 +303,13 @@ export async function runSuiteFromFile(inputPath: string, options: RunSuiteOptio
 
       const tr = await runOneTest({
         suiteId: suite.suiteId,
-        runIdIso,
-        suiteContext,
-        suiteBaseUrl,
+        runId,
+        runDateFolder,
+        suiteContext: suite.context ?? {},
+        suiteBaseUrl: suite.baseUrl,
         doc,
         filePath,
-        registry,
+        registry: loadAllExecutables(path.resolve("flows")),
         options,
         artifactsBaseDir
       });
@@ -393,12 +326,9 @@ export async function runSuiteFromFile(inputPath: string, options: RunSuiteOptio
       aborted: tests.filter((t) => t.result === "aborted").length
     };
 
-    // ProjectId at run level:
-    // - if all tests share one project, use it
-    // - else use "mixed"
     const projectId =
       tests.length === 0
-        ? (options.browserName ?? "chromium")
+        ? options.browserName ?? "chromium"
         : tests.every((t) => t.projectId === tests[0].projectId)
         ? tests[0].projectId
         : "mixed";
@@ -408,37 +338,42 @@ export async function runSuiteFromFile(inputPath: string, options: RunSuiteOptio
       suiteId: suite.suiteId,
       suiteName: suite.suiteName,
       suitePath: rootPath,
-      runId: runIdIso,
+      runId,
+      executionType,
       executionMode: options.executionMode ?? "stub",
       projectId,
-      startedAt: runStartedAt,
+      startedAt,
       endedAt,
-      durationMs: durationMs(runStartedAt, endedAt),
+      durationMs: durationMs(startedAt, endedAt),
       tests,
       summary
     };
 
-    // Write run manifest: artifacts/<suiteId>/<runId>/run.json
-    const runFolder = runIdToFolderName(runIdIso);
-    const runOutDir = path.join(artifactsBaseDir, suite.suiteId, runFolder);
+    const runOutDir = path.join(
+      artifactsBaseDir,
+      suite.suiteId,
+      runDateFolder,
+      runId
+    );
 
     new JsonReporter({ outputDir: runOutDir }).write("run.json", runResult);
-
     return runResult;
   }
 
-  // Single executable path (treated as a suite of one with suiteId = "single")
+  // Single executable path
   const startedAt = nowIso();
-  const runIdIso = startedAt;
+  const runId = randomUUID();
+  const runDateFolder = toDateFolder(startedAt);
 
   const tr = await runOneTest({
     suiteId: "single",
-    runIdIso,
+    runId,
+    runDateFolder,
     suiteContext: {},
     suiteBaseUrl: undefined,
     doc: root as ExecutableDoc,
     filePath: rootPath,
-    registry,
+    registry: loadAllExecutables(path.resolve("flows")),
     options,
     artifactsBaseDir
   });
@@ -450,7 +385,8 @@ export async function runSuiteFromFile(inputPath: string, options: RunSuiteOptio
     suiteId: "single",
     suiteName: undefined,
     suitePath: rootPath,
-    runId: runIdIso,
+    runId,
+    executionType,
     executionMode: options.executionMode ?? "stub",
     projectId: tr.projectId,
     startedAt,
@@ -465,9 +401,13 @@ export async function runSuiteFromFile(inputPath: string, options: RunSuiteOptio
     }
   };
 
-  const runFolder = runIdToFolderName(runIdIso);
-  const runOutDir = path.join(artifactsBaseDir, "single", runFolder);
-  new JsonReporter({ outputDir: runOutDir }).write("run.json", runResult);
+  const runOutDir = path.join(
+    artifactsBaseDir,
+    "single",
+    runDateFolder,
+    runId
+  );
 
+  new JsonReporter({ outputDir: runOutDir }).write("run.json", runResult);
   return runResult;
 }
