@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+
+## [v1.0.0] – 2026-02-03 — Open Core Foundation
+
+### Removed
+Deprecated `diff` and `flaky` tool implementations from Core.
+These were legacy, unreferenced artifacts from early exploratory phases.
+Divergence detection and flakiness classification are analysis concerns and belong to Observatory.
+
 ## [v1.0.0] – 2025-12-31 — Open Core Foundation
 
 ### Added
