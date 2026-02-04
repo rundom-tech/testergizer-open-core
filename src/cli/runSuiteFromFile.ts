@@ -1,9 +1,12 @@
 import fs from "fs";
 import path from "path";
 import { randomUUID } from "crypto";
+import { pathToFileURL } from "url";
 
 import { CoreRunner } from "../core/CoreRunner";
 import { JsonReporter } from "../tools/jsonReporter";
+import { HtmlReporter } from "../tools/htmlReporter";
+import { createArtifactObserver, ensureArtifactsIndex } from "../tools/artifactObserver";
 
 import {
   resolveRootContext,
@@ -198,6 +201,8 @@ async function runOneTest(params: {
   registry: Map<string, ExecutableDoc>;
   options: RunSuiteOptions;
   artifactsBaseDir: string;
+  runOutDir: string;
+  artifactObserver: ReturnType<typeof createArtifactObserver>;
 }): Promise<TestResult> {
   const {
     suiteId,
@@ -209,7 +214,9 @@ async function runOneTest(params: {
     filePath,
     registry,
     options,
-    artifactsBaseDir
+    artifactsBaseDir,
+    runOutDir,
+    artifactObserver
   } = params;
 
   throwIfIssues(validateExecutableDoc(doc, filePath));
@@ -254,7 +261,15 @@ async function runOneTest(params: {
     headless: options.headless,
     slowMoMs: options.slowMoMs,
     baseUrl: options.baseUrl ?? suiteBaseUrl,
-    browserName: options.browserName
+    browserName: options.browserName,
+    artifacts: {
+      enabled: (options.executionMode ?? "stub") !== "stub",
+      dir: runOutDir,
+      trace: "on-failure",
+      video: "on-failure",
+      screenshot: "on-failure"
+    },
+    artifactObserver
   });
 
   const testResult = await runner.run(testDef);
@@ -291,6 +306,10 @@ export async function runSuiteFromFile(inputPath: string, options: RunSuiteOptio
     const runId = randomUUID();
     const runDateFolder = toDateFolder(startedAt);
 
+    const runOutDir = path.join(artifactsBaseDir, suite.suiteId, runDateFolder, runId);
+    ensureArtifactsIndex({ runOutDir, suiteId: suite.suiteId, runId });
+    const artifactObserver = createArtifactObserver({ runOutDir, suiteId: suite.suiteId, runId });
+
     const tests: TestResult[] = [];
 
     for (let i = 0; i < suite.tests.length; i++) {
@@ -311,7 +330,9 @@ export async function runSuiteFromFile(inputPath: string, options: RunSuiteOptio
         filePath,
         registry: loadAllExecutables(path.resolve("flows")),
         options,
-        artifactsBaseDir
+        artifactsBaseDir,
+        runOutDir,
+        artifactObserver
       });
 
       tests.push(tr);
@@ -349,14 +370,18 @@ export async function runSuiteFromFile(inputPath: string, options: RunSuiteOptio
       summary
     };
 
-    const runOutDir = path.join(
-      artifactsBaseDir,
-      suite.suiteId,
-      runDateFolder,
-      runId
-    );
-
     new JsonReporter({ outputDir: runOutDir }).write("run.json", runResult);
+
+    const artifactsDoc = loadJson(path.join(runOutDir, "artifacts.json"));
+    new HtmlReporter({ outputDir: runOutDir }).write("report.html", runResult, artifactsDoc);
+
+    const reportPath = path.resolve(runOutDir, "report.html");
+    console.log("");
+    console.log("Testergizer HTML report:");
+    console.log(pathToFileURL(reportPath).href);
+    console.log("Tip: paste the URL into your browser to view the report");
+    console.log("");
+
     return runResult;
   }
 
@@ -364,6 +389,10 @@ export async function runSuiteFromFile(inputPath: string, options: RunSuiteOptio
   const startedAt = nowIso();
   const runId = randomUUID();
   const runDateFolder = toDateFolder(startedAt);
+
+  const runOutDir = path.join(artifactsBaseDir, "single", runDateFolder, runId);
+  ensureArtifactsIndex({ runOutDir, suiteId: "single", runId });
+  const artifactObserver = createArtifactObserver({ runOutDir, suiteId: "single", runId });
 
   const tr = await runOneTest({
     suiteId: "single",
@@ -375,7 +404,9 @@ export async function runSuiteFromFile(inputPath: string, options: RunSuiteOptio
     filePath: rootPath,
     registry: loadAllExecutables(path.resolve("flows")),
     options,
-    artifactsBaseDir
+    artifactsBaseDir,
+    runOutDir,
+    artifactObserver
   });
 
   const endedAt = nowIso();
@@ -401,13 +432,17 @@ export async function runSuiteFromFile(inputPath: string, options: RunSuiteOptio
     }
   };
 
-  const runOutDir = path.join(
-    artifactsBaseDir,
-    "single",
-    runDateFolder,
-    runId
-  );
-
   new JsonReporter({ outputDir: runOutDir }).write("run.json", runResult);
+
+  const artifactsDoc = loadJson(path.join(runOutDir, "artifacts.json"));
+  new HtmlReporter({ outputDir: runOutDir }).write("report.html", runResult, artifactsDoc);
+
+  const reportPath = path.resolve(runOutDir, "report.html");
+  console.log("");
+  console.log("Testergizer HTML report:");
+  console.log(pathToFileURL(reportPath).href);
+  console.log("Tip: paste the URL into your browser to view the report");
+  console.log("");
+
   return runResult;
 }

@@ -40,6 +40,11 @@ export interface JsonSuite {
   tests: JsonTestDefinition[];
 }
 
+/** Minimal observer contract for append-only runtime evidence. */
+export interface ArtifactObserver {
+  append(entry: unknown): void;
+}
+
 export interface CoreRunnerOptions {
   headless?: boolean;
   slowMoMs?: number;
@@ -55,4 +60,20 @@ export interface CoreRunnerOptions {
   /** If provided, retry only these step IDs */
   retryStepIds?: string[];
   retryDelayMs?: number;
+
+  /**
+   * Optional artifact capture for a single run session.
+   * Purely additive: disabling artifacts must not change execution semantics.
+   */
+  artifacts?: {
+    enabled: boolean;
+    /** Absolute or run-root-relative directory. CoreRunner will create attempt folders under it. */
+    dir: string;
+    trace?: "on-failure";
+    video?: "on-failure";
+    screenshot?: "on-failure";
+  };
+
+  /** Optional append-only observer for artifacts (writes are performed by the CLI layer). */
+  artifactObserver?: ArtifactObserver;
 }

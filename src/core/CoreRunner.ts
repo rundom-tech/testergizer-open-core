@@ -1,12 +1,17 @@
 // src/core/CoreRunner.ts
 
+import fs from "fs";
+import path from "path";
+import crypto from "crypto";
+
 import {
   chromium,
   firefox,
   webkit,
   type Browser,
   type BrowserType,
-  type Page
+  type Page,
+  type BrowserContext
 } from "playwright";
 
 import type {
@@ -52,6 +57,18 @@ function pickBrowserType(name?: string): {
   return { projectId: "chromium", browserType: chromium };
 }
 
+function isHeadless(options: CoreRunnerOptions): boolean {
+  return options.headless ?? true;
+}
+
+function safeFileToken(input: string): string {
+  return String(input || "")
+    .replace(/[^a-zA-Z0-9._-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 80);
+}
+
 /**
  * Pure helper: compute instrumentation facts per attempt.
  * No policy inference, only explicit rules.
@@ -93,9 +110,7 @@ export class CoreRunner {
   async run(test: JsonTestDefinition): Promise<TestResult> {
     const testStartedAt = nowIso();
 
-    const { projectId, browserType } = pickBrowserType(
-      this.options.browserName
-    );
+    const { projectId, browserType } = pickBrowserType(this.options.browserName);
 
     const attempts: TestAttemptResult[] = [];
 
@@ -108,6 +123,7 @@ export class CoreRunner {
 
     for (let attemptNumber = 1; attemptNumber <= maxAttempts; attemptNumber++) {
       let browser: Browser | null = null;
+      let context: BrowserContext | null = null;
       let page: Page | null = null;
 
       const stepResults: StepResult[] = [];
@@ -115,6 +131,18 @@ export class CoreRunner {
 
       let attemptFailed = false;
       let aborted: StepError | null = null;
+
+      const artifactsEnabled =
+        this.options.artifacts?.enabled === true && this.executionMode !== "stub";
+
+      const attemptDir = artifactsEnabled
+        ? path.join(
+            this.options.artifacts!.dir,
+            projectId,
+            test.id,
+            `attempt-${attemptNumber}`
+          )
+        : undefined;
 
       const attemptStartedAt = nowIso();
 
@@ -125,9 +153,30 @@ export class CoreRunner {
             slowMo: this.options.slowMoMs
           });
 
-          const context = await browser.newContext({
-            baseURL: this.options.baseUrl
+          if (attemptDir) {
+            await fs.promises.mkdir(attemptDir, { recursive: true });
+          }
+
+          context = await browser.newContext({
+            baseURL: this.options.baseUrl,
+            recordVideo:
+              artifactsEnabled &&
+              this.options.artifacts?.video === "on-failure" &&
+              attemptDir
+                ? { dir: attemptDir }
+                : undefined
           });
+
+          if (
+            artifactsEnabled &&
+            this.options.artifacts?.trace === "on-failure"
+          ) {
+            await context.tracing.start({
+              screenshots: true,
+              snapshots: true,
+              sources: true
+            });
+          }
 
           page = await context.newPage();
         }
@@ -143,6 +192,43 @@ export class CoreRunner {
             status = "failed";
             errors.push(this.toStepError(err));
             attemptFailed = true;
+
+            if (
+              artifactsEnabled &&
+              this.options.artifacts?.screenshot === "on-failure" &&
+              attemptDir &&
+              page
+            ) {
+              try {
+                const shotPath = path.join(
+                  attemptDir,
+                  `step-${safeFileToken(step.id)}-failure.png`
+                );
+                await page.screenshot({ path: shotPath, fullPage: true });
+
+                this.options.artifactObserver?.append({
+                  id: crypto.randomUUID(),
+                  type: "screenshot",
+                  observedAt: nowIso(),
+                  execution: {
+                    testId: test.id,
+                    attempt: attemptNumber,
+                    stepId: step.id,
+                    browser: projectId,
+                    mode: isHeadless(this.options) ? "headless" : "headed",
+                    projectId
+                  },
+                  scope: "step",
+                  trigger: "failure",
+                  artifact: {
+                    path: shotPath,
+                    producer: "playwright"
+                  }
+                });
+              } catch {
+                // Evidence capture must not throw.
+              }
+            }
           }
 
           const stepEndedAt = nowIso();
@@ -162,6 +248,86 @@ export class CoreRunner {
         aborted = this.toStepError(err);
         attemptErrors.push(aborted);
       } finally {
+        // Trace stop must happen before context is closed.
+        if (
+          context &&
+          artifactsEnabled &&
+          this.options.artifacts?.trace === "on-failure"
+        ) {
+          try {
+            if (attemptFailed && attemptDir) {
+              const tracePath = path.join(attemptDir, "trace.zip");
+              await context.tracing.stop({ path: tracePath });
+
+              this.options.artifactObserver?.append({
+                id: crypto.randomUUID(),
+                type: "trace",
+                observedAt: nowIso(),
+                execution: {
+                  testId: test.id,
+                  attempt: attemptNumber,
+                  browser: projectId,
+                  mode: isHeadless(this.options) ? "headless" : "headed",
+                  projectId
+                },
+                scope: "test",
+                trigger: "failure",
+                artifact: {
+                  path: tracePath,
+                  producer: "playwright"
+                }
+              });
+            } else {
+              await context.tracing.stop();
+            }
+          } catch {
+            // Evidence capture must not throw.
+          }
+        }
+
+        // Close context to flush video files.
+        const video = page?.video?.();
+
+        if (context) {
+          try {
+            await context.close();
+          } catch {
+            // ignore
+          }
+        }
+
+        // Video path is only reliably available after close.
+        if (
+          video &&
+          artifactsEnabled &&
+          this.options.artifacts?.video === "on-failure" &&
+          attemptFailed
+        ) {
+          try {
+            const videoPath = await video.path();
+            this.options.artifactObserver?.append({
+              id: crypto.randomUUID(),
+              type: "video",
+              observedAt: nowIso(),
+              execution: {
+                testId: test.id,
+                attempt: attemptNumber,
+                browser: projectId,
+                mode: isHeadless(this.options) ? "headless" : "headed",
+                projectId
+              },
+              scope: "test",
+              trigger: "failure",
+              artifact: {
+                path: videoPath,
+                producer: "playwright"
+              }
+            });
+          } catch {
+            // ignore
+          }
+        }
+
         if (browser) {
           try {
             await browser.close();

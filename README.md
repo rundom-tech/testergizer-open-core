@@ -92,3 +92,48 @@ Execution behavior is configurable through **explicit, bounded configuration**.
 ## License
 
 Testergizer Open Core is licensed under the Apache License, Version 2.0.
+
+## HTML Reports & Runtime Artifacts (Phase 2)
+
+Testergizer Open Core produces a rich, self-contained HTML report for every run session.
+
+### What is generated
+For each run:
+- `run.json` – canonical run result
+- `artifacts.json` – append-only evidence index
+- `report.html` – derived human-readable report
+
+On failure (only):
+- Playwright trace (`trace.zip`)
+- Video recording
+- Step-level screenshots
+
+### Artifact principles
+- Artifacts are optional and non-intrusive
+- No artifacts are produced on successful attempts
+- Artifacts never affect execution semantics
+- Evidence is append-only and deterministic
+
+### HTML report
+The HTML report:
+- Is fully static and self-contained
+- Links directly to raw evidence
+- Opens evidence in new tabs
+- Does not perform inference or aggregation
+- Is derived entirely from `run.json` + `artifacts.json`
+
+### Accessing the report
+At the end of execution, Testergizer prints a canonical file URL:
+
+file:///absolute/path/to/report.html
+
+
+This URL is portable across platforms and can be opened in any browser.
+
+### Scope
+Phase 2 supports:
+- Single run session
+- Single project / browser
+- No cross-run comparison
+
+Trend analysis and aggregation are intentionally deferred to later phases.

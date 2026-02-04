@@ -1,0 +1,53 @@
+{
+  "$id": "https://testergizer.dev/schemas/artifacts.schema.json",
+  "type": "object",
+  "required": ["schemaVersion", "suiteId", "runId", "observations"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "v1" },
+    "suiteId": { "type": "string" },
+    "runId": { "type": "string" },
+    "observations": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/artifactObservation" }
+    }
+  },
+  "$defs": {
+    "artifactObservation": {
+      "type": "object",
+      "required": ["id", "type", "observedAt", "execution", "scope", "artifact"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string", "enum": ["screenshot", "video", "trace", "log"] },
+        "observedAt": { "type": "string", "format": "date-time" },
+        "execution": {
+          "type": "object",
+          "required": ["testId", "attempt", "browser", "mode"],
+          "additionalProperties": false,
+          "properties": {
+            "testId": { "type": "string" },
+            "attempt": { "type": "integer", "minimum": 1 },
+            "stepId": { "type": "string" },
+            "browser": { "type": "string" },
+            "mode": { "type": "string" },
+            "projectId": { "type": "string" }
+          }
+        },
+        "scope": { "type": "string", "enum": ["step", "test", "run"] },
+        "trigger": { "type": "string", "enum": ["always", "failure", "manual", "on-test-end"] },
+        "artifact": {
+          "type": "object",
+          "required": ["path", "producer"],
+          "additionalProperties": false,
+          "properties": {
+            "path": { "type": "string" },
+            "format": { "type": "string" },
+            "producer": { "type": "string" },
+            "mimeType": { "type": "string" }
+          }
+        }
+      }
+    }
+  }
+}

@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.0.0] – 2026-02-04
+
+### Added
+- Deterministic runtime artifact capture (trace, video, screenshot) on failure only
+- Append-only `artifacts.json` evidence index per run
+- Self-contained HTML report per run session
+- Evidence links (trace, video, screenshots) opening in new tabs
+- Canonical file URL emission for generated HTML report
+
+### Fixed
+- Correct file URI generation across platforms (Windows/macOS/Linux)
+- Guaranteed artifact directory creation per attempt
+- Proper trace lifecycle handling (no empty traces on pass)
+
+### Notes
+- HTML reports are strictly derived views over raw JSON artifacts
+- No inference, aggregation, or cross-run logic introduced
+- Phase 2 is frozen as a stable foundation for Observatory work
 
 ## [v1.0.0] – 2026-02-03 — Open Core Foundation
 
