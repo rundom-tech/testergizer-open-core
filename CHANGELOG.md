@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [v1.0.0] – 2026-02-04
+## [v1.2.0] – 2026-02-04
 
 ### Added
 - Deterministic runtime artifact capture (trace, video, screenshot) on failure only
