@@ -53,6 +53,7 @@ type SuiteTestEntry = ExecutableDoc | SuiteTestRef;
 interface SuiteDoc {
   schemaVersion: "v1";
   suiteId: string;
+  applicationName: string; // 🔒 AUT – required
   suiteName?: string;
   baseUrl?: string;
   context?: Record<string, any>;
@@ -76,6 +77,7 @@ function isSuiteDoc(v: any): v is SuiteDoc {
     isObject(v) &&
     v.schemaVersion === "v1" &&
     typeof v.suiteId === "string" &&
+    typeof v.applicationName === "string" &&
     Array.isArray(v.tests)
   );
 }
@@ -300,6 +302,11 @@ export async function runSuiteFromFile(inputPath: string, options: RunSuiteOptio
 
   if (isSuiteDoc(root)) {
     const suite = root as SuiteDoc;
+
+    if (!suite.applicationName.trim()) {
+      throw new Error("Suite must define a non-empty applicationName (Application Under Test)");
+    }
+
     const suiteDir = path.dirname(rootPath);
 
     const startedAt = nowIso();
@@ -359,6 +366,7 @@ export async function runSuiteFromFile(inputPath: string, options: RunSuiteOptio
       suiteId: suite.suiteId,
       suiteName: suite.suiteName,
       suitePath: rootPath,
+      applicationName: suite.applicationName,
       runId,
       executionType,
       executionMode: options.executionMode ?? "stub",
@@ -373,7 +381,7 @@ export async function runSuiteFromFile(inputPath: string, options: RunSuiteOptio
     new JsonReporter({ outputDir: runOutDir }).write("run.json", runResult);
 
     const artifactsDoc = loadJson(path.join(runOutDir, "artifacts.json"));
-    new HtmlReporter({ outputDir: runOutDir }).write("report.html", runResult, artifactsDoc);
+    new HtmlReporter({ outputDir: runOutDir }).write(runResult, artifactsDoc);
 
     const reportPath = path.resolve(runOutDir, "report.html");
     console.log("");
@@ -385,64 +393,7 @@ export async function runSuiteFromFile(inputPath: string, options: RunSuiteOptio
     return runResult;
   }
 
-  // Single executable path
-  const startedAt = nowIso();
-  const runId = randomUUID();
-  const runDateFolder = toDateFolder(startedAt);
-
-  const runOutDir = path.join(artifactsBaseDir, "single", runDateFolder, runId);
-  ensureArtifactsIndex({ runOutDir, suiteId: "single", runId });
-  const artifactObserver = createArtifactObserver({ runOutDir, suiteId: "single", runId });
-
-  const tr = await runOneTest({
-    suiteId: "single",
-    runId,
-    runDateFolder,
-    suiteContext: {},
-    suiteBaseUrl: undefined,
-    doc: root as ExecutableDoc,
-    filePath: rootPath,
-    registry: loadAllExecutables(path.resolve("flows")),
-    options,
-    artifactsBaseDir,
-    runOutDir,
-    artifactObserver
-  });
-
-  const endedAt = nowIso();
-
-  const runResult: RunResult = {
-    schemaVersion: "v1",
-    suiteId: "single",
-    suiteName: undefined,
-    suitePath: rootPath,
-    runId,
-    executionType,
-    executionMode: options.executionMode ?? "stub",
-    projectId: tr.projectId,
-    startedAt,
-    endedAt,
-    durationMs: durationMs(startedAt, endedAt),
-    tests: [tr],
-    summary: {
-      total: 1,
-      passed: tr.result === "passed" ? 1 : 0,
-      failed: tr.result === "failed" ? 1 : 0,
-      aborted: tr.result === "aborted" ? 1 : 0
-    }
-  };
-
-  new JsonReporter({ outputDir: runOutDir }).write("run.json", runResult);
-
-  const artifactsDoc = loadJson(path.join(runOutDir, "artifacts.json"));
-  new HtmlReporter({ outputDir: runOutDir }).write("report.html", runResult, artifactsDoc);
-
-  const reportPath = path.resolve(runOutDir, "report.html");
-  console.log("");
-  console.log("Testergizer HTML report:");
-  console.log(pathToFileURL(reportPath).href);
-  console.log("Tip: paste the URL into your browser to view the report");
-  console.log("");
-
-  return runResult;
+  throw new Error(
+    "Single executable runs must be wrapped in a suite defining applicationName"
+  );
 }

@@ -137,6 +137,8 @@ export interface RunResult {
   suiteName?: string;
   suitePath: string;
 
+  applicationName: string; // ✅ AUT — canonical source
+
   /** Opaque run identity (not time-derived) */
   runId: string;
 

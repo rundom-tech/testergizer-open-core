@@ -1,6 +1,7 @@
 {
   "schemaVersion": "v1",
   "suiteId": "demosauce-e2e",
+  "applicationName": "Demo Sauce Store",
   "suiteName": "SauceDemo E2E",
   "baseUrl": "https://www.saucedemo.com/",
   "tests": [

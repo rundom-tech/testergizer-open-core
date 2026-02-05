@@ -3,25 +3,94 @@ import path from "path";
 
 import type { RunResult, TestAttemptResult, TestResult } from "../core/resultTypes";
 import type { ArtifactsIndex } from "./artifactObserver";
+import { runMain } from "module";
 
 export interface HtmlReporterOptions {
+  /**
+   * Absolute or relative path to:
+   * artifacts/suiteId/date/runId
+   *
+   * The reporter will always write report.html into this directory.
+   */
   outputDir: string;
 }
 
 export class HtmlReporter {
   private readonly outputDir: string;
 
+  // Frozen branding asset locations (repo-root relative)
+  private static readonly BRANDING_PRODUCT = "branding/vendor/product.png"; // Testergizer logo (optional)
+  private static readonly BRANDING_VENDOR = "branding/vendor/vendor.png"; // RunDOM logo (mandatory - provenance marker)
+  private static readonly BRANDING_CUSTOMER = "branding/customer/customer.png"; // Customer logo (optional)
+
   constructor(opts: HtmlReporterOptions) {
-    this.outputDir = opts.outputDir;
+    this.outputDir = path.resolve(opts.outputDir);
+
+    this.validateBrandingInvariant();
   }
 
-  write(fileName: string, run: RunResult, artifacts?: ArtifactsIndex): void {
+  /**
+   * Frozen: always writes report.html (caller does not choose the filename).
+   */
+  write(run: RunResult, artifacts?: ArtifactsIndex): void {
     if (!fs.existsSync(this.outputDir)) fs.mkdirSync(this.outputDir, { recursive: true });
-    const outPath = path.join(this.outputDir, fileName);
-    fs.writeFileSync(outPath, this.render(run, artifacts), "utf-8");
+    const outPath = path.join(this.outputDir, "report.html");
+    fs.writeFileSync(outPath, this.render(outPath, run, artifacts), "utf-8");
   }
 
-  private render(run: RunResult, artifacts?: ArtifactsIndex): string {
+  /* =========================
+   * Branding invariant (hard gate)
+   * =========================
+   *
+   * Report lives at: artifacts/suiteId/date/runId/report.html
+   * Branding lives at repo root: branding/...
+   *
+   * We compute repoRoot as outputDir/../../../../
+   * and require vendor.png to exist there.
+   */
+
+  private validateBrandingInvariant(): void {
+    const repoRoot = this.getRepoRootFromOutputDir();
+
+    const mustExist = (repoRel: string, label: string) => {
+      const abs = path.resolve(repoRoot, repoRel);
+      if (!abs.startsWith(repoRoot)) {
+        throw new Error(`HtmlReporter: branding path for '${label}' escapes repo root: '${repoRel}'`);
+      }
+      if (!fs.existsSync(abs)) {
+        throw new Error(`HtmlReporter: missing mandatory branding asset for '${label}': '${repoRel}'`);
+      }
+    };
+
+    // Vendor logo is mandatory (semantic provenance marker)
+    mustExist(HtmlReporter.BRANDING_VENDOR, "vendor");
+
+    // Product/customer are optional by spec — no failure if missing.
+  }
+
+  private getRepoRootFromOutputDir(): string {
+    // outputDir is .../artifacts/suiteId/date/runId
+    // repoRoot is four levels up
+    return path.resolve(this.outputDir, "../../../../");
+  }
+
+  private computeBrandingSrc(reportHtmlPath: string, repoRelativeBrandingPath: string): string {
+    const repoRoot = this.getRepoRootFromOutputDir();
+    const absBrand = path.resolve(repoRoot, repoRelativeBrandingPath);
+
+    // Convert to a relative URL from report.html directory, force forward slashes.
+    return path
+      .relative(path.dirname(reportHtmlPath), absBrand)
+      .replace(/\\/g, "/");
+  }
+
+  private brandingExists(repoRelativeBrandingPath: string): boolean {
+    const repoRoot = this.getRepoRootFromOutputDir();
+    const abs = path.resolve(repoRoot, repoRelativeBrandingPath);
+    return abs.startsWith(repoRoot) && fs.existsSync(abs);
+  }
+
+  private render(reportHtmlPath: string, run: RunResult, artifacts?: ArtifactsIndex): string {
     const esc = (s: any) =>
       String(s ?? "")
         .replace(/&/g, "&amp;")
@@ -41,6 +110,16 @@ export class HtmlReporter {
     };
 
     const badge = (result: string) => `<span class="badge badge-${esc(result)}">${esc(result)}</span>`;
+
+    /* =========================
+     * Branding rendering (frozen paths)
+     * ========================= */
+
+    const renderBrandImg = (repoRel: string, alt: string, cls?: string) => {
+      if (!this.brandingExists(repoRel)) return "";
+      const src = this.computeBrandingSrc(reportHtmlPath, repoRel);
+      return `<img class="logo ${cls ?? ""}" src="${esc(src)}" alt="${esc(alt)}" />`;
+    };
 
     const observations = Array.isArray(artifacts?.observations)
       ? (artifacts!.observations as any[])
@@ -65,7 +144,9 @@ export class HtmlReporter {
           // Prefer relative paths in the report (so report remains portable inside the runOutDir)
           const href = rel.startsWith(this.outputDir) ? rel.slice(this.outputDir.length + 1) : rel;
           const label = o?.type ? String(o.type) : "evidence";
-          return `<a class="evidence" href="${esc(href)}" target="_blank" rel="noopener noreferrer">${esc(label)}</a>`;
+          return `<a class="evidence" href="${esc(href)}" target="_blank" rel="noopener noreferrer">${esc(
+            label
+          )}</a>`;
         })
         .join(" ");
       return `<div class="evidence-row">${links}</div>`;
@@ -187,7 +268,9 @@ export class HtmlReporter {
             </div>
             <div class="section">
               <div class="section-title">Raw JSON</div>
-              <div class="mono"><a href="./${esc((t as any).projectId)}/${esc(t.id)}/result.json" target="_blank" rel="noopener noreferrer">result.json</a></div>
+              <div class="mono"><a href="./${esc((t as any).projectId)}/${esc(
+        t.id
+      )}/result.json" target="_blank" rel="noopener noreferrer">result.json</a></div>
             </div>
           </div>
         </details>
@@ -205,28 +288,21 @@ export class HtmlReporter {
       </div>
     `;
 
+    // Customer left, Testergizer right (both optional)
+    const customerLogo = renderBrandImg(HtmlReporter.BRANDING_CUSTOMER, "Customer", "logo-large");
+    const testergizerLogo = renderBrandImg(HtmlReporter.BRANDING_PRODUCT, "Testergizer", "logo-large");
+
     const header = `
       <div class="header">
-        <div class="h1">Testergizer Run Report</div>
-        <div class="meta">
-          <span class="k">suite</span> <span class="mono">${esc((run as any).suiteId)}</span>
-          ${(run as any).suiteName ? `<span class="muted">(${esc((run as any).suiteName)})</span>` : ""}
-          <span class="sep">•</span>
-          <span class="k">runId</span> <span class="mono">${esc((run as any).runId)}</span>
-          <span class="sep">•</span>
-          <span class="k">project</span> <span class="mono">${esc((run as any).projectId)}</span>
-          <span class="sep">•</span>
-          <span class="k">type</span> <span class="mono">${esc((run as any).executionType)}</span>
-          <span class="sep">•</span>
-          <span class="k">mode</span> <span class="mono">${esc((run as any).executionMode)}</span>
-        </div>
-        <div class="meta muted mono">${esc((run as any).startedAt)} → ${esc((run as any).endedAt)} (${esc(fmtMs((run as any).durationMs))})</div>
-        ${summary}
-        <div class="actions">
-          <button class="btn" data-action="expand-all">Expand all</button>
-          <button class="btn" data-action="collapse-all">Collapse all</button>
-          <a class="btn" href="./run.json" target="_blank" rel="noopener noreferrer">run.json</a>
-          <a class="btn" href="./artifacts.json" target="_blank" rel="noopener noreferrer">artifacts.json</a>
+        <div class="header-grid">
+          <div class="header-left">${customerLogo}</div>
+          <div class="header-center">
+            <div class="h1">
+              <span class="app-name">${esc(run.applicationName)}</span>
+              <span class="report-title">Automated Tests Run Report</span>
+            </div>
+          </div>
+          <div class="header-right">${testergizerLogo}</div>
         </div>
       </div>
     `;
@@ -238,59 +314,134 @@ export class HtmlReporter {
       </div>
     `;
 
+    const footer = `
+      <div class="footer">
+        Powered by Testergizer | Copyright 2025 © RunDOM Technologies 
+      </div>
+    `;
+
+    const runMeta = `
+      <div class="run-meta">
+        <div><span class="k">Suite:</span> <span class="mono">${esc(run.suiteId)}</span></div>
+        ${run.suiteName ? `<div><span class="k">Suite name:</span> ${esc(run.suiteName)}</div>` : ""}
+        <div><span class="k">Run ID:</span> <span class="mono">${esc(run.runId)}</span></div>
+        <div><span class="k">Project:</span> <span class="mono">${esc(run.projectId)}</span></div>
+        <div><span class="k">Execution type:</span> <span class="mono">${esc(run.executionType)}</span></div>
+        <div><span class="k">Execution mode:</span> <span class="mono">${esc(run.executionMode)}</span></div>
+        <div><span class="k">Started at:</span> <span class="mono">${esc(run.startedAt)}</span></div>
+        <div><span class="k">Ended at:</span> <span class="mono">${esc(run.endedAt)}</span></div>
+        <div><span class="k">Duration:</span> <span class="mono">${fmtMs(run.durationMs)}</span></div>
+      </div>
+    `;    
+
+    const actions = `
+      <div class="actions">
+        <button class="btn" data-action="expand-all">Expand all</button>
+        <button class="btn" data-action="collapse-all">Collapse all</button>
+        <a class="btn" href="./run.json" target="_blank" rel="noopener noreferrer">run.json</a>
+        <a class="btn" href="./artifacts.json" target="_blank" rel="noopener noreferrer">artifacts.json</a>
+      </div>
+    `;
+
+
     return `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Testergizer Run Report</title>
+    <title>${esc(run.applicationName)} Automated Tests Run Report</title>
     <style>
       :root { color-scheme: light dark; }
       body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; margin: 0; padding: 0; }
       a { color: inherit; }
-      .header { padding: 18px 22px; border-bottom: 1px solid rgba(120,120,120,0.25); position: sticky; top: 0; background: rgba(255,255,255,0.92); backdrop-filter: blur(8px); }
+
+      .header { padding: 18px 22px; border-bottom: 1px solid rgba(120,120,120,0.25); position: sticky; top: 0; background: rgba(255,255,255,0.92); backdrop-filter: blur(8px); z-index: 10; }
       @media (prefers-color-scheme: dark) { .header { background: rgba(10,10,10,0.88); } }
-      .h1 { font-size: 20px; font-weight: 700; margin-bottom: 6px; }
-      .meta { font-size: 13px; line-height: 1.4; }
+
+      .header-grid { display: grid; grid-template-columns: auto 1fr auto; gap: 16px; align-items: start; }
+      .header-left, .header-right { display: flex; align-items: center; }
+      .header-center { min-width: 0; }
+
+      .logo { display: block; }
+      .logo-large { height: 52px; width: auto; max-width: 260px; object-fit: contain; }
+
+      .h1 { font-size: 20px; font-weight: 700; margin-bottom: 6px; text-align: center; }
+      
+      .app-name {
+        color: #1f2937; /* strong, near-black */
+      }
+
+      @media (prefers-color-scheme: dark) {
+        .app-name {
+          color: #f9fafb;
+        }
+      }
+
+      .report-title {
+        color: rgba(120,120,120,0.85);
+        margin-left: 6px;
+        font-weight: 500;
+      }
+
+      .meta { font-size: 13px; line-height: 1.4; text-align: center; }
       .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
       .muted { opacity: 0.72; }
       .sep { margin: 0 8px; opacity: 0.5; }
       .k { opacity: 0.7; margin-right: 4px; }
-      .summary { display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
-      .summary-item { border: 1px solid rgba(120,120,120,0.25); border-radius: 10px; padding: 8px 10px; min-width: 90px; }
+
+      .run-meta { padding: 14px 22px; }
+      .run-meta > div { padding: 2px; }
+
+      .summary { display: flex; justify-content: center; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+      .summary-item { border: 1px solid rgba(120,120,120,0.25); border-radius: 10px; padding: 8px 10px; min-width: 90px; text-align: center; }
       .summary-item .k { display: block; font-size: 12px; margin-bottom: 4px; }
       .summary-item .v { font-size: 18px; font-weight: 700; }
-      .actions { margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap; }
+
+      .actions { margin-top: 12px; display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
       .btn { border: 1px solid rgba(120,120,120,0.25); background: transparent; border-radius: 10px; padding: 6px 10px; cursor: pointer; font-size: 13px; text-decoration: none; }
       .btn:hover { border-color: rgba(120,120,120,0.55); }
+
       .content { padding: 18px 22px; }
       .section-title { font-weight: 700; margin: 14px 0 10px; }
+
       details.card { border: 1px solid rgba(120,120,120,0.25); border-radius: 14px; padding: 10px 12px; margin-bottom: 12px; }
       details.card summary { cursor: pointer; list-style: none; }
       details.card summary::-webkit-details-marker { display: none; }
+
       .card-title { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
       .title { font-weight: 700; }
       .card-meta { margin-top: 6px; font-size: 12px; opacity: 0.8; }
       .card-body { margin-top: 10px; }
+
       .section { margin-top: 12px; }
       .attempt { border: 1px solid rgba(120,120,120,0.22); border-radius: 12px; padding: 10px; margin-top: 10px; }
       .attempt-header { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+
       .evidence-row { display: flex; gap: 8px; flex-wrap: wrap; margin: 6px 0 2px; }
       .evidence { border: 1px solid rgba(120,120,120,0.25); border-radius: 999px; padding: 2px 8px; font-size: 12px; text-decoration: none; }
       .evidence:hover { border-color: rgba(120,120,120,0.55); }
+
       .pill { border: 1px solid rgba(120,120,120,0.25); border-radius: 999px; padding: 2px 8px; font-size: 12px; }
       .badge { border-radius: 999px; padding: 2px 10px; font-size: 12px; border: 1px solid rgba(120,120,120,0.25); }
+
       .table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 6px; }
       .table th, .table td { border-bottom: 1px solid rgba(120,120,120,0.2); padding: 6px 6px; vertical-align: top; }
       .table th { text-align: left; opacity: 0.8; }
+
       .errors summary { cursor: pointer; }
       .error { margin-top: 8px; }
       .stack { white-space: pre-wrap; padding: 8px; border: 1px solid rgba(120,120,120,0.25); border-radius: 10px; overflow-x: auto; }
+
+      .footer { padding: 18px 22px; border-top: 1px solid rgba(120,120,120,0.25); margin-top: 18px; text-align: center; font-size: 12px; opacity: 0.78; }
     </style>
   </head>
-  <body>
+  <body>        
     ${header}
+    ${runMeta}
+    ${summary}
+    ${actions}
     ${list}
+    ${footer}
     <script>
       (function() {
         function setAll(open) {
