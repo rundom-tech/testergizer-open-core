@@ -1,0 +1,34 @@
+/* =========================================================
+   Testergizer Report — Dark Theme
+   Tokens only: colors, borders, accents.
+   Must be loaded AFTER report.layout.css
+   ========================================================= */
+
+/* themes/dark/theme.css */
+
+:root {
+  --bg: #0e0f11;
+  --bg-soft: #15171a;
+  --panel-bg: rgba(20, 22, 26, 0.95);
+
+  --text: #e6e8eb;
+  --text-muted: #9aa0a6;
+
+  --border: rgba(255, 255, 255, 0.12);
+  --accent: #4aa3ff;
+  --accent-warn: #f5a623;
+  --accent-danger: #ff6b6b;
+
+  --badge-passed: #2ecc71;
+  --badge-failed: #e74c3c;
+  --badge-aborted: #f39c12;
+}
+
+/* Optional refinements */
+.badge {
+  border-color: var(--border);
+}
+
+a {
+  color: var(--accent);
+}

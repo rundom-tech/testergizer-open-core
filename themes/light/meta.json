@@ -1,0 +1,6 @@
+{
+  "id": "light",
+  "name": "Light",
+  "author": "RunDOM",
+  "supports": ["light"]
+}

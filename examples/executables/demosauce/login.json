@@ -1,0 +1,36 @@
+{
+  "id": "demosauce-login-exp",
+  "description": "Reusable login flow with explicit context activation",
+  "steps": [
+    {
+      "action": "setContext",
+      "contexts": ["page.login"]
+    },
+    {
+      "action": "navigate",
+      "url": "https://www.saucedemo.com/"
+    },
+    {
+      "action": "fill",
+      "target": "login.username",
+      "value": "${USERNAME}"
+    },
+    {
+      "action": "fill",
+      "target": "login.password",
+      "value": "${PASSWORD}"
+    },
+    {
+      "action": "click",
+      "target": "submit.button"
+    },
+    {
+      "action": "clearContext",
+      "contexts": ["page.login"]
+    },
+    {
+      "action": "setContext",
+      "contexts": ["page.inventory"]
+    }
+  ]
+}

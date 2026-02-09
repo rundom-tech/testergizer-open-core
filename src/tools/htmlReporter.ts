@@ -1,9 +1,9 @@
+// src/tools/htmlReporter.ts
 import fs from "fs";
 import path from "path";
 
 import type { RunResult, TestAttemptResult, TestResult } from "../core/resultTypes";
 import type { ArtifactsIndex } from "./artifactObserver";
-import { runMain } from "module";
 
 export interface HtmlReporterOptions {
   /**
@@ -79,9 +79,7 @@ export class HtmlReporter {
     const absBrand = path.resolve(repoRoot, repoRelativeBrandingPath);
 
     // Convert to a relative URL from report.html directory, force forward slashes.
-    return path
-      .relative(path.dirname(reportHtmlPath), absBrand)
-      .replace(/\\/g, "/");
+    return path.relative(path.dirname(reportHtmlPath), absBrand).replace(/\\/g, "/");
   }
 
   private brandingExists(repoRelativeBrandingPath: string): boolean {
@@ -111,6 +109,26 @@ export class HtmlReporter {
 
     const badge = (result: string) => `<span class="badge badge-${esc(result)}">${esc(result)}</span>`;
 
+    const tryReadJson = (p: string): any | undefined => {
+      try {
+        if (!fs.existsSync(p)) return undefined;
+        return JSON.parse(fs.readFileSync(p, "utf-8"));
+      } catch {
+        return undefined;
+      }
+    };
+
+    // Runtime-only compiler metadata (no schema changes).
+    const provenanceDoc = tryReadJson(path.join(this.outputDir, "provenance.json"));
+    const provenanceByTestId: Record<string, Record<string, any>> =
+      provenanceDoc && typeof provenanceDoc === "object" ? provenanceDoc.byTestId ?? {} : {};
+
+    const debugWarningsDoc = tryReadJson(path.join(this.outputDir, "debug-warnings.json"));
+    const debugWarnings: any[] =
+      debugWarningsDoc && typeof debugWarningsDoc === "object" && Array.isArray(debugWarningsDoc.warnings)
+        ? debugWarningsDoc.warnings
+        : [];
+
     /* =========================
      * Branding rendering (frozen paths)
      * ========================= */
@@ -121,19 +139,14 @@ export class HtmlReporter {
       return `<img class="logo ${cls ?? ""}" src="${esc(src)}" alt="${esc(alt)}" />`;
     };
 
-    const observations = Array.isArray(artifacts?.observations)
-      ? (artifacts!.observations as any[])
-      : [];
+    const observations = Array.isArray(artifacts?.observations) ? (artifacts!.observations as any[]) : [];
 
     const obsForAttempt = (testId: string, attempt: number) =>
       observations.filter((o) => o?.execution?.testId === testId && o?.execution?.attempt === attempt);
 
     const obsForStep = (testId: string, attempt: number, stepId: string) =>
       observations.filter(
-        (o) =>
-          o?.execution?.testId === testId &&
-          o?.execution?.attempt === attempt &&
-          o?.execution?.stepId === stepId
+        (o) => o?.execution?.testId === testId && o?.execution?.attempt === attempt && o?.execution?.stepId === stepId
       );
 
     const renderEvidenceLinks = (items: any[]) => {
@@ -167,6 +180,20 @@ export class HtmlReporter {
 
       const evidence = renderEvidenceLinks(obsForStep(testId, attempt, step.id));
 
+      const prov = provenanceByTestId?.[testId]?.[String(step.id)];
+      const originHtml = prov
+        ? `<details class="origin"><summary>Origin</summary>
+            <div class="origin-body">
+              <div><span class="k">executable:</span> <span class="mono">${esc(prov.originExecutableId)}</span></div>
+              <div><span class="k">path:</span> <span class="mono">${esc(prov.originPath)}</span></div>
+              <div><span class="k">reusable:</span> <span class="mono">${esc(prov.reusable)}</span></div>
+              <div><span class="k">stack:</span> <span class="mono">${esc(
+                Array.isArray(prov.includeStack) ? prov.includeStack.join(" → ") : ""
+              )}</span></div>
+            </div>
+          </details>`
+        : "";
+
       return `
         <tr>
           <td class="mono">${esc(step.id)}</td>
@@ -176,7 +203,7 @@ export class HtmlReporter {
           <td class="mono">${esc(step.startedAt)}</td>
           <td class="mono">${esc(step.endedAt)}</td>
           <td class="mono">${esc(fmtMs(step.durationMs))}</td>
-          <td>${errHtml}${evidence}</td>
+          <td>${errHtml}${evidence}${originHtml}</td>
         </tr>
       `;
     };
@@ -222,14 +249,14 @@ export class HtmlReporter {
           <table class="table">
             <thead>
               <tr>
-                <th>stepId</th>
+                <th>id</th>
                 <th>action</th>
                 <th>status</th>
                 <th>attempts</th>
-                <th>startedAt</th>
-                <th>endedAt</th>
+                <th>started</th>
+                <th>ended</th>
                 <th>duration</th>
-                <th>errors / evidence</th>
+                <th>details</th>
               </tr>
             </thead>
             <tbody>
@@ -242,25 +269,20 @@ export class HtmlReporter {
 
     const renderTestCard = (t: TestResult, idx: number) => {
       const attempts = Array.isArray((t as any).attempts) ? (t as any).attempts : [];
-      const title = `${idx + 1}. ${t.name ? t.name : t.id}`;
-      const meta = [
-        `<span class="k">id</span> <span class="mono">${esc(t.id)}</span>`,
-        `<span class="k">project</span> <span class="mono">${esc((t as any).projectId)}</span>`,
-        `<span class="k">mode</span> <span class="mono">${esc((t as any).executionMode)}</span>`,
-        `<span class="k">domain</span> <span class="mono">${esc((t as any).testDomain)}</span>`,
-        `<span class="k">duration</span> <span class="mono">${esc(fmtMs((t as any).durationMs))}</span>`
-      ].join(" ");
-
       return `
-        <details class="card" id="test-${esc(t.id)}">
+        <details class="card" ${idx === 0 ? "open" : ""}>
           <summary>
             <div class="card-title">
-              <span class="title">${esc(title)}</span>
+              <span class="title">${esc(t.id)}</span>
               ${badge((t as any).result)}
               <span class="muted mono">${esc((t as any).startedAt)} → ${esc((t as any).endedAt)}</span>
+              <span class="mono">${esc(fmtMs((t as any).durationMs))}</span>
             </div>
-            <div class="card-meta">${meta}</div>
+            <div class="card-meta mono">project: ${esc((t as any).projectId)} <span class="sep">|</span> attempts: ${esc(
+        attempts.length
+      )}</div>
           </summary>
+
           <div class="card-body">
             <div class="section">
               <div class="section-title">Attempts</div>
@@ -307,7 +329,34 @@ export class HtmlReporter {
       </div>
     `;
 
+    const debugSection = debugWarnings.length
+      ? `
+      <div class="debug-banner">
+        ⚠️ DEBUG MODE — Reusable purity rules were relaxed. See <a href="./debug-warnings.json" target="_blank" rel="noopener noreferrer">debug-warnings.json</a>
+      </div>
+      <div class="content">
+        <div class="section-title">Warnings</div>
+        <div class="warnings">
+          ${debugWarnings
+            .map((w: any) => {
+              const stack = Array.isArray(w.includeStack) ? w.includeStack.join(" → ") : "";
+              return `
+                <div class="warning">
+                  <div class="mono"><span class="k">executable:</span> ${esc(w.originExecutableId)} <span class="sep">|</span> <span class="k">field:</span> ${esc(w.field)} <span class="sep">|</span> <span class="k">step:</span> ${esc(w.stepId)}</div>
+                  <div class="mono muted">${esc(w.message)}</div>
+                  <div class="mono muted"><span class="k">path:</span> ${esc(w.originPath)}</div>
+                  <div class="mono muted"><span class="k">stack:</span> ${esc(stack)}</div>
+                </div>
+              `;
+            })
+            .join("")}
+        </div>
+      </div>
+    `
+      : "";
+
     const list = `
+      ${debugSection}
       <div class="content">
         <div class="section-title">Tests</div>
         ${tests.map((t: any, idx: number) => renderTestCard(t, idx)).join("")}
@@ -316,7 +365,7 @@ export class HtmlReporter {
 
     const footer = `
       <div class="footer">
-        Powered by Testergizer | Copyright 2025 © RunDOM Technologies 
+        Powered by Testergizer | Copyright 2025 © RunDOM Technologies
       </div>
     `;
 
@@ -327,12 +376,12 @@ export class HtmlReporter {
         <div><span class="k">Run ID:</span> <span class="mono">${esc(run.runId)}</span></div>
         <div><span class="k">Project:</span> <span class="mono">${esc(run.projectId)}</span></div>
         <div><span class="k">Execution type:</span> <span class="mono">${esc(run.executionType)}</span></div>
-        <div><span class="k">Execution mode:</span> <span class="mono">${esc(run.executionMode)}</span></div>
+        <div><span class="k">Execution intent:</span> <span class="mono">${esc(run.executionIntent)}</span></div>
         <div><span class="k">Started at:</span> <span class="mono">${esc(run.startedAt)}</span></div>
         <div><span class="k">Ended at:</span> <span class="mono">${esc(run.endedAt)}</span></div>
         <div><span class="k">Duration:</span> <span class="mono">${fmtMs(run.durationMs)}</span></div>
       </div>
-    `;    
+    `;
 
     const actions = `
       <div class="actions">
@@ -340,9 +389,17 @@ export class HtmlReporter {
         <button class="btn" data-action="collapse-all">Collapse all</button>
         <a class="btn" href="./run.json" target="_blank" rel="noopener noreferrer">run.json</a>
         <a class="btn" href="./artifacts.json" target="_blank" rel="noopener noreferrer">artifacts.json</a>
+        <button class="btn" data-action="view">View ▾</button>
       </div>
     `;
 
+    // NOTE:
+    // - report.html lives in artifacts/suiteId/date/runId/
+    // - repo root is ../../../../
+    // - base layout css currently lives under src/tools/
+    // - themes live under themes/<name>/theme.css
+    const layoutCssHref = "../../../../src/tools/report.layout.css";
+    const defaultThemeHref = "../../../../themes/default/theme.css";
 
     return `<!doctype html>
 <html lang="en">
@@ -350,92 +407,15 @@ export class HtmlReporter {
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${esc(run.applicationName)} Automated Tests Run Report</title>
-    <style>
-      :root { color-scheme: light dark; }
-      body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; margin: 0; padding: 0; }
-      a { color: inherit; }
 
-      .header { padding: 18px 22px; border-bottom: 1px solid rgba(120,120,120,0.25); position: sticky; top: 0; background: rgba(255,255,255,0.92); backdrop-filter: blur(8px); z-index: 10; }
-      @media (prefers-color-scheme: dark) { .header { background: rgba(10,10,10,0.88); } }
+    <!-- Base layout (structure, spacing, grids, typography) -->
+    <link rel="stylesheet" href="${esc(layoutCssHref)}" />
 
-      .header-grid { display: grid; grid-template-columns: auto 1fr auto; gap: 16px; align-items: start; }
-      .header-left, .header-right { display: flex; align-items: center; }
-      .header-center { min-width: 0; }
-
-      .logo { display: block; }
-      .logo-large { height: 52px; width: auto; max-width: 260px; object-fit: contain; }
-
-      .h1 { font-size: 20px; font-weight: 700; margin-bottom: 6px; text-align: center; }
-      
-      .app-name {
-        color: #1f2937; /* strong, near-black */
-      }
-
-      @media (prefers-color-scheme: dark) {
-        .app-name {
-          color: #f9fafb;
-        }
-      }
-
-      .report-title {
-        color: rgba(120,120,120,0.85);
-        margin-left: 6px;
-        font-weight: 500;
-      }
-
-      .meta { font-size: 13px; line-height: 1.4; text-align: center; }
-      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
-      .muted { opacity: 0.72; }
-      .sep { margin: 0 8px; opacity: 0.5; }
-      .k { opacity: 0.7; margin-right: 4px; }
-
-      .run-meta { padding: 14px 22px; }
-      .run-meta > div { padding: 2px; }
-
-      .summary { display: flex; justify-content: center; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
-      .summary-item { border: 1px solid rgba(120,120,120,0.25); border-radius: 10px; padding: 8px 10px; min-width: 90px; text-align: center; }
-      .summary-item .k { display: block; font-size: 12px; margin-bottom: 4px; }
-      .summary-item .v { font-size: 18px; font-weight: 700; }
-
-      .actions { margin-top: 12px; display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
-      .btn { border: 1px solid rgba(120,120,120,0.25); background: transparent; border-radius: 10px; padding: 6px 10px; cursor: pointer; font-size: 13px; text-decoration: none; }
-      .btn:hover { border-color: rgba(120,120,120,0.55); }
-
-      .content { padding: 18px 22px; }
-      .section-title { font-weight: 700; margin: 14px 0 10px; }
-
-      details.card { border: 1px solid rgba(120,120,120,0.25); border-radius: 14px; padding: 10px 12px; margin-bottom: 12px; }
-      details.card summary { cursor: pointer; list-style: none; }
-      details.card summary::-webkit-details-marker { display: none; }
-
-      .card-title { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-      .title { font-weight: 700; }
-      .card-meta { margin-top: 6px; font-size: 12px; opacity: 0.8; }
-      .card-body { margin-top: 10px; }
-
-      .section { margin-top: 12px; }
-      .attempt { border: 1px solid rgba(120,120,120,0.22); border-radius: 12px; padding: 10px; margin-top: 10px; }
-      .attempt-header { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
-
-      .evidence-row { display: flex; gap: 8px; flex-wrap: wrap; margin: 6px 0 2px; }
-      .evidence { border: 1px solid rgba(120,120,120,0.25); border-radius: 999px; padding: 2px 8px; font-size: 12px; text-decoration: none; }
-      .evidence:hover { border-color: rgba(120,120,120,0.55); }
-
-      .pill { border: 1px solid rgba(120,120,120,0.25); border-radius: 999px; padding: 2px 8px; font-size: 12px; }
-      .badge { border-radius: 999px; padding: 2px 10px; font-size: 12px; border: 1px solid rgba(120,120,120,0.25); }
-
-      .table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 6px; }
-      .table th, .table td { border-bottom: 1px solid rgba(120,120,120,0.2); padding: 6px 6px; vertical-align: top; }
-      .table th { text-align: left; opacity: 0.8; }
-
-      .errors summary { cursor: pointer; }
-      .error { margin-top: 8px; }
-      .stack { white-space: pre-wrap; padding: 8px; border: 1px solid rgba(120,120,120,0.25); border-radius: 10px; overflow-x: auto; }
-
-      .footer { padding: 18px 22px; border-top: 1px solid rgba(120,120,120,0.25); margin-top: 18px; text-align: center; font-size: 12px; opacity: 0.78; }
-    </style>
+    <!-- Active theme (tokens only: colors, borders, accents) -->
+    <link id="tg-theme" rel="stylesheet" href="${esc(defaultThemeHref)}" />
   </head>
-  <body>        
+
+  <body>
     ${header}
     ${runMeta}
     ${summary}
@@ -443,18 +423,138 @@ export class HtmlReporter {
     ${list}
     ${footer}
     <script>
-      (function() {
-        function setAll(open) {
-          document.querySelectorAll('details.card').forEach(function(d) { d.open = open; });
+    (function () {
+      'use strict';
+
+      /* ---------- helpers ---------- */
+
+      function $(id) {
+        return document.getElementById(id);
+      }
+
+      function show(el) {
+        if (el) el.hidden = false;
+      }
+
+      function hide(el) {
+        if (el) el.hidden = true;
+      }
+
+      /* ---------- core actions ---------- */
+
+      function expandAll() {
+        document.querySelectorAll('details.card').forEach(d => d.open = true);
+      }
+
+      function collapseAll() {
+        document.querySelectorAll('details.card').forEach(d => d.open = false);
+      }
+
+      /* ---------- click handling ---------- */
+
+      document.addEventListener('click', function (e) {
+        var t = e.target;
+        if (!t) return;
+
+        var viewMenu = $('view-menu');
+        var appearancePanel = $('appearance-panel');
+
+        /* Expand / Collapse */
+        if (t.matches('[data-action="expand-all"]')) {
+          expandAll();
+          return;
         }
-        document.querySelectorAll('[data-action="expand-all"]').forEach(function(b) {
-          b.addEventListener('click', function() { setAll(true); });
-        });
-        document.querySelectorAll('[data-action="collapse-all"]').forEach(function(b) {
-          b.addEventListener('click', function() { setAll(false); });
-        });
-      })();
+
+        if (t.matches('[data-action="collapse-all"]')) {
+          collapseAll();
+          return;
+        }
+
+        /* View ▾ button */
+        if (t.matches('[data-action="view"]')) {
+          if (!viewMenu) return;
+
+          if (viewMenu.hidden) {
+            show(viewMenu);
+            var r = t.getBoundingClientRect();
+            viewMenu.style.position = 'absolute';
+            viewMenu.style.top = (r.bottom + 6) + 'px';
+            viewMenu.style.left = r.left + 'px';
+          } else {
+            hide(viewMenu);
+          }
+          return;
+        }
+
+        /* View → Appearance */
+        if (t.matches('[data-action="open-appearance"]')) {
+          hide(viewMenu);
+          show(appearancePanel);
+          return;
+        }
+
+        /* Click on backdrop closes appearance */
+        if (t.classList.contains('ap-backdrop')) {
+          hide(appearancePanel);
+          return;
+        }
+
+        /* Click outside view menu closes it */
+        if (viewMenu && !viewMenu.contains(t) && !t.matches('[data-action="view"]')) {
+          hide(viewMenu);
+        }
+      });
+
+      /* ---------- theme switching ---------- */
+
+      document.addEventListener('change', function (e) {
+        var t = e.target;
+        if (!t || t.id !== 'ap-theme') return;
+
+        var themeLink = $('tg-theme');
+        if (!themeLink) return;
+
+        themeLink.href = '../../../../themes/' + t.value + '/theme.css';
+      });
+
+      /* ---------- ESC closes appearance ---------- */
+
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') {
+          hide($('appearance-panel'));
+          hide($('view-menu'));
+        }
+      });
+
+    })();
     </script>
+    <!-- View menu (popup) -->
+    <div id="view-menu" hidden>
+      <button class="menu-item" data-action="open-appearance">
+        Appearance
+      </button>
+    </div>
+
+    <!-- Appearance panel (floating) -->
+    <div id="appearance-panel" hidden>
+      <div class="ap-backdrop"></div>
+      <div class="appearance-panel">
+        <div class="ap-title">Appearance</div>
+        <div class="ap-group">
+          <div class="ap-label">Theme</div>
+          <select id="ap-theme">
+            <option value="default">Default</option>
+            <option value="dark">Dark</option>
+            <option value="high-contrast">High contrast</option>
+          </select>
+        </div>
+
+        <div class="ap-group">
+          <div class="ap-hint mono">Changes affect this report only (no persistence yet).</div>
+        </div>
+      </div>
+    </div>
+
   </body>
 </html>`;
   }

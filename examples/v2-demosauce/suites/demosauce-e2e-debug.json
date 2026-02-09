@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "v2",
+  "suiteId": "demosauce-e2e-v2-debug",
+  "suiteName": "DemoSauce E2E (debug)",
+  "resolveFrom": "..",
+  "baseUrl": "https://www.saucedemo.com",
+  "tests": [
+    {
+      "id": "login-and-logout",
+      "testRef": "tests/login-and-logout.json",
+      "params": {
+        "USERNAME": "standard_user",
+        "PASSWORD": "secret_sauce"
+      }
+    },
+    {
+      "id": "login-and-logout-literals",
+      "testRef": "tests/login-and-logout-literals.json"      
+    }
+  ]
+}

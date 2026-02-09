@@ -1,0 +1,27 @@
+{
+  "id": "demosauce-e2e-exp",
+  "applicationName": "DemoSauce",
+  "description": "E2E suite validating CLR + contexts + reusable executables (experimental)",
+  "clr": "../clr/demosauce.json",
+  "parameters": {
+    "USERNAME": "standard_user",
+    "PASSWORD": "secret_sauce"
+  },
+  "tests": [
+    {
+      "id": "login-shows-inventory-and-logout",
+      "includes": [
+        "../executables/demosauce/login.json"
+      ],
+      "steps": [
+        {
+          "action": "assertVisible",
+          "target": "inventory.container"
+        }
+      ],
+      "includesAfter": [
+        "../executables/demosauce/logout.json"
+      ]
+    }
+  ]
+}

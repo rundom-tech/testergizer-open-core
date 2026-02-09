@@ -1,0 +1,22 @@
+{
+  "id": "demosauce-logout-exp",
+  "description": "Reusable logout flow with inventory context",
+  "steps": [
+    {
+      "action": "setContext",
+      "contexts": ["page.inventory"]
+    },
+    {
+      "action": "click",
+      "target": "menu.button"
+    },
+    {
+      "action": "click",
+      "target": "menu.logout"
+    },
+    {
+      "action": "clearContext",
+      "contexts": ["page.inventory"]
+    }
+  ]
+}

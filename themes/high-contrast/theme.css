@@ -1,0 +1,23 @@
+:root {
+  --bg: #000000;
+  --fg: #ffffff;
+
+  --panel-bg: #000000;
+  --header-bg: #000000;
+
+  --border: #ffffff;
+  --border-soft: #dddddd;
+  --border-strong: #ffffff;
+
+  --accent: #ffff00;
+
+  --title-fg: #ffffff;
+  --title-muted: #ffffff;
+
+  --btn-bg: #000000;
+  --chip-bg: #000000;
+
+  --warn-bg: #000000;
+  --warn-border: #ffff00;
+  --warn-border-soft: #ffff00;
+}

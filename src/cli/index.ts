@@ -32,6 +32,11 @@ yargs(hideBin(process.argv))
         .option("headless", { type: "boolean" })
         .option("slow-mo", { type: "number", alias: "slowMo" })
         .option("base-url", { type: "string", alias: "baseUrl" })
+        .option("debug", {
+          type: "boolean",
+          default: false,
+          describe: "Allow debug-only behaviors (e.g., literals inside reusable executables)"
+        })
         .option("out", { type: "string" }),
     (args: RunArgs) => {
       run(args).catch((err: Error) => {

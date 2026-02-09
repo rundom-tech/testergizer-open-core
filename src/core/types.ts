@@ -1,4 +1,5 @@
-export type ExecutionMode = "stub" | "execute" | "baseline";
+export type ExecutionMode = "stub" | "verify" | "baseline";
+export type ExecutionIntent = "stub" | "verify" | "baseline";
 
 export type TestDomain = "ui" | "api" | "system";
 

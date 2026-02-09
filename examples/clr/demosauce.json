@@ -1,0 +1,52 @@
+{
+  "id": "demosauce-clr-exp",
+  "description": "Experimental CLR for saucedemo.com with ordered selectors and context subscriptions",
+  "locators": {
+    "login.username": {
+      "contexts": ["page.login"],
+      "selectors": [
+        { "using": "css", "value": "#user-name" },
+        { "using": "css", "value": "input[data-test='username']" }
+      ]
+    },
+    "login.password": {
+      "contexts": ["page.login"],
+      "selectors": [
+        { "using": "css", "value": "#password" },
+        { "using": "css", "value": "input[data-test='password']" }
+      ]
+    },
+    "submit.button": {
+      "selectors": [
+        {
+          "contexts": ["page.login"],
+          "using": "css",
+          "value": "#login-button"
+        },
+        {
+          "contexts": ["page.checkout"],
+          "using": "css",
+          "value": "button.place-order"
+        }
+      ]
+    },
+    "inventory.container": {
+      "contexts": ["page.inventory"],
+      "selectors": [
+        { "using": "css", "value": ".inventory_list" }
+      ]
+    },
+    "menu.button": {
+      "contexts": ["page.inventory"],
+      "selectors": [
+        { "using": "css", "value": "#react-burger-menu-btn" }
+      ]
+    },
+    "menu.logout": {
+      "contexts": ["page.inventory"],
+      "selectors": [
+        { "using": "css", "value": "#logout_sidebar_link" }
+      ]
+    }
+  }
+}

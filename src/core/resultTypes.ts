@@ -1,4 +1,4 @@
-import { ExecutionMode, TestDomain } from "./types";
+import { ExecutionIntent, ExecutionMode, TestDomain } from "./types";
 
 /**
  * Evidence semantics (Open Core)
@@ -142,10 +142,10 @@ export interface RunResult {
   /** Opaque run identity (not time-derived) */
   runId: string;
 
-  /** real | stub */
-  executionType: "real" | "stub";
-
-  executionMode: ExecutionMode;
+  /** Execution | Validation | Intent axes */
+  executionType: "stub" | "live"; // stub only means "no real browser interaction"; it may still include real execution of test logic and steps
+  validationMode: "debug" | "prod"; // debug allows debug-only behaviors (e.g., literals inside reusable executables)
+  executionIntent: ExecutionIntent; // intent is the declared purpose of this run, which may differ from actual execution mode in some cases (e.g., debug runs with executionIntent=verify may still run in stub mode)
 
   /** Playwright project id (for now: browserName or mixed) */
   projectId: string;
