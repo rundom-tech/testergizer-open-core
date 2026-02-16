@@ -19,6 +19,7 @@ export interface RunArgs {
    * Forwarded to Core; must NOT affect schemas or suite structure.
    */
   debug?: boolean;
+  retries?: number;
 }
 
 /**
@@ -65,6 +66,8 @@ export async function run(args: RunArgs) {
     // Forward --debug to Core execution
     // Enables runtime-only relaxation of reusable purity checks
     debug: args.debug === true,
+
+    retries: Math.max(0, Number(args.retries ?? 0)),  // 🔽 ADD THIS
 
     // Opaque launch metadata (schema-agnostic, runtime only)
     launch: {

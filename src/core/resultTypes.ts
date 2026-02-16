@@ -33,6 +33,18 @@ export interface StepError {
 export interface StepResult {
   id: string;
   action: string;
+  // 🔽 passthrough metadata (compiler → runner → reporter)
+  group?: {
+    name: string;
+  };
+  target?: {
+    value: string;
+    resolved?: boolean;
+  };
+  data?: {
+    value: any;
+    masked?: boolean;
+  };
   status: StepStatus;
   attempts: number;
   errors: StepError[];
@@ -138,6 +150,8 @@ export interface RunResult {
   suitePath: string;
 
   applicationName: string; // ✅ AUT — canonical source
+  // ✅ ADD
+  baseUrl?: string;
 
   /** Opaque run identity (not time-derived) */
   runId: string;

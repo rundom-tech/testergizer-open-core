@@ -1,0 +1,35 @@
+{
+  "schemaVersion": "v2",
+  "suiteId": "demosauce-e2e-v2-mixed",
+  "suiteName": "DemoSauce E2E (Debug Mixed)",
+  "resolveFrom": "..",
+  "baseUrl": "https://www.saucedemo.com",
+  "tests": [
+    {
+      "id": "first-with-literals",
+      "testRef": "tests/login-and-logout-literals.json"
+    },
+    {
+      "id": "second-with-literals-skipped",
+      "testRef": "tests/login-and-logout-literals.json",
+      "skip": {"reason":"Just for testing skips"}
+    },
+    {
+      "id": "login-and-logout-success",
+      "testRef": "tests/login-and-logout.json",
+      "params": {
+        "USERNAME": "standard_user",
+        "PASSWORD": "secret_sauce"
+      }
+    },
+    {
+      "id": "login-and-logout-failure",
+      "testRef": "tests/login-and-logout.json",
+      "params": {
+        "USERNAME": "standard_user",
+        "PASSWORD": "secret_cause"
+      }
+    }
+  ]     
+  
+}

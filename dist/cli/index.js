@@ -23,6 +23,17 @@ yargs(hideBin(process.argv))
 })
     .option("headed", { type: "boolean" })
     .option("headless", { type: "boolean" })
+    .option("retries", {
+    type: "number",
+    describe: "Number of additional attempts after the first",
+    demandOption: false,
+    coerce: (v) => {
+        if (!Number.isFinite(v) || v < 0) {
+            throw new Error("Invalid value for --retries. Must be a non-negative number.");
+        }
+        return Math.floor(v);
+    }
+})
     .option("slow-mo", { type: "number", alias: "slowMo" })
     .option("base-url", { type: "string", alias: "baseUrl" })
     .option("debug", {

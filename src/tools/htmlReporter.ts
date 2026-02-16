@@ -1,4 +1,12 @@
 // src/tools/htmlReporter.ts
+// CHANGELOG (2026-02-11)
+// - Improved debug warning rendering semantics.
+// - Explicitly clarifies reusable purity relaxation.
+// - No structural or execution logic changes.
+// - No layout refactors.
+// - No CSS changes.
+// - No noise.
+
 import fs from "fs";
 import path from "path";
 
@@ -13,10 +21,19 @@ export interface HtmlReporterOptions {
    * The reporter will always write report.html into this directory.
    */
   outputDir: string;
+
+  /**
+   * Optional set of sensitive *values* (already-resolved secrets) that must be redacted
+   * from the HTML report.
+   *
+   * NOTE: This mirrors JsonReporter sanitization semantics.
+   */
+  secretVars?: Set<string>;
 }
 
 export class HtmlReporter {
   private readonly outputDir: string;
+  private readonly secretVars?: Set<string>;
 
   // Frozen branding asset locations (repo-root relative)
   private static readonly BRANDING_PRODUCT = "branding/vendor/product.png"; // Testergizer logo (optional)
@@ -25,6 +42,7 @@ export class HtmlReporter {
 
   constructor(opts: HtmlReporterOptions) {
     this.outputDir = path.resolve(opts.outputDir);
+    this.secretVars = opts.secretVars;
 
     this.validateBrandingInvariant();
   }
@@ -88,6 +106,50 @@ export class HtmlReporter {
     return abs.startsWith(repoRoot) && fs.existsSync(abs);
   }
 
+  /**
+   * Single source of truth for evidence href generation.
+   *
+   * Handles:
+   * - absolute paths (e.g. video)
+   * - repo-root relative paths starting with "artifacts/"
+   * - run-root relative paths (relative to outputDir)
+   *
+   * Outputs:
+   * - encoded, browser-friendly relative href when inside outputDir
+   * - file:/// fallback when outside outputDir
+   */
+  private toHref(rawPath: string): string {
+    const p = String(rawPath || "");
+    if (!p) return "";
+
+    let abs: string;
+
+    if (path.isAbsolute(p)) {
+      // Absolute path (e.g., video)
+      abs = p;
+    } else {
+      const normalized = p.replace(/\\/g, "/");
+
+      if (normalized.startsWith("artifacts/")) {
+        // Repo-root relative
+        abs = path.resolve(process.cwd(), normalized);
+      } else {
+        // Run-root relative
+        abs = path.resolve(this.outputDir, normalized);
+      }
+    }
+
+    const rel = path.relative(this.outputDir, abs).replace(/\\/g, "/");
+
+    // If the artifact escapes outputDir, fall back to file://
+    if (rel.startsWith("../") || rel === "..") {
+      const fileUrl = "file:///" + abs.replace(/\\/g, "/").replace(/^\/+/, "");
+      return encodeURI(fileUrl);
+    }
+
+    return encodeURI(rel);
+  }
+
   private render(reportHtmlPath: string, run: RunResult, artifacts?: ArtifactsIndex): string {
     const esc = (s: any) =>
       String(s ?? "")
@@ -107,7 +169,56 @@ export class HtmlReporter {
       return `${m}m ${rs.toFixed(1)}s`;
     };
 
+    const resolveGotoUrl = (step: any): string | null => {
+      if (String(step?.action).toLowerCase() !== "goto") return null;
+
+      const raw = getTargetString(step);
+      if (!raw) return null;
+
+      // Already absolute
+      if (/^https?:\/\//i.test(raw)) return raw;
+
+      const base =
+        (run as any).baseUrl ??
+        (run as any).baseURL ??
+        (run as any).projectBaseUrl;
+
+      if (!base) return raw; // last-resort fallback
+
+      try {
+        return new URL(raw, base).toString();
+      } catch {
+        return raw;
+      }
+    };
+
     const badge = (result: string) => `<span class="badge badge-${esc(result)}">${esc(result)}</span>`;
+
+    // Mirror JsonReporter redaction semantics: secretVars contains *values*.
+    const sanitize = (value: any): any => {
+      if (value === null || value === undefined) return value;
+
+      if (typeof value === "string") {
+        if (this.secretVars && this.secretVars.has(value)) return "••••••";
+        return value;
+      }
+
+      if (Array.isArray(value)) return value.map((v) => sanitize(v));
+
+      if (typeof value === "object") {
+        const out: any = {};
+        for (const [k, v] of Object.entries(value)) {
+          if (typeof v === "string" && this.secretVars && this.secretVars.has(v)) {
+            out[k] = "••••••";
+          } else {
+            out[k] = sanitize(v);
+          }
+        }
+        return out;
+      }
+
+      return value;
+    };
 
     const tryReadJson = (p: string): any | undefined => {
       try {
@@ -128,6 +239,22 @@ export class HtmlReporter {
       debugWarningsDoc && typeof debugWarningsDoc === "object" && Array.isArray(debugWarningsDoc.warnings)
         ? debugWarningsDoc.warnings
         : [];
+    // ========================================================
+    // DEBUG WARNINGS INDEX (by exact stepId)
+    // Runtime-only. No schema change.
+    // ========================================================
+
+    const debugWarningsByStepId: Record<string, any[]> = {};
+
+    for (const w of debugWarnings) {
+      if (!w?.stepId) continue;
+
+      if (!debugWarningsByStepId[w.stepId]) {
+        debugWarningsByStepId[w.stepId] = [];
+      }
+
+      debugWarningsByStepId[w.stepId].push(w);
+    }
 
     /* =========================
      * Branding rendering (frozen paths)
@@ -149,7 +276,7 @@ export class HtmlReporter {
         (o) => o?.execution?.testId === testId && o?.execution?.attempt === attempt && o?.execution?.stepId === stepId
       );
 
-    const renderEvidenceLinks = (items: any[]) => {
+    /* const renderEvidenceLinks = (items: any[]) => {
       if (!items.length) return "";
       const links = items
         .map((o) => {
@@ -163,6 +290,82 @@ export class HtmlReporter {
         })
         .join(" ");
       return `<div class="evidence-row">${links}</div>`;
+    }; */
+
+    const renderEvidenceLinks = (items: any[]) => {
+      if (!items.length) return "";
+
+      const links = items
+        .map((o) => {
+          const href = this.toHref(String(o?.artifact?.path || ""));
+          if (!href) return "";
+          const label = o?.type ? String(o.type) : "evidence";
+          return `<a class="evidence" href="${esc(href)}" target="_blank" rel="noopener noreferrer">${esc(
+            label
+          )}</a>`;
+        })
+        .filter(Boolean)
+        .join(" ");
+
+      return links ? `<div class="evidence-row">${links}</div>` : "";
+    };
+
+    // Step 2.1 (masking policy): redact password-like fills regardless of origin.
+    const getTargetString = (step: any): string => {
+      const t = step?.target;
+      if (typeof t === "string") return t;
+      if (t && typeof t === "object" && typeof t.value === "string") return t.value;
+      return "";
+    };
+
+    const isPasswordLikeFill = (step: any): boolean => {
+      if (String(step?.action ?? "").toLowerCase() !== "fill") return false;
+      const target = getTargetString(step);
+      if (!target) return false;
+      // Heuristic: anything that *looks* like a password field.
+      // Examples: "#password", "input[name=password]", "[data-test=password]", etc.
+      return /password/i.test(target);
+    };
+
+    /* =========================
+     * Step 2.2 (visual rail):
+     * Icon + result-class rail on the left, vertically centered (Option A).
+     * ========================= */
+
+    const normalizeResult = (r: any): string => {
+      const s = String(r ?? "").trim().toLowerCase();
+      if (!s) return "unknown";
+      return s;
+    };
+
+    const stepRailClass = (result: string): string => {
+      switch (result) {
+        case "passed":
+          return "step-passed";
+        case "failed":
+          return "step-failed";
+        case "aborted":
+          return "step-aborted";
+        case "skipped":
+          return "step-skipped";
+        default:
+          return "step-unknown";
+      }
+    };
+
+    const stepRailIcon = (result: string): string => {
+      switch (result) {
+        case "passed":
+          return "✓";
+        case "failed":
+          return "✕";
+        case "aborted":
+          return "⦸";
+        case "skipped":
+          return "⏭";
+        default:
+          return "•";
+      }
     };
 
     const renderStepRow = (step: any, testId: string, attempt: number) => {
@@ -194,25 +397,171 @@ export class HtmlReporter {
           </details>`
         : "";
 
+      const targetHtml = (() => {
+        const t = (step as any).target;
+
+        /**
+         * PHASE 1 — EVIDENCE CORRECTION (DISPLAY ONLY)
+         *
+         * For `goto` steps:
+         * - If the target is relative ("/", "/login", etc.)
+         * - AND it can be resolved against a known base URL
+         * - AND the resolved URL differs from the raw target
+         *
+         * Then we render the resolved URL for human readability.
+         *
+         * Execution, evidence, and JSON remain unchanged.
+         */
+        const resolvedGoto = resolveGotoUrl(step);
+
+        // Back-compat: target may be a plain string
+        if (typeof t === "string") {
+          const raw = t.trim();
+          if (!raw) return `<span class="action-target unresolved">(no target)</span>`;
+
+          // ONLY_IF_DIFFERENT: avoid noise when resolution adds no information
+          const shown = resolvedGoto && resolvedGoto !== raw ? resolvedGoto : raw;
+
+          return `
+          <span class="action-arrow">→</span>
+          <span class="action-target"><code>${esc(shown)}</code></span>
+        `;
+        }
+
+        // Newer shape: { value, resolved? }
+        const raw =
+          String(step?.action).toLowerCase() === "goto" ? resolvedGoto ?? (t as any)?.value : (t as any)?.value;
+
+        if (!raw) return `<span class="action-target unresolved">(no target)</span>`;
+
+        const unresolved = (t as any)?.resolved === false;
+        const shown = resolvedGoto ?? raw;
+
+        return `
+        <span class="action-arrow">→</span>
+        <span class="action-target ${unresolved ? "unresolved" : ""}">
+          <code>${esc(shown)}</code>
+          ${unresolved ? " (not found)" : ""}
+        </span>
+      `;
+      })();
+
+      const dataHtml = (() => {
+        const forceMasked = isPasswordLikeFill(step);
+
+        // Prefer compiled/runtime metadata if present.
+        const dObj = (step as any).data;
+
+        if (dObj && typeof dObj === "object" && "value" in dObj) {
+          const raw = sanitize((dObj as any).value);
+          const masked = (dObj as any).masked === true || forceMasked;
+          const shown = masked ? "••••••" : String(raw);
+          return `
+            <span class="action-data ${masked ? "masked" : ""}">
+              = <code>${esc(shown)}</code>
+              ${masked ? " (masked)" : ""}
+            </span>
+          `;
+        }
+
+        // Back-compat: many actions still store parameters in step.value / step.input
+        const raw = (step as any).value ?? (step as any).input;
+        if (raw === undefined) return "";
+
+        const masked = forceMasked;
+        const redacted = sanitize(raw);
+        const shown = masked ? "••••••" : String(redacted);
+
+        return `
+          <span class="action-data ${masked ? "masked" : ""}">
+            = <code>${esc(shown)}</code>
+            ${masked ? " (masked)" : ""}
+          </span>
+        `;
+      })();
+
+      /*
+       * ATTACH WARNING TO STEP
+       * Inline reusable purity warnings (debug semantics).
+       */
+      const warningsHtml = (() => {
+        const ws = Array.isArray(step.warnings) ? step.warnings : [];
+        const inlineDebugWarnings = debugWarningsByStepId[String(step.id)] ?? [];
+
+        const allWarnings = [...ws, ...inlineDebugWarnings];
+        if (!allWarnings.length) return "";
+
+        return `
+          <details class="step-warnings">
+            <summary class="warn-toggle">⚠️ ${allWarnings.length}</summary>
+            <div class="warn-body">
+              ${allWarnings
+                .map((w: any) => `<div class="warn-item mono">${esc(w.message ?? String(w))}</div>`)
+                .join("")}
+            </div>
+          </details>
+        `;
+      })();
+
+      const execHtml = `
+        <details class="step-exec">
+          <summary class="exec-toggle" title="Execution details">ℹ️</summary>
+          <div class="exec-body mono">
+            <div><span class="k">result:</span> ${esc(step.status ?? step.result)}</div>            
+            <div><span class="k">started:</span> ${esc(step.startedAt)}</div>
+            <div><span class="k">ended:</span> ${esc(step.endedAt)}</div>
+            <div><span class="k">duration:</span> ${esc(fmtMs(step.durationMs))}</div>
+          </div>
+        </details>
+      `;
+
+      const stepResult = normalizeResult(step.status ?? step.result);
+      const railCls = stepRailClass(stepResult);
+      const railIcon = stepRailIcon(stepResult);
+
       return `
-        <tr>
-          <td class="mono">${esc(step.id)}</td>
-          <td>${esc(step.action)}</td>
-          <td>${badge(step.status)}</td>
-          <td class="mono">${esc(step.attempts)}</td>
-          <td class="mono">${esc(step.startedAt)}</td>
-          <td class="mono">${esc(step.endedAt)}</td>
-          <td class="mono">${esc(fmtMs(step.durationMs))}</td>
-          <td>${errHtml}${evidence}${originHtml}</td>
+        <tr data-step-id="${esc(step.id)}">
+          <td class="action-cell">
+            <div class="step-row">
+              <div class="step-rail ${esc(railCls)}" aria-label="step result: ${esc(stepResult)}" title="${esc(
+        stepResult
+      )}">
+                <span class="step-icon" aria-hidden="true">${esc(railIcon)}</span>
+              </div>
+
+              <div class="step-body">
+                <div class="action-main">
+                  <span class="action-name">${esc(step.action)}</span>
+                  ${targetHtml}
+                  ${dataHtml}
+                  ${warningsHtml}
+                  ${execHtml}
+                </div>
+                ${errHtml}
+                ${evidence}
+                ${originHtml}
+              </div>
+            </div>
+          </td>
         </tr>
       `;
     };
 
-    const renderAttempt = (a: TestAttemptResult, testId: string) => {
+    //const renderAttempt = (a: TestAttemptResult, testId: string, totalAttempts: number) => {
+    const renderAttempt = (a: TestAttemptResult, testId: string, attemptIndex: number, totalAttempts: number) => {
       const attErrors = Array.isArray((a as any).errors) ? (a as any).errors : [];
 
       const headerBits: string[] = [];
-      headerBits.push(`<span class="k">Attempt</span> <span class="mono">#${esc((a as any).attempt)}</span>`);
+      /**
+       * PHASE 1 — EVIDENCE CORRECTION (attempt numbering)
+       *
+       * Attempt "X of Y" must be based on the test's attempts array length,
+       * NOT on number of steps.
+       */
+      headerBits.push(
+        `<span class="k">Attempt</span> <span class="mono">${esc(attemptIndex)} of ${esc(totalAttempts)}</span>`
+      );
+
       headerBits.push(badge((a as any).result));
       headerBits.push(`<span class="muted mono">${esc((a as any).startedAt)} → ${esc((a as any).endedAt)}</span>`);
       headerBits.push(`<span class="mono">${esc(fmtMs((a as any).durationMs))}</span>`);
@@ -249,18 +598,50 @@ export class HtmlReporter {
           <table class="table">
             <thead>
               <tr>
-                <th>id</th>
-                <th>action</th>
-                <th>status</th>
-                <th>attempts</th>
-                <th>started</th>
-                <th>ended</th>
-                <th>duration</th>
-                <th>details</th>
-              </tr>
+                <th>Steps</th>
+              </tr>              
             </thead>
             <tbody>
-              ${steps.map((s: any) => renderStepRow(s, testId, (a as any).attempt)).join("")}
+              ${(() => {
+                const rows: string[] = [];
+                let currentGroup: { name: string; steps: any[] } | null = null;
+
+                const flushGroup = () => {
+                  if (!currentGroup) return;
+                  rows.push(`
+                    <tr class="step-group">
+                      <td>
+                        <details>
+                          <summary class="step-group-title">${esc(currentGroup.name)}</summary>
+                          <table class="table nested">
+                            <tbody>
+                              ${currentGroup.steps.map((s) => renderStepRow(s, testId, (a as any).attempt)).join("")}
+                            </tbody>
+                          </table>
+                        </details>
+                      </td>
+                    </tr>
+                  `);
+                  currentGroup = null;
+                };
+
+                for (const s of steps) {
+                  const g = (s as any).group?.name;
+                  if (g) {
+                    if (!currentGroup || currentGroup.name !== g) {
+                      flushGroup();
+                      currentGroup = { name: g, steps: [] };
+                    }
+                    currentGroup.steps.push(s);
+                  } else {
+                    flushGroup();
+                    rows.push(renderStepRow(s, testId, (a as any).attempt));
+                  }
+                }
+
+                flushGroup();
+                return rows.join("");
+              })()}
             </tbody>
           </table>
         </div>
@@ -286,7 +667,7 @@ export class HtmlReporter {
           <div class="card-body">
             <div class="section">
               <div class="section-title">Attempts</div>
-              ${attempts.map((a: any) => renderAttempt(a, t.id)).join("")}
+              ${attempts.map((a: any, idx: number) => renderAttempt(a, t.id, idx + 1, attempts.length)).join("")}
             </div>
             <div class="section">
               <div class="section-title">Raw JSON</div>
@@ -301,6 +682,17 @@ export class HtmlReporter {
 
     const tests = Array.isArray((run as any).tests) ? (run as any).tests : [];
 
+    // ========================================================
+    // INVALID & SKIPPED (runtime-only channels)
+    // ========================================================
+
+    const invalidBlock = (run as any).invalidation;
+    const skippedBlock = (run as any).skipped;
+
+    const invalidTests: any[] = invalidBlock && Array.isArray(invalidBlock.tests) ? invalidBlock.tests : [];
+
+    const skippedTests: any[] = skippedBlock && Array.isArray(skippedBlock.tests) ? skippedBlock.tests : [];
+
     const summary = `
       <div class="summary">
         <div class="summary-item"><div class="k">total</div><div class="v mono">${esc((run as any).summary.total)}</div></div>
@@ -309,6 +701,31 @@ export class HtmlReporter {
         <div class="summary-item"><div class="k">aborted</div><div class="v mono">${esc((run as any).summary.aborted)}</div></div>
       </div>
     `;
+
+    const debugBanner = debugWarnings.length
+      ? `
+        <div class="debug-banner">
+          ⚠️ DEBUG MODE — Reusable purity rules were relaxed for this run.
+          (<a href="./debug-warnings.json" target="_blank" rel="noopener noreferrer">see debug-warnings.json</a>)
+        </div>
+      `
+      : "";
+
+    const invalidBanner = invalidTests.length
+      ? `
+        <div class="debug-banner">
+          ⚠️ ${esc(invalidTests.length)} invalid test(s) detected during compile phase
+        </div>
+      `
+      : "";
+
+    const skippedBanner = skippedTests.length
+      ? `
+        <div class="debug-banner">
+          ⏭ ${esc(skippedTests.length)} test(s) intentionally skipped
+        </div>
+      `
+      : "";
 
     // Customer left, Testergizer right (both optional)
     const customerLogo = renderBrandImg(HtmlReporter.BRANDING_CUSTOMER, "Customer", "logo-large");
@@ -329,39 +746,66 @@ export class HtmlReporter {
       </div>
     `;
 
-    const debugSection = debugWarnings.length
-      ? `
-      <div class="debug-banner">
-        ⚠️ DEBUG MODE — Reusable purity rules were relaxed. See <a href="./debug-warnings.json" target="_blank" rel="noopener noreferrer">debug-warnings.json</a>
-      </div>
-      <div class="content">
-        <div class="section-title">Warnings</div>
-        <div class="warnings">
-          ${debugWarnings
-            .map((w: any) => {
-              const stack = Array.isArray(w.includeStack) ? w.includeStack.join(" → ") : "";
-              return `
-                <div class="warning">
-                  <div class="mono"><span class="k">executable:</span> ${esc(w.originExecutableId)} <span class="sep">|</span> <span class="k">field:</span> ${esc(w.field)} <span class="sep">|</span> <span class="k">step:</span> ${esc(w.stepId)}</div>
-                  <div class="mono muted">${esc(w.message)}</div>
-                  <div class="mono muted"><span class="k">path:</span> ${esc(w.originPath)}</div>
-                  <div class="mono muted"><span class="k">stack:</span> ${esc(stack)}</div>
-                </div>
-              `;
-            })
-            .join("")}
-        </div>
-      </div>
-    `
-      : "";
-
     const list = `
-      ${debugSection}
       <div class="content">
         <div class="section-title">Tests</div>
         ${tests.map((t: any, idx: number) => renderTestCard(t, idx)).join("")}
       </div>
     `;
+
+    const invalidSection = invalidTests.length
+      ? `
+        <div class="content">
+          <div class="section-title">Invalid Tests</div>
+          ${invalidTests
+            .map(
+              (t: any) => `
+                <div class="card">
+                  <div class="card-title">
+                    <span class="title">${esc(t.testId)}</span>
+                    <span class="badge badge-failed">invalid</span>
+                  </div>
+                  <div class="card-body mono">
+                    <div><span class="k">Path:</span> ${esc(t.testPath)}</div>
+                    <div><span class="k">Phase:</span> ${esc(t.phase)}</div>
+                    <div><span class="k">Reason:</span> ${esc(t.reason)}</div>
+                    ${
+                      t.stack
+                        ? `<details><summary>Stack</summary><pre class="stack">${esc(t.stack)}</pre></details>`
+                        : ""
+                    }
+                  </div>
+                </div>
+              `
+            )
+            .join("")}
+        </div>
+      `
+      : "";
+
+    const skippedSection = skippedTests.length
+      ? `
+        <div class="content">
+          <div class="section-title">Skipped Tests</div>
+          ${skippedTests
+            .map(
+              (t: any) => `
+                <div class="card">
+                  <div class="card-title">
+                    <span class="title">${esc(t.testId)}</span>
+                    <span class="badge badge-skipped">skipped</span>
+                  </div>
+                  <div class="card-body mono">
+                    <div><span class="k">Path:</span> ${esc(t.testPath)}</div>
+                    <div><span class="k">Reason:</span> ${esc(t.reason ?? "No reason provided")}</div>
+                  </div>
+                </div>
+              `
+            )
+            .join("")}
+        </div>
+      `
+      : "";
 
     const footer = `
       <div class="footer">
@@ -375,6 +819,7 @@ export class HtmlReporter {
         ${run.suiteName ? `<div><span class="k">Suite name:</span> ${esc(run.suiteName)}</div>` : ""}
         <div><span class="k">Run ID:</span> <span class="mono">${esc(run.runId)}</span></div>
         <div><span class="k">Project:</span> <span class="mono">${esc(run.projectId)}</span></div>
+        <div><span class="k">Base URL:</span> <span class="mono">${esc((run as any).baseUrl)}</span></div>
         <div><span class="k">Execution type:</span> <span class="mono">${esc(run.executionType)}</span></div>
         <div><span class="k">Execution intent:</span> <span class="mono">${esc(run.executionIntent)}</span></div>
         <div><span class="k">Started at:</span> <span class="mono">${esc(run.startedAt)}</span></div>
@@ -419,8 +864,13 @@ export class HtmlReporter {
     ${header}
     ${runMeta}
     ${summary}
+    ${debugBanner}
+    ${invalidBanner}
+    ${skippedBanner}
     ${actions}
     ${list}
+    ${invalidSection}
+    ${skippedSection}
     ${footer}
     <script>
     (function () {

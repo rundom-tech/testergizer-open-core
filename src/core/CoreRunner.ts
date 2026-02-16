@@ -70,6 +70,28 @@ function safeFileToken(input: string): string {
 }
 
 /**
+ * Defensive normalization:
+ * yargs / CLI layers sometimes pass numbers as strings.
+ * retries must be a non-negative integer count of *additional* attempts.
+ */
+function normalizeRetries(value: unknown): number {
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) return 0;
+    return Math.max(0, Math.floor(value));
+  }
+
+  if (typeof value === "string") {
+    const t = value.trim();
+    if (!t) return 0;
+    const n = Number(t);
+    if (!Number.isFinite(n)) return 0;
+    return Math.max(0, Math.floor(n));
+  }
+
+  return 0;
+}
+
+/**
  * Pure helper: compute instrumentation facts per attempt.
  * No policy inference, only explicit rules.
  */
@@ -92,6 +114,7 @@ export class CoreRunner {
   private readonly options: CoreRunnerOptions;
   private readonly executionMode: ExecutionMode;
   private readonly executor: StepExecutor;
+  private readonly retries: number;
 
   constructor(options: CoreRunnerOptions = {}) {
     this.options = options;
@@ -100,6 +123,18 @@ export class CoreRunner {
       this.executionMode === "stub"
         ? new StubExecutor()
         : new PlaywrightExecutor();
+
+    // Retry semantics:
+    // - retries = number of *additional* attempts after the first one
+    // - maxAttempts = 1 + retries
+    // NOTE: retries are disabled for stub mode by policy.
+    //
+    // IMPORTANT: we normalize here because upstream CLI parsers may supply "2"
+    // (string) instead of 2 (number). Without this, retries silently become 0.
+    this.retries =
+      this.executionMode === "stub"
+        ? 0
+        : normalizeRetries((options as any).retries);
   }
 
   /**
@@ -114,10 +149,7 @@ export class CoreRunner {
 
     const attempts: TestAttemptResult[] = [];
 
-    const maxAttempts =
-      this.executionMode === "stub"
-        ? 1
-        : Math.max(1, this.options.retries ?? 1);
+    const maxAttempts = 1 + this.retries;
 
     let finalResult: TestResultValue = "passed";
 
@@ -233,9 +265,37 @@ export class CoreRunner {
 
           const stepEndedAt = nowIso();
 
+          // Normalize compiler/runtime passthroughs into report-friendly shapes.
+          const normalizedTarget = (() => {
+            const t: any = (step as any).target;
+            if (t === undefined || t === null) return undefined;
+            if (typeof t === "string") return { value: t, resolved: true };
+            if (typeof t === "object" && typeof t.value === "string") {
+              return { value: t.value, resolved: t.resolved !== false };
+            }
+            // Fallback (do not throw in reporter path)
+            return { value: String(t), resolved: true };
+          })();
+
+          const normalizedData = (() => {
+            const d: any = (step as any).data;
+            if (d && typeof d === "object" && "value" in d) return d;
+
+            const v: any = (step as any).value ?? (step as any).input;
+            if (v === undefined) return undefined;
+
+            return { value: v, masked: false };
+          })();
+
           stepResults.push({
             id: step.id,
             action: step.action,
+
+            // 🔽 REQUIRED passthroughs (compiler → runtime → report)
+            group: (step as any).group,
+            target: normalizedTarget,
+            data: normalizedData,
+
             status,
             attempts: 1,
             errors,
@@ -384,6 +444,7 @@ export class CoreRunner {
         break;
       }
 
+      // failed: only stop after last attempt; otherwise retry mechanically
       finalResult = "failed";
     }
 
