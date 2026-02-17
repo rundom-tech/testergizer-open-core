@@ -137,3 +137,19 @@ Phase 2 supports:
 - No cross-run comparison
 
 Trend analysis and aggregation are intentionally deferred to later phases.
+
+## Compatibility & Locator Registry (CLR)
+
+Testergizer uses a Compatibility & Locator Registry (CLR) to formalize the relationship between logical test targets and the Application Under Test (AUT).
+
+CLR centralizes:
+
+- Logical locator definitions
+- Ordered resolution strategies
+- Version compatibility rules
+- Structural governance signals
+
+Locator resolution is deterministic and fully traceable.
+Adaptive or heuristic behavior, if enabled, is implemented as an explicit AddOn and is never silent.
+
+For design principles and architectural boundaries, see docs/CLR_INTENT.md.
