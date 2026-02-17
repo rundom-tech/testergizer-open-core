@@ -2,6 +2,7 @@
 
 import { satisfies } from "semver";
 import type { CLRExecutionContext } from "./clrExecutionContext";
+import type { CLRDefinition } from "./clrDefinition";
 
 export type CLRVersionStatus =
   | "match"
@@ -10,49 +11,52 @@ export type CLRVersionStatus =
 
 export interface CLRVersionCheckResult {
   status: CLRVersionStatus;
-  reason?: "clr_demo_sentinel" | "executionType_model";
+  reason?: "executionType_model" | "demo_mode";
   detectedVersion?: string;
   expectedRange?: string;
 }
 
-export function evaluateVersionRange(
-  versionRange: string,
+export function evaluateVersionCompatibility(
+  definition: CLRDefinition,
   context: CLRExecutionContext
 ): CLRVersionCheckResult {
-  // Model execution → not applicable
+
+  // Model mode → no real AUT
   if (context.executionType === "model") {
     return {
       status: "skipped",
       reason: "executionType_model",
-      expectedRange: versionRange,
+      expectedRange: definition.versionRange,
     };
   }
 
-  // Demo sentinel → explicitly skipped
-  if (versionRange === "demo") {
+  // Demo CLR → version not applicable
+  if (definition.versionRange === "demo") {
     return {
       status: "skipped",
-      reason: "clr_demo_sentinel",
+      reason: "demo_mode",
       detectedVersion: context.detectedAutVersion,
-      expectedRange: versionRange,
+      expectedRange: definition.versionRange,
     };
   }
 
   const detected = context.detectedAutVersion;
 
-  if (!detected) {
+  if (!detected || detected === "demo") {
     return {
       status: "out_of_range",
-      detectedVersion: undefined,
-      expectedRange: versionRange,
+      detectedVersion: detected,
+      expectedRange: definition.versionRange,
     };
   }
 
-  const ok = satisfies(detected, versionRange, { includePrerelease: true });
+  const ok = satisfies(detected, definition.versionRange, {
+    includePrerelease: true,
+  });
 
   return {
     status: ok ? "match" : "out_of_range",
     detectedVersion: detected,
-    expectedRange: versionRange,
+    expectedRange: definition.versionRange,
   };
 }
