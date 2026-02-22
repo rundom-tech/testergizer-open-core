@@ -531,5 +531,25 @@ pre.stack {
         font-weight: 700;
       }
 
+.tg-attempt {
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px;
+  margin: 10px 0;
+  padding: 8px 12px;
+  background: rgba(255,255,255,0.02);
+}
 
+.tg-attempt__title {
+  display: flex;
+  justify-content: space-between;
+  cursor: pointer;
+  font-weight: 500;
+}
 
+.tg-attempt__body {
+  margin-top: 8px;
+}
+
+.attempt-card {
+  margin: 12px 0 12px 18px;
+}

@@ -547,7 +547,6 @@ export class HtmlReporter {
       `;
     };
 
-    //const renderAttempt = (a: TestAttemptResult, testId: string, totalAttempts: number) => {
     const renderAttempt = (a: TestAttemptResult, testId: string, attemptIndex: number, totalAttempts: number) => {
       const attErrors = Array.isArray((a as any).errors) ? (a as any).errors : [];
 
@@ -591,60 +590,67 @@ export class HtmlReporter {
       const steps = Array.isArray((a as any).steps) ? (a as any).steps : [];
 
       return `
-        <div class="attempt">
-          <div class="attempt-header">${headerBits.join(" ")}</div>
-          ${attemptEvidence}
-          ${attemptErrorsHtml}
-          <table class="table">
-            <thead>
-              <tr>
-                <th>Steps</th>
-              </tr>              
-            </thead>
-            <tbody>
-              ${(() => {
-                const rows: string[] = [];
-                let currentGroup: { name: string; steps: any[] } | null = null;
+        <details class="card attempt-card" ${(a as any).result !== "passed" ? "open" : ""}>
+          <summary>
+            <div class="card-title">
+              ${headerBits.join(" ")}
+            </div>
+          </summary>
 
-                const flushGroup = () => {
-                  if (!currentGroup) return;
-                  rows.push(`
-                    <tr class="step-group">
-                      <td>
-                        <details>
-                          <summary class="step-group-title">${esc(currentGroup.name)}</summary>
-                          <table class="table nested">
-                            <tbody>
-                              ${currentGroup.steps.map((s) => renderStepRow(s, testId, (a as any).attempt)).join("")}
-                            </tbody>
-                          </table>
-                        </details>
-                      </td>
-                    </tr>
-                  `);
-                  currentGroup = null;
-                };
+          <div class="card-body">          
+            ${attemptEvidence}
+            ${attemptErrorsHtml}
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Steps</th>
+                </tr>              
+              </thead>
+              <tbody>
+                ${(() => {
+                  const rows: string[] = [];
+                  let currentGroup: { name: string; steps: any[] } | null = null;
 
-                for (const s of steps) {
-                  const g = (s as any).group?.name;
-                  if (g) {
-                    if (!currentGroup || currentGroup.name !== g) {
+                  const flushGroup = () => {
+                    if (!currentGroup) return;
+                    rows.push(`
+                      <tr class="step-group">
+                        <td>
+                          <details>
+                            <summary class="step-group-title">${esc(currentGroup.name)}</summary>
+                            <table class="table nested">
+                              <tbody>
+                                ${currentGroup.steps.map((s) => renderStepRow(s, testId, (a as any).attempt)).join("")}
+                              </tbody>
+                            </table>
+                          </details>
+                        </td>
+                      </tr>
+                    `);
+                    currentGroup = null;
+                  };
+
+                  for (const s of steps) {
+                    const g = (s as any).group?.name;
+                    if (g) {
+                      if (!currentGroup || currentGroup.name !== g) {
+                        flushGroup();
+                        currentGroup = { name: g, steps: [] };
+                      }
+                      currentGroup.steps.push(s);
+                    } else {
                       flushGroup();
-                      currentGroup = { name: g, steps: [] };
+                      rows.push(renderStepRow(s, testId, (a as any).attempt));
                     }
-                    currentGroup.steps.push(s);
-                  } else {
-                    flushGroup();
-                    rows.push(renderStepRow(s, testId, (a as any).attempt));
                   }
-                }
 
-                flushGroup();
-                return rows.join("");
-              })()}
-            </tbody>
-          </table>
-        </div>
+                  flushGroup();
+                  return rows.join("");
+                })()}
+              </tbody>
+            </table>         
+          </div> 
+        </details>
       `;
     };
 
@@ -667,7 +673,7 @@ export class HtmlReporter {
           <div class="card-body">
             <div class="section">
               <div class="section-title">Attempts</div>
-              ${attempts.map((a: any, idx: number) => renderAttempt(a, t.id, idx + 1, attempts.length)).join("")}
+              ${attempts.map((a: any, i: number) => renderAttempt(a, t.id, i + 1, attempts.length)).join("")}
             </div>
             <div class="section">
               <div class="section-title">Raw JSON</div>
@@ -704,28 +710,42 @@ export class HtmlReporter {
 
     const debugBanner = debugWarnings.length
       ? `
-        <div class="debug-banner">
-          ⚠️ DEBUG MODE — Reusable purity rules were relaxed for this run.
-          (<a href="./debug-warnings.json" target="_blank" rel="noopener noreferrer">see debug-warnings.json</a>)
+        <div class="content">
+          <details class="card" open>
+            <summary class="card-title">
+              <span class="title">Warnings & Notices</span>
+              <span class="badge badge-warning">info</span>
+            </summary>
+            <div class="card-body">
+              <div class="debug-banner">
+                ⚠️ DEBUG MODE — Reusable purity rules were relaxed for this run.
+                (<a href="./debug-warnings.json" target="_blank" rel="noopener noreferrer">debug-warnings.json</a>)
+              </div>
+              ${invalidTests.length ? `<div class="debug-banner">⚠️ ${esc(invalidTests.length)} invalid test(s) detected during compile phase</div>` : ""}
+              ${skippedTests.length ? `<div class="debug-banner">⏭ ${esc(skippedTests.length)} test(s) intentionally skipped</div>` : ""}
+            </div>
+          </details>
+        </div>
+      `
+      : (invalidTests.length || skippedTests.length)
+      ? `
+        <div class="content">
+          <details class="card" open>
+            <summary class="card-title">
+              <span class="title">Warnings & Notices</span>
+              <span class="badge badge-warning">info</span>
+            </summary>
+            <div class="card-body">
+              ${invalidTests.length ? `<div class="debug-banner">⚠️ ${esc(invalidTests.length)} invalid test(s) detected during compile phase</div>` : ""}
+              ${skippedTests.length ? `<div class="debug-banner">⏭ ${esc(skippedTests.length)} test(s) intentionally skipped</div>` : ""}
+            </div>
+          </details>
         </div>
       `
       : "";
 
-    const invalidBanner = invalidTests.length
-      ? `
-        <div class="debug-banner">
-          ⚠️ ${esc(invalidTests.length)} invalid test(s) detected during compile phase
-        </div>
-      `
-      : "";
-
-    const skippedBanner = skippedTests.length
-      ? `
-        <div class="debug-banner">
-          ⏭ ${esc(skippedTests.length)} test(s) intentionally skipped
-        </div>
-      `
-      : "";
+    const invalidBanner = "";
+    const skippedBanner = "";
 
     // Customer left, Testergizer right (both optional)
     const customerLogo = renderBrandImg(HtmlReporter.BRANDING_CUSTOMER, "Customer", "logo-large");
@@ -749,7 +769,8 @@ export class HtmlReporter {
     const list = `
       <div class="content">
         <div class="section-title">Tests</div>
-        ${tests.map((t: any, idx: number) => renderTestCard(t, idx)).join("")}
+        ${tests.map((t: any, idx: number) => renderTestCard(t, idx)
+    ).join("")}
       </div>
     `;
 
@@ -759,23 +780,37 @@ export class HtmlReporter {
           <div class="section-title">Invalid Tests</div>
           ${invalidTests
             .map(
-              (t: any) => `
-                <div class="card">
-                  <div class="card-title">
-                    <span class="title">${esc(t.testId)}</span>
-                    <span class="badge badge-failed">invalid</span>
-                  </div>
-                  <div class="card-body mono">
-                    <div><span class="k">Path:</span> ${esc(t.testPath)}</div>
-                    <div><span class="k">Phase:</span> ${esc(t.phase)}</div>
-                    <div><span class="k">Reason:</span> ${esc(t.reason)}</div>
+              (t: any, idx: number) => `
+                <details class="card" ${idx === 0 ? "open" : ""}>
+                  <summary>
+                    <div class="card-title">
+                      <span class="title">${esc(t.testId)}</span>
+                      <span class="badge badge-failed">invalid</span>
+                      <span class="muted mono">compile</span>
+                    </div>
+                    <div class="card-meta mono">path: ${esc(t.testPath)}</div>
+                  </summary>
+                  <div class="card-body">
+                    <div class="section">
+                      <div class="section-title">Details</div>
+                      <div class="mono">
+                        <div><span class="k">Path:</span> ${esc(t.testPath)}</div>
+                        <div><span class="k">Phase:</span> ${esc(t.phase)}</div>
+                        <div><span class="k">Reason:</span> ${esc(t.reason)}</div>
+                      </div>
+                    </div>
                     ${
                       t.stack
-                        ? `<details><summary>Stack</summary><pre class="stack">${esc(t.stack)}</pre></details>`
+                        ? `
+                          <div class="section">
+                            <div class="section-title">Stack</div>
+                            <pre class="stack mono">${esc(t.stack)}</pre>
+                          </div>
+                        `
                         : ""
                     }
                   </div>
-                </div>
+                </details>
               `
             )
             .join("")}
@@ -789,17 +824,26 @@ export class HtmlReporter {
           <div class="section-title">Skipped Tests</div>
           ${skippedTests
             .map(
-              (t: any) => `
-                <div class="card">
-                  <div class="card-title">
-                    <span class="title">${esc(t.testId)}</span>
-                    <span class="badge badge-skipped">skipped</span>
+              (t: any, idx: number) => `
+                <details class="card" ${idx === 0 && !invalidTests.length ? "open" : ""}>
+                  <summary>
+                    <div class="card-title">
+                      <span class="title">${esc(t.testId)}</span>
+                      <span class="badge badge-skipped">skipped</span>
+                      <span class="muted mono">intentional</span>
+                    </div>
+                    <div class="card-meta mono">path: ${esc(t.testPath)}</div>
+                  </summary>
+                  <div class="card-body">
+                    <div class="section">
+                      <div class="section-title">Details</div>
+                      <div class="mono">
+                        <div><span class="k">Path:</span> ${esc(t.testPath)}</div>
+                        <div><span class="k">Reason:</span> ${esc(t.reason ?? "No reason provided")}</div>
+                      </div>
+                    </div>
                   </div>
-                  <div class="card-body mono">
-                    <div><span class="k">Path:</span> ${esc(t.testPath)}</div>
-                    <div><span class="k">Reason:</span> ${esc(t.reason ?? "No reason provided")}</div>
-                  </div>
-                </div>
+                </details>
               `
             )
             .join("")}
@@ -814,19 +858,69 @@ export class HtmlReporter {
     `;
 
     const runMeta = `
-      <div class="run-meta">
-        <div><span class="k">Suite:</span> <span class="mono">${esc(run.suiteId)}</span></div>
-        ${run.suiteName ? `<div><span class="k">Suite name:</span> ${esc(run.suiteName)}</div>` : ""}
-        <div><span class="k">Run ID:</span> <span class="mono">${esc(run.runId)}</span></div>
-        <div><span class="k">Project:</span> <span class="mono">${esc(run.projectId)}</span></div>
-        <div><span class="k">Base URL:</span> <span class="mono">${esc((run as any).baseUrl)}</span></div>
-        <div><span class="k">Execution type:</span> <span class="mono">${esc(run.executionType)}</span></div>
-        <div><span class="k">Execution intent:</span> <span class="mono">${esc(run.executionIntent)}</span></div>
-        <div><span class="k">Started at:</span> <span class="mono">${esc(run.startedAt)}</span></div>
-        <div><span class="k">Ended at:</span> <span class="mono">${esc(run.endedAt)}</span></div>
-        <div><span class="k">Duration:</span> <span class="mono">${fmtMs(run.durationMs)}</span></div>
+      <div class="content">
+        <details class="card" open>
+          <summary class="card-title">
+            <span class="title">Run metadata</span>
+            <span class="badge badge-muted">run</span>
+          </summary>
+          <div class="card-body mono run-meta">
+            <div><span class="k">Suite:</span> <span class="mono">${esc(run.suiteId)}</span></div>
+            ${run.suiteName ? `<div><span class="k">Suite name:</span> ${esc(run.suiteName)}</div>` : ""}
+            <div><span class="k">Run ID:</span> <span class="mono">${esc(run.runId)}</span></div>
+            <div><span class="k">Project:</span> <span class="mono">${esc(run.projectId)}</span></div>
+            <div><span class="k">Base URL:</span> <span class="mono">${esc((run as any).baseUrl)}</span></div>
+            <div><span class="k">Execution engine:</span> <span class="mono">${esc(run.executionEngine)}</span></div>
+            <div><span class="k">Execution intent:</span> <span class="mono">${esc(run.executionIntent)}</span></div>
+            <div><span class="k">Validation mode:</span> <span class="mono">${esc(run.validationMode)}</span></div>
+            ${
+              (run as any).launch?.command
+                ? `<div><span class="k">Launch:</span> <span class="mono">${esc((run as any).launch.command)}</span></div>`
+                : ""
+            }
+            ${
+              (run as any).launch?.cwd
+                ? `<div><span class="k">Launch cwd:</span> <span class="mono">${esc((run as any).launch.cwd)}</span></div>`
+                : ""
+            }
+            <div><span class="k">Started at:</span> <span class="mono">${esc(run.startedAt)}</span></div>
+            <div><span class="k">Ended at:</span> <span class="mono">${esc(run.endedAt)}</span></div>
+            <div><span class="k">Duration:</span> <span class="mono">${fmtMs(run.durationMs)}</span></div>
+          </div>
+        </details>
       </div>
     `;
+
+    // =========================
+    // CLR GOVERNANCE (runtime-only)
+    // =========================
+    const clr = (run as any).clrResolution;
+
+    const clrSection = clr
+      ? `
+      <div class="content">
+        <details class="card" open>
+          <summary class="card-title">
+            <span class="title">CLR governance</span>
+            <span class="badge badge-muted">clr</span>
+          </summary>
+          <div class="card-body mono run-meta">
+            <div><span class="k">App ID:</span> <span class="mono">${esc(clr.appId)}</span></div>
+            <div><span class="k">Version Range:</span> <span class="mono">${esc(clr.versionRange)}</span></div>
+            <div><span class="k">Detected AUT Version:</span> <span class="mono">${esc(
+              clr.detectedAutVersion ?? "-"
+            )}</span></div>
+            <div><span class="k">Version Status:</span> <span class="mono">${esc(
+              clr.versionCheck?.status
+            )}</span></div>
+            <div><span class="k">DOM Status:</span> <span class="mono">${esc(
+              clr.domCheck?.status
+            )}</span></div>
+          </div>
+        </details>
+      </div>
+      `
+      : "";
 
     const actions = `
       <div class="actions">
@@ -863,6 +957,7 @@ export class HtmlReporter {
   <body>
     ${header}
     ${runMeta}
+    ${clrSection}
     ${summary}
     ${debugBanner}
     ${invalidBanner}
