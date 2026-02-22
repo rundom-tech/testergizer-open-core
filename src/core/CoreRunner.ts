@@ -1,5 +1,9 @@
 // src/core/CoreRunner.ts
 
+import { loadCLRFromFile } from "./locators/clrLoader";
+import { evaluateVersionCompatibility } from "./locators/clrVersionGuard";
+import { evaluateDomFingerprint } from "./locators/clrDomGuard";
+
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
@@ -16,7 +20,9 @@ import {
 
 import type {
   CoreRunnerOptions,
-  ExecutionMode,
+  ExecutionEngine,
+  ExecutionIntent,
+  ValidationMode,
   JsonTestDefinition,
   JsonStep
 } from "./types";
@@ -35,6 +41,7 @@ import type {
   InstrumentationState,
   CacheState
 } from "./resultTypes";
+import { CLRDefinition } from "./locators/clrDefinition";
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -96,10 +103,10 @@ function normalizeRetries(value: unknown): number {
  * No policy inference, only explicit rules.
  */
 function instrumentationForAttempt(
-  executionMode: ExecutionMode,
+  executionEngine: ExecutionEngine,
   attemptNumber: number
 ): InstrumentationState | undefined {
-  if (executionMode === "stub") return undefined;
+  if (executionEngine === "testergizer") return undefined;
 
   const enabled = attemptNumber > 1;
 
@@ -112,29 +119,106 @@ function instrumentationForAttempt(
 
 export class CoreRunner {
   private readonly options: CoreRunnerOptions;
-  private readonly executionMode: ExecutionMode;
+  private readonly engine: ExecutionEngine;
   private readonly executor: StepExecutor;
   private readonly retries: number;
 
+  // 🔽 NEW FIELDS (Step 2)
+  private autVersion?: string;
+  private clrDefinition?: CLRDefinition;
+  private clrResolution?: any;
+  private clrInitialized = false;
+
   constructor(options: CoreRunnerOptions = {}) {
     this.options = options;
-    this.executionMode = options.executionMode ?? "stub";
+
+    this.engine = options.executionEngine ?? "testergizer";
+
     this.executor =
-      this.executionMode === "stub"
+      this.engine === "testergizer"
         ? new StubExecutor()
         : new PlaywrightExecutor();
 
     // Retry semantics:
     // - retries = number of *additional* attempts after the first one
     // - maxAttempts = 1 + retries
-    // NOTE: retries are disabled for stub mode by policy.
+    // NOTE: retries are disabled for testergizer engine by policy.
     //
     // IMPORTANT: we normalize here because upstream CLI parsers may supply "2"
     // (string) instead of 2 (number). Without this, retries silently become 0.
     this.retries =
-      this.executionMode === "stub"
+      this.engine === "testergizer"
         ? 0
         : normalizeRetries((options as any).retries);
+
+    // 🔽 CLR autVersion injection
+    this.autVersion = options.autVersion;
+  }
+
+  private async initCLR(): Promise<void> {
+    if (this.clrInitialized) return;
+
+    const autVersion =
+      this.autVersion ??
+      (this.engine === "testergizer" ? "demo" : undefined);
+
+    if (this.engine !== "testergizer" && !autVersion) {
+      throw new Error(
+        "CLR_REQUIRED: autVersion must be provided for live execution"
+      );
+    }
+
+    const clrPath = process.env.TESTERGIZER_CLR ?? "clr.json";
+    const clrAbs = path.isAbsolute(clrPath)
+      ? clrPath
+      : path.resolve(process.cwd(), clrPath);
+
+    const clrDef = await loadCLRFromFile(clrAbs);
+
+    const detectedAutVersion = autVersion ?? "demo";
+
+    const versionCheck = evaluateVersionCompatibility(clrDef, {
+      executionEngine: this.engine,
+      executionIntent: this.options.executionIntent ?? "verify",
+      validationMode: this.options.validationMode ?? "strict",
+      detectedAutVersion,
+      detectedDomFingerprint: undefined
+    });
+
+    if (versionCheck.status === "out_of_range") {
+      throw new Error(
+        `CLR_VERSION_MISMATCH: appId=${clrDef.appId} autVersion=${detectedAutVersion} range=${clrDef.versionRange}`
+      );
+    }
+
+    const domCheck = evaluateDomFingerprint(
+      clrDef.domFingerprint,
+      {
+        executionEngine: this.engine,
+        executionIntent: this.options.executionIntent ?? "verify",
+        validationMode: this.options.validationMode ?? "strict",
+        detectedAutVersion,
+        detectedDomFingerprint: undefined
+      }
+    );
+
+    if (domCheck.status === "drift") {
+      throw new Error(
+        `CLR_DOM_DRIFT: appId=${clrDef.appId} autVersion=${detectedAutVersion}`
+      );
+    }
+
+    this.clrDefinition = clrDef;
+
+    this.clrResolution = {
+      appId: clrDef.appId,
+      versionRange: clrDef.versionRange,
+      detectedAutVersion,
+      versionCheck,
+      domCheck
+    };
+
+    this.clrInitialized = true;
   }
 
   /**
@@ -144,6 +228,9 @@ export class CoreRunner {
    */
   async run(test: JsonTestDefinition): Promise<TestResult> {
     const testStartedAt = nowIso();
+
+    // AUT version must be provided by suite (injected via JsonTestDefinition)
+    await this.initCLR();
 
     const { projectId, browserType } = pickBrowserType(this.options.browserName);
 
@@ -164,8 +251,10 @@ export class CoreRunner {
       let attemptFailed = false;
       let aborted: StepError | null = null;
 
+      const isModelEngine = this.engine === "testergizer";
       const artifactsEnabled =
-        this.options.artifacts?.enabled === true && this.executionMode !== "stub";
+        this.options.artifacts?.enabled === true &&
+        this.engine !== "testergizer";
 
       const attemptDir = artifactsEnabled
         ? path.join(
@@ -179,7 +268,7 @@ export class CoreRunner {
       const attemptStartedAt = nowIso();
 
       try {
-        if (this.executionMode !== "stub") {
+        if (this.engine !== "testergizer") {
           browser = await browserType.launch({
             headless: this.options.headless ?? true,
             slowMo: this.options.slowMoMs
@@ -216,14 +305,16 @@ export class CoreRunner {
         for (const step of test.steps ?? []) {
           const stepStartedAt = nowIso();
           const errors: StepError[] = [];
-          let status: StepStatus = "passed";
+          let status: StepStatus = isModelEngine ? "reviewed" : "passed";
 
           try {
             await this.executor.execute(step as JsonStep, page);
           } catch (err) {
-            status = "failed";
+            if (!isModelEngine) {
+              status = "failed";
+              attemptFailed = true;
+            }
             errors.push(this.toStepError(err));
-            attemptFailed = true;
 
             if (
               artifactsEnabled &&
@@ -402,19 +493,22 @@ export class CoreRunner {
 
       const attemptEndedAt = nowIso();
 
-      const attemptResult: TestResultValue = aborted
-        ? "aborted"
-        : attemptFailed
-        ? "failed"
-        : "passed";
+      const attemptResult: TestResultValue =
+        aborted
+          ? "aborted"
+          : isModelEngine
+          ? "reviewed"
+          : attemptFailed
+          ? "failed"
+          : "passed";
 
       const instrumentation = instrumentationForAttempt(
-        this.executionMode,
+        this.engine,
         attemptNumber
       );
 
       const cache: CacheState | undefined =
-        this.executionMode === "stub"
+        this.engine === "testergizer"
           ? undefined
           : {
               mode: "enabled",
@@ -434,17 +528,21 @@ export class CoreRunner {
         steps: stepResults
       });
 
-      if (attemptResult === "passed") {
-        finalResult = "passed";
-        break;
-      }
-
       if (attemptResult === "aborted") {
         finalResult = "aborted";
         break;
       }
 
-      // failed: only stop after last attempt; otherwise retry mechanically
+      if (isModelEngine) {
+        finalResult = "reviewed";
+        break;
+      }
+
+      if (attemptResult === "passed") {
+        finalResult = "passed";
+        break;
+      }
+
       finalResult = "failed";
     }
 
@@ -454,7 +552,6 @@ export class CoreRunner {
       id: test.id,
       name: test.name,
       testDomain: test.testDomain ?? "system",
-      executionMode: this.executionMode,
       projectId,
       result: finalResult,
       startedAt: testStartedAt,

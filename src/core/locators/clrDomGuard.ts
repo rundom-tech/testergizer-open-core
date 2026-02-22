@@ -11,7 +11,7 @@ export type CLRDomStatus =
 
 export interface CLRDomCheckResult {
   status: CLRDomStatus;
-  reason?: "executionType_model";
+  reason?: "engine_testergizer";
   expectedFingerprint?: string;
   detectedFingerprint?: string;
 }
@@ -20,10 +20,10 @@ export function evaluateDomFingerprint(
   expectedFingerprint: string | undefined,
   context: CLRExecutionContext
 ): CLRDomCheckResult {
-  if (context.executionType === "model") {
+  if (context.executionEngine === "testergizer") {
     return {
       status: "skipped",
-      reason: "executionType_model",
+      reason: "engine_testergizer",
     };
   }
 

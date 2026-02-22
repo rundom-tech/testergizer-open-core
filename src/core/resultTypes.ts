@@ -1,4 +1,4 @@
-import { ExecutionIntent, ExecutionMode, TestDomain } from "./types";
+import { ExecutionEngine, ExecutionIntent,ValidationMode, TestDomain } from "./types";
 
 /**
  * Evidence semantics (Open Core)
@@ -17,8 +17,8 @@ import { ExecutionIntent, ExecutionMode, TestDomain } from "./types";
  * - No comparison, inference, or divergence labeling.
  */
 
-export type StepStatus = "passed" | "failed";
-export type TestResultValue = "passed" | "failed" | "aborted";
+export type StepStatus = "passed" | "failed" | "reviewed";
+export type TestResultValue = "passed" | "failed" | "aborted" | "reviewed";
 
 /* ============================================================
  * Errors & steps
@@ -108,9 +108,6 @@ export interface TestResult {
   name?: string;
   testDomain: TestDomain;
 
-  /** Execution mode for this test (headed / headless) */
-  executionMode: ExecutionMode;
-
   /** Playwright project id (for now: browserName) */
   projectId: string;
 
@@ -156,10 +153,9 @@ export interface RunResult {
   /** Opaque run identity (not time-derived) */
   runId: string;
 
-  /** Execution | Validation | Intent axes */
-  executionType: "stub" | "live"; // stub only means "no real browser interaction"; it may still include real execution of test logic and steps
-  validationMode: "debug" | "prod"; // debug allows debug-only behaviors (e.g., literals inside reusable executables)
-  executionIntent: ExecutionIntent; // intent is the declared purpose of this run, which may differ from actual execution mode in some cases (e.g., debug runs with executionIntent=verify may still run in stub mode)
+  executionEngine: ExecutionEngine;
+  executionIntent: ExecutionIntent;
+  validationMode: ValidationMode;
 
   /** Playwright project id (for now: browserName or mixed) */
   projectId: string;

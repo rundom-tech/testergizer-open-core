@@ -1,78 +1,114 @@
-/**
- * src/cli/run.ts
-**/
+// src/cli/run.ts
+
 import path from "path";
 import { runSuiteFromFile } from "./runSuiteFromFile";
-import type { ExecutionMode } from "../core/types";
+import type {
+  ExecutionEngine,
+  ExecutionIntent,
+  ValidationMode
+} from "../core/types";
 
 export interface RunArgs {
-  file: string;
-  mode?: ExecutionMode;
-  headed?: boolean;
-  headless?: boolean;
-  slowMo?: number;
-  baseUrl?: string;
-  out?: string;
-
-  /**
-   * Runtime-only debug flag.
-   * Forwarded to Core; must NOT affect schemas or suite structure.
-   */
+  suitePath: string;
+  executionEngine?: ExecutionEngine;
+  executionIntent?: ExecutionIntent;
   debug?: boolean;
+
+  baseUrl?: string;
+  browserName?: "chromium" | "firefox" | "webkit";
+  headless?: boolean;
+  slowMoMs?: number;
   retries?: number;
 }
 
-/**
- * CLI entrypoint for `testergizer run`
- *
- * Responsibilities:
- * - Resolve input path
- * - Normalize CLI flags
- * - Capture launch metadata (command + cwd)
- * - Forward everything verbatim to Core
- */
 export async function run(args: RunArgs) {
-  const resolvedPath = path.resolve(args.file);
+  return runSuiteFromFile(args.suitePath, args);
+}
 
-  // Execution mode is a Core concern; CLI only forwards intent
-  const executionMode = args.mode ?? "stub";
+/* -----------------------------------------------------------
+ * CLI Wrapper
+ * ----------------------------------------------------------- */
 
-  /**
-   * Headless resolution rules:
-   * - --headed explicitly disables headless
-   * - --headless explicitly enables headless
-   * - default is headless=true
-   */
-  const headless =
-    args.headed === true
-      ? false
-      : args.headless === true
-      ? true
-      : true;
+function getFlag(name: string): string | undefined {
+  const index = process.argv.indexOf(name);
+  if (index === -1) return undefined;
+  return process.argv[index + 1];
+}
 
-  /**
-   * Capture full launch command for transparency.
-   * This is CLI responsibility only and is persisted verbatim.
-   */
-  const launchCommand = process.argv.join(" ");
+function hasFlag(name: string): boolean {
+  return process.argv.includes(name);
+}
 
-  await runSuiteFromFile(resolvedPath, {
-    executionMode,
-    artifactsDir: args.out ?? "artifacts",
-    headless,
-    slowMoMs: args.slowMo,
-    baseUrl: args.baseUrl,
+// Only execute when invoked directly from CLI
+if (require.main === module) {
+  (async () => {
+    const argv = process.argv.slice(2);
 
-    // Forward --debug to Core execution
-    // Enables runtime-only relaxation of reusable purity checks
-    debug: args.debug === true,
-
-    retries: Math.max(0, Number(args.retries ?? 0)),  // 🔽 ADD THIS
-
-    // Opaque launch metadata (schema-agnostic, runtime only)
-    launch: {
-      command: launchCommand,
-      cwd: process.cwd()
+    if (argv.length === 0) {
+      console.error("Usage: testergizer <suitePath> [options]");
+      process.exit(1);
     }
+
+    const suitePath = path.resolve(argv[0]);
+
+    const engineRaw = getFlag("--engine");
+    const engine: ExecutionEngine =
+      (engineRaw as ExecutionEngine) ?? "testergizer";
+
+    if (engine !== "testergizer" && engine !== "playwright") {
+      throw new Error(
+        `Unsupported engine "${engine}". Supported: testergizer | playwright`
+      );
+    }
+
+    const intentRaw = getFlag("--intent");
+    let intent: ExecutionIntent;
+
+    if (engine === "testergizer") {
+      intent = "review";
+      if (intentRaw) {
+        console.warn(
+          `⚠️  --intent ignored for engine "testergizer" (review is implicit).`
+        );
+      }
+    } else {
+      intent = (intentRaw ?? "verify") as ExecutionIntent;
+
+      if (intent === "review") {
+        throw new Error(
+          `Intent "review" is not supported by engine "playwright".`
+        );
+      }
+
+      if (intent !== "verify" && intent !== "baseline") {
+        throw new Error(
+          `Unsupported intent "${intent}" for engine "playwright".`
+        );
+      }
+    }
+
+    const headless =
+      hasFlag("--headed") ? false :
+      hasFlag("--headless") ? true :
+      undefined;
+
+    await run({
+      suitePath,
+      executionEngine: engine,
+      executionIntent: intent,
+      debug: hasFlag("--debug"),
+      baseUrl: getFlag("--baseUrl"),
+      browserName: getFlag("--browser") as any,
+      headless,
+      slowMoMs: getFlag("--slowMo")
+        ? Number(getFlag("--slowMo"))
+        : undefined,
+      retries: getFlag("--retries")
+        ? Number(getFlag("--retries"))
+        : undefined
+    });
+  })().catch((err) => {
+    console.error(err);
+    process.exit(1);
   });
 }

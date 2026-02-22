@@ -20,7 +20,7 @@ describe("runSuiteFromFile (stub mode)", () => {
   it("writes results artifact and returns runResult", async () => {
     const suitePath = path.join(CWD, "tests", "fixtures", "demosauce-e2e.json");
     const { runResult, outPath } = await runSuiteFromFile(suitePath, {
-      executionMode: "stub",
+      executionEngine: "testergizer",
       artifactsDir: tmpDir,
     });
 

@@ -1,5 +1,17 @@
-export type ExecutionMode = "stub" | "verify" | "baseline";
-export type ExecutionIntent = "stub" | "verify" | "baseline";
+// src/core/types.ts
+// Core types and interfaces for test definitions, execution options, and artifact observation.
+export type ExecutionEngine =
+  | "testergizer"
+  | "playwright";
+
+export type ExecutionIntent =
+  | "review"
+  | "verify"
+  | "baseline";
+
+export type ValidationMode =
+  | "strict"
+  | "debug";
 
 export type TestDomain = "ui" | "api" | "system";
 
@@ -50,8 +62,11 @@ export interface CoreRunnerOptions {
   headless?: boolean;
   slowMoMs?: number;
   baseUrl?: string;
-  executionMode?: ExecutionMode;
+  executionEngine?: ExecutionEngine;
+  executionIntent?: ExecutionIntent;
+  validationMode?: ValidationMode;
   retries?: number;
+  autVersion?: string; // ← NEW
 
   /** Playwright browser family (maps to Playwright project semantics) */
   browserName?: "chromium" | "firefox" | "webkit";

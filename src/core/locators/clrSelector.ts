@@ -1,26 +1,37 @@
-// src/core/locators/clrSelector.ts
-
 import { satisfies } from "semver";
-import type { CLRDefinition } from "./definition";
+import type { CLRDefinition } from "./clrDefinition";
 
-export function selectCLRForVersion(
-  definitions: CLRDefinition[],
-  detectedAutVersion: string
-): CLRLoadResult {
-  const matches = definitions.filter(def =>
-    def.versionRange !== "demo" &&
-    satisfies(detectedAutVersion, def.versionRange, {
-      includePrerelease: true,
-    })
-  );
+export type CLRMatchStatus =
+  | "match"
+  | "version_mismatch"
+  | "demo_mismatch";
 
-  if (matches.length === 0) {
-    return { status: "not_found" };
+export interface CLRMatchResult {
+  status: CLRMatchStatus;
+  definition: CLRDefinition;
+}
+
+export function validateCLRForVersion(
+  clr: CLRDefinition,
+  autVersion: string
+): CLRMatchResult {
+
+  if (autVersion === "demo") {
+    if (clr.versionRange === "demo") {
+      return { status: "match", definition: clr };
+    }
+    return { status: "demo_mismatch", definition: clr };
   }
 
-  if (matches.length > 1) {
-    return { status: "ambiguous", matches };
+  if (clr.versionRange === "demo") {
+    return { status: "demo_mismatch", definition: clr };
   }
 
-  return { status: "match", definition: matches[0] };
+  const ok = satisfies(autVersion, clr.versionRange, {
+    includePrerelease: true
+  });
+
+  return ok
+    ? { status: "match", definition: clr }
+    : { status: "version_mismatch", definition: clr };
 }

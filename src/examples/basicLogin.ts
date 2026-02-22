@@ -10,7 +10,11 @@ const test: JsonTestDefinition = {
 };
 
 async function run() {
-  const runner = new CoreRunner({ executionMode: "stub" });
+  const runner = new CoreRunner({
+    executionEngine: "testergizer",
+    executionIntent: "review",
+    validationMode: "strict"
+  });
   await runner.run(test);
   await runner.dispose();
 }

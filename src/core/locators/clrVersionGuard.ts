@@ -11,7 +11,7 @@ export type CLRVersionStatus =
 
 export interface CLRVersionCheckResult {
   status: CLRVersionStatus;
-  reason?: "executionType_model" | "demo_mode";
+  reason?: "engine_testergizer" | "demo_mode";
   detectedVersion?: string;
   expectedRange?: string;
 }
@@ -22,10 +22,10 @@ export function evaluateVersionCompatibility(
 ): CLRVersionCheckResult {
 
   // Model mode → no real AUT
-  if (context.executionType === "model") {
+  if (context.executionEngine === "testergizer") {
     return {
       status: "skipped",
-      reason: "executionType_model",
+      reason: "engine_testergizer",
       expectedRange: definition.versionRange,
     };
   }
