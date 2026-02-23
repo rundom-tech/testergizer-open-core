@@ -1,65 +1,61 @@
 import type {
   LocatorDefinition,
-  LocatorResolutionResult,
-  ParsedTarget,
-  ResolutionAttempt,
-  StrategyExecutor
-} from './types';
-import {
-  ContextNotAllowedError,
-  NoStrategyResolvedError,
-  UnknownElementKeyError
-} from './errors';
+  ClrSelector,
+  LocatorResolutionResult
+} from "./types";
 
-export function assertContextAllowed(context: string, elementKey: string, def: LocatorDefinition): void {
-  if (!def.contexts.includes(context)) {
-    throw new ContextNotAllowedError(context, elementKey, def.contexts);
-  }
-}
+import { ContextNotAllowedError } from "./errors";
 
-export function requireDefinition(
+export async function resolveLocator(
   elementKey: string,
-  def: LocatorDefinition | undefined,
-  knownKeys?: string[]
-): LocatorDefinition {
-  if (!def) throw new UnknownElementKeyError(elementKey, knownKeys);
-  return def;
-}
-
-export async function resolveLocator<THandle>(
-  parsed: ParsedTarget,
   def: LocatorDefinition,
-  executor: StrategyExecutor<THandle>
-): Promise<{ handle: THandle; result: LocatorResolutionResult }> {
-  const attempts: ResolutionAttempt[] = [];
-
-  for (const s of def.strategies) {
-    try {
-      const handle = await executor.tryResolve(s);
-
-      if (handle) {
-        attempts.push({ by: s.by, value: s.value, name: s.name, result: 'success' });
-        return {
-          handle,
-          result: {
-            resolved: true,
-            resolvedBy: s,
-            attempts
-          }
-        };
-      }
-
-      attempts.push({ by: s.by, value: s.value, name: s.name, result: 'not_found' });
-    } catch (err: any) {
-      attempts.push({
-        by: s.by,
-        value: s.value,
-        name: s.name,
-        result: 'error',
-        errorMessage: err?.message ? String(err.message) : String(err)
-      });
-    }
+  context: string,
+  executor: {
+    tryResolve(selector: ClrSelector): Promise<unknown | null>;
+  }
+): Promise<LocatorResolutionResult> {
+  // Context guard (optional)
+  if (def.contexts && !def.contexts.includes(context)) {
+    throw new ContextNotAllowedError(
+      context,
+      elementKey,
+      def.contexts ?? []
+    );
   }
 
-  throw new NoStrategyResolvedError(parsed.context, `${parsed.context}.${parsed.logicalName}.${parsed.type}`);
+  const attempts: Array<{
+    using: ClrSelector["using"];
+    value: string;
+    result: "success" | "not_found";
+  }> = [];
+
+  for (const s of def.selectors) {
+    const handle = await executor.tryResolve(s);
+
+    if (handle) {
+      attempts.push({
+        using: s.using,
+        value: s.value,
+        result: "success"
+      });
+
+      return {
+        resolved: true,
+        resolvedBy: s,
+        handle,
+        attempts
+      };
+    }
+
+    attempts.push({
+      using: s.using,
+      value: s.value,
+      result: "not_found"
+    });
+  }
+
+  return {
+    resolved: false,
+    attempts
+  };
 }

@@ -1,3 +1,5 @@
+import { ClrSelector } from "../locators/types";
+
 export interface EvidenceEventBase {
   type: string;
   timestamp: string; // ISO
@@ -9,17 +11,14 @@ export interface LocatorResolutionEvidenceEvent extends EvidenceEventBase {
   context: string;    // e.g. "login"
   elementKey: string; // e.g. "submit.button"
   resolved: boolean;
-  attempts: Array<{
-    by: string;
+  attempts: {
+    using: ClrSelector["using"];
     value: string;
-    name?: string;
-    result: 'success' | 'not_found' | 'error';
-    errorMessage?: string;
-  }>;
+    result: "success" | "not_found";
+  }[];
   resolvedBy?: {
-    by: string;
+    using: ClrSelector["using"];
     value: string;
-    name?: string;
   };
 }
 

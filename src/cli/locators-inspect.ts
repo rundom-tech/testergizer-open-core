@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { LocatorRepository } from '../core/locators/repository';
+import { ClrSelector } from '../core/locators/types';
 
 function printUsage(): void {
   console.log(`Usage:
@@ -19,14 +20,14 @@ async function inspectByKey(repo: LocatorRepository, key: string): Promise<void>
   console.log(`Element key: ${key}\n`);
 
   console.log(`Contexts:`);
-  for (const c of def.contexts) {
+  for (const c of def.contexts ?? []) {
     console.log(`  - ${c}`);
   }
 
-  console.log(`\nStrategies (in order):`);
-  def.strategies.forEach((s, i) => {
-    const extra = s.name ? ` name="${s.name}"` : '';
-    console.log(`  ${i + 1}. ${s.by}: ${s.value}${extra}`);
+  console.log(`\nSelectors (in order):`);
+  def.selectors.forEach((s: ClrSelector, i: number) => {
+    const extra = s.using ? ` using="${s.using}"` : '';
+    console.log(`  ${i + 1}. ${s.using}: ${s.value}${extra}`);
   });
 }
 
@@ -34,7 +35,7 @@ async function inspectByContext(repo: LocatorRepository, context: string): Promi
   const keys = repo.keys();
   const matches = keys.filter((k) => {
     const def = repo.get(k);
-    return def?.contexts.includes(context);
+    return def?.contexts?.includes(context) ?? false;
   });
 
   console.log(`Context: ${context}\n`);

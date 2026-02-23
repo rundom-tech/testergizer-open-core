@@ -1,22 +1,36 @@
 {
-  "id": "demosauce-logout-exp",
-  "description": "Reusable logout flow with inventory context",
+  "id": "demosauce-login-exp",
+  "description": "Reusable login flow with explicit context activation",
   "steps": [
     {
       "action": "setContext",
-      "contexts": ["page.inventory"]
+      "contexts": ["login"]
+    },
+    {
+      "action": "navigate",
+      "url": "https://www.saucedemo.com/"
+    },
+    {
+      "action": "fill",
+      "target": "login.username.edit",
+      "value": "${USERNAME}"
+    },
+    {
+      "action": "fill",
+      "target": "login.password.edit",
+      "value": "${PASSWORD}"
     },
     {
       "action": "click",
-      "target": "menu.button"
-    },
-    {
-      "action": "click",
-      "target": "menu.logout"
+      "target": "login.submit.button"
     },
     {
       "action": "clearContext",
-      "contexts": ["page.inventory"]
+      "contexts": ["login"]
+    },
+    {
+      "action": "setContext",
+      "contexts": ["inventory"]
     }
   ]
 }

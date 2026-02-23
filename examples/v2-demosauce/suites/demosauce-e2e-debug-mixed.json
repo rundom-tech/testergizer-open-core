@@ -4,6 +4,7 @@
   "suiteName": "DemoSauce E2E (Debug Mixed)",
   "resolveFrom": "..",
   "baseUrl": "https://www.saucedemo.com",
+  "autVersion": "demo",
   "tests": [
     {
       "id": "first-with-literals",

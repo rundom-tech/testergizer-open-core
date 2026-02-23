@@ -1,4 +1,4 @@
-import { ExecutionEngine, ExecutionIntent,ValidationMode, TestDomain } from "./types";
+import { ExecutionEngine, ExecutionIntent, ValidationMode, TestDomain } from "./types";
 
 /**
  * Evidence semantics (Open Core)
@@ -30,6 +30,24 @@ export interface StepError {
   stack?: string;
 }
 
+/**
+ * CLR-aware target metadata (optional, backwards compatible).
+ *
+ * - logical: CLR key (semantic intent) e.g. "login.username.edit"
+ * - value: resolved selector value used at runtime e.g. "#user-name"
+ * - resolvedBy / attempts: resolution diagnostics for report foldout
+ */
+export interface StepTargetResolvedBy {
+  using: string;
+  value: string;
+}
+
+export interface StepTargetAttempt {
+  using: string;
+  value: string;
+  result: "success" | "not_found";
+}
+
 export interface StepResult {
   id: string;
   action: string;
@@ -37,10 +55,51 @@ export interface StepResult {
   group?: {
     name: string;
   };
+
+  /**
+   * Target metadata.
+   *
+   * Backwards compatible:
+   * - Existing runs may only include { value, resolved? }.
+   * CLR-enhanced:
+   * - logical + resolvedBy + attempts enable report rendering as:
+   *   logical key (primary) + expandable resolution section.
+   */
   target?: {
+    /**
+     * CLR logical key (semantic)
+     * e.g. login.username.edit
+     */
+    logical?: string;
+
+    /**
+     * Final selector used at runtime
+     */
     value: string;
+
+    /**
+     * Whether resolution succeeded
+     */
     resolved?: boolean;
+
+    /**
+     * The selector that resolved successfully
+     */
+    resolvedBy?: {
+      using: string;
+      value: string;
+    };
+
+    /**
+     * All resolution attempts
+     */
+    attempts?: {
+      using: string;
+      value: string;
+      result: "success" | "not_found";
+    }[];
   };
+
   data?: {
     value: any;
     masked?: boolean;
@@ -51,6 +110,11 @@ export interface StepResult {
   startedAt: string;
   endedAt: string;
   durationMs: number;
+}
+
+export interface StepWarning {
+  code: string;
+  message: string;
 }
 
 /* ============================================================
@@ -81,7 +145,7 @@ export interface CacheState {
 
 export interface TestAttemptResult {
   attempt: number;
-  
+
   /** Playwright-aligned outcome */
   result: TestResultValue;
 
@@ -96,7 +160,6 @@ export interface TestAttemptResult {
 
   steps: StepResult[];
   cache?: CacheState;
-
 }
 
 /* ============================================================

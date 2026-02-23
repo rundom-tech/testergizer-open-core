@@ -39,9 +39,12 @@ import type {
   TestResultValue,
   TestAttemptResult,
   InstrumentationState,
-  CacheState
+  CacheState,
+  StepWarning
 } from "./resultTypes";
+
 import { CLRDefinition } from "./locators/clrDefinition";
+import { ClrSelector } from "./locators/types";
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -561,6 +564,76 @@ export class CoreRunner {
     };
   }
 
+  private selectorToPlaywright(selector: ClrSelector): string {
+    switch (selector.using) {
+      case "css":
+        return selector.value;
+
+      case "xpath":
+        return `xpath=${selector.value}`;
+
+      case "text":
+        return `text=${selector.value}`;
+
+      case "role":
+        return `role=${selector.value}`;
+
+      case "testid":
+        return `[data-testid="${selector.value}"]`;
+
+      default:
+        throw new Error(`Unsupported selector strategy '${selector.using}'.`);
+    }
+  }
+
+  private compileClrTarget(
+    rawTarget: string
+  ): { resolvedValue: string; logical: string; warnings: StepWarning[] } | null {
+    if (!this.clrDefinition) return null;
+
+    // Strict 3-part rule for Beta
+    const parts = rawTarget.split(".");
+    if (parts.length !== 3) return null;
+
+    const [context, logicalName, type] = parts;
+    const key = `${logicalName}.${type}`;
+    const locator = this.clrDefinition.locators[key];
+
+    if (!locator) {
+      throw new Error(
+        `CLR locator '${key}' not found for target '${rawTarget}'.`
+      );
+    }
+
+    const warnings: StepWarning[] = [];
+
+    // Advisory context validation
+    if (Array.isArray(locator.contexts) && locator.contexts.length > 0) {
+      if (!locator.contexts.includes(context)) {
+        warnings.push({
+          code: "CLR_CONTEXT_MISMATCH",
+          message: `Context '${context}' not declared for locator '${key}'. Declared contexts: [${locator.contexts.join(", ")}]`
+        });
+      }
+    }
+
+    // Deterministic selector selection
+    const selector = locator.selectors[0];
+    if (!selector) {
+      throw new Error(
+        `CLR locator '${key}' has no selectors defined.`
+      );
+    }
+
+    const resolvedValue = this.selectorToPlaywright(selector);
+
+    return {
+      resolvedValue,
+      logical: rawTarget,
+      warnings
+    };
+  }
+
   async dispose(): Promise<void> {
     // no-op by design
   }
@@ -580,3 +653,4 @@ export class CoreRunner {
     };
   }
 }
+

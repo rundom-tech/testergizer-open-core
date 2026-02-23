@@ -2,7 +2,7 @@ import type { EvidenceSink } from '../evidence/types';
 import type { StrategyExecutor } from './types';
 import { parseTarget } from './target';
 import { LocatorRepository } from './repository';
-import { assertContextAllowed, requireDefinition, resolveLocator } from './resolver';
+import { resolveLocator } from './resolver';
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -14,39 +14,78 @@ export async function resolveTargetWithEvidence<THandle>(args: {
   executor: StrategyExecutor<THandle>;
   evidence?: EvidenceSink;      // optional in Core (but recommended)
 }): Promise<THandle> {
-  const parsed = parseTarget(args.target);
-  const elementKey = parsed.elementKey;
 
-  const def = requireDefinition(elementKey, args.repo.get(elementKey), args.repo.keys());
-  assertContextAllowed(parsed.context, elementKey, def);
+  const parsed = parseTarget(args.target);
+  const elementKey = parsed.elementKey;   // CLR logical key
+  const context = parsed.context;
+
+  const def = args.repo.get(elementKey);
+
+  if (!def) {
+    throw new Error(
+      `CLR element "${elementKey}" not found. Available keys: ${args.repo.keys().join(', ')}`
+    );
+  }
 
   try {
-    const { handle, result } = await resolveLocator(parsed, def, args.executor);
+    const res = await resolveLocator(
+      elementKey,
+      def,
+      context,
+      args.executor
+    );
 
+    if (!res.resolved || !res.handle) {
+      throw new Error(`Failed to resolve locator: ${args.target}`);
+    }
+
+    // Emit full resolution evidence for report layer
     await args.evidence?.append({
       type: 'locatorResolution',
       timestamp: nowIso(),
+
+      // semantic identity
       target: args.target,
-      context: parsed.context,
-      elementKey,
+      context,
+      elementKey,                // logical key (for report primary display)
+
+      // mechanical outcome
       resolved: true,
-      attempts: result.attempts,
-      resolvedBy: result.resolvedBy
-        ? { by: result.resolvedBy.by, value: result.resolvedBy.value, ...(result.resolvedBy.name ? { name: result.resolvedBy.name } : {}) }
+
+      attempts: res.attempts?.map(a => ({
+        using: a.using,
+        value: a.value,
+        result: a.result
+      })) ?? [],
+
+      resolvedBy: res.resolvedBy
+        ? {
+            using: res.resolvedBy.using,
+            value: res.resolvedBy.value
+          }
         : undefined
     });
 
-    return handle;
+    return res.handle as THandle;
+
   } catch (err: any) {
+
     // Emit failure evidence as well
     await args.evidence?.append({
       type: 'locatorResolution',
       timestamp: nowIso(),
+
       target: args.target,
-      context: parsed.context,
+      context,
       elementKey,
+
       resolved: false,
-      attempts: [] // attempts are inside the thrown error path; keep Core simple here
+
+      // if resolver threw before attempts were available,
+      // keep it empty rather than guessing
+      attempts: [],
+
+      resolvedBy: undefined
     });
 
     throw err;

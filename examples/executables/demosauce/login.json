@@ -4,7 +4,7 @@
   "steps": [
     {
       "action": "setContext",
-      "contexts": ["page.login"]
+      "contexts": ["login"]
     },
     {
       "action": "navigate",
@@ -12,25 +12,25 @@
     },
     {
       "action": "fill",
-      "target": "login.username",
+      "target": "login.username.edit",
       "value": "${USERNAME}"
     },
     {
       "action": "fill",
-      "target": "login.password",
+      "target": "login.password.edit",
       "value": "${PASSWORD}"
     },
     {
       "action": "click",
-      "target": "submit.button"
+      "target": "login.submit.button"
     },
     {
       "action": "clearContext",
-      "contexts": ["page.login"]
+      "contexts": ["login"]
     },
     {
       "action": "setContext",
-      "contexts": ["page.inventory"]
+      "contexts": ["inventory"]
     }
   ]
 }

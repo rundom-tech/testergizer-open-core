@@ -1,82 +1,99 @@
-import type { LocatorDictionary, LocatorDefinition, LocatorStrategy } from './types';
-import { LocatorsError } from './errors';
+import type { LocatorDefinition, ClrSelector } from "./types";
 
-function isNonEmptyString(x: unknown): x is string {
-  return typeof x === 'string' && x.trim().length > 0;
-}
-
-function isStringArray(x: unknown): x is string[] {
-  return Array.isArray(x) && x.every(isNonEmptyString);
-}
-
-function isObject(x: unknown): x is Record<string, unknown> {
-  return typeof x === 'object' && x !== null && !Array.isArray(x);
-}
-
-function validateStrategy(raw: unknown, path: string): LocatorStrategy {
-  if (!isObject(raw)) throw new LocatorsError('INVALID_LOCATORS', `Invalid strategy at ${path}: expected object`);
-
-  const by = raw.by;
-  const value = raw.value;
-  const name = raw.name;
-
-  const knownBy = ['css', 'xpath', 'testId', 'role', 'text', 'aria'] as const;
-
-  if (!isNonEmptyString(by) || !knownBy.includes(by as any)) {
-    throw new LocatorsError('INVALID_LOCATORS', `Invalid "by" at ${path}.by: must be one of ${knownBy.join(', ')}`);
-  }
-  if (!isNonEmptyString(value)) {
-    throw new LocatorsError('INVALID_LOCATORS', `Invalid "value" at ${path}.value: must be non-empty string`);
-  }
-  if (name !== undefined && !isNonEmptyString(name)) {
-    throw new LocatorsError('INVALID_LOCATORS', `Invalid "name" at ${path}.name: must be non-empty string if provided`);
+export function validateLocatorDefinition(
+  raw: unknown,
+  path: string
+): LocatorDefinition {
+  if (!raw || typeof raw !== "object") {
+    throw new Error(`Invalid locator definition at '${path}'.`);
   }
 
-  return { by: by as any, value, ...(name ? { name } : {}) };
-}
+  const obj = raw as Record<string, unknown>;
 
-export function validateLocatorDefinition(raw: unknown, path: string): LocatorDefinition {
-  if (!isObject(raw)) throw new LocatorsError('INVALID_LOCATORS', `Invalid locator definition at ${path}: expected object`);
+  // strategy (optional)
+  let strategy: "firstMatch" | undefined;
 
-  const contexts = raw.contexts;
-  const strategies = raw.strategies;
-  const description = raw.description;
-
-  if (!isStringArray(contexts) || contexts.length === 0) {
-    throw new LocatorsError('INVALID_LOCATORS', `Invalid "contexts" at ${path}.contexts: must be non-empty string array`);
+  if (obj.strategy !== undefined) {
+    if (obj.strategy !== "firstMatch") {
+      throw new Error(
+        `Invalid strategy at '${path}'. Only "firstMatch" is supported.`
+      );
+    }
+    strategy = obj.strategy;
   }
 
-  if (!Array.isArray(strategies) || strategies.length === 0) {
-    throw new LocatorsError('INVALID_LOCATORS', `Invalid "strategies" at ${path}.strategies: must be non-empty array`);
+  // contexts (optional)
+  let contexts: string[] | undefined;
+
+  if (obj.contexts !== undefined) {
+    if (!Array.isArray(obj.contexts)) {
+      throw new Error(`'contexts' at '${path}' must be an array of strings.`);
+    }
+
+    contexts = obj.contexts.map((c, i) => {
+      if (typeof c !== "string") {
+        throw new Error(
+          `contexts[${i}] at '${path}' must be a string.`
+        );
+      }
+      return c;
+    });
   }
 
-  const parsedStrategies = strategies.map((s, i) => validateStrategy(s, `${path}.strategies[${i}]`));
-
-  if (description !== undefined && !isNonEmptyString(description)) {
-    throw new LocatorsError('INVALID_LOCATORS', `Invalid "description" at ${path}.description: must be non-empty string`);
+  // selectors (required)
+  if (!Array.isArray(obj.selectors) || obj.selectors.length === 0) {
+    throw new Error(
+      `Locator '${path}' must define a non-empty 'selectors' array.`
+    );
   }
+
+  const selectors: ClrSelector[] = obj.selectors.map((s, i) => {
+    if (!s || typeof s !== "object") {
+      throw new Error(
+        `Invalid selector at '${path}.selectors[${i}]'.`
+      );
+    }
+
+    const sel = s as Record<string, unknown>;
+
+    if (typeof sel.using !== "string") {
+      throw new Error(
+        `Selector at '${path}.selectors[${i}]' must define a string 'using'.`
+      );
+    }
+
+    if (typeof sel.value !== "string") {
+      throw new Error(
+        `Selector at '${path}.selectors[${i}]' must define a string 'value'.`
+      );
+    }
+
+    return {
+      using: sel.using as ClrSelector["using"],
+      value: sel.value
+    };
+  });
 
   return {
+    strategy,
     contexts,
-    strategies: parsedStrategies,
-    ...(description ? { description } : {})
+    selectors
   };
 }
 
-export function validateLocatorDictionary(raw: unknown): LocatorDictionary {
-  if (!isObject(raw)) throw new LocatorsError('INVALID_LOCATORS', `Invalid locators JSON: expected object at root`);
-
-  const out: LocatorDictionary = {};
-
-  for (const [key, def] of Object.entries(raw)) {
-    if (!isNonEmptyString(key) || !key.includes('.')) {
-      throw new LocatorsError(
-        'INVALID_LOCATORS',
-        `Invalid dictionary key "${key}". Expected "<logicalName>.<type>" (e.g. "submit.button")`
-      );
-    }
-    out[key] = validateLocatorDefinition(def, `locators["${key}"]`);
+export function validateLocatorDictionary(
+  raw: unknown
+): Record<string, LocatorDefinition> {
+  if (!raw || typeof raw !== "object") {
+    throw new Error("Invalid CLR locator dictionary.");
   }
 
-  return out;
+  const result: Record<string, LocatorDefinition> = {};
+  const obj = raw as Record<string, unknown>;
+
+  for (const key of Object.keys(obj)) {
+    result[key] = validateLocatorDefinition(obj[key], key);
+  }
+
+  return result;
 }

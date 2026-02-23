@@ -1,15 +1,12 @@
-export type LocatorBy = 'css' | 'xpath' | 'testId' | 'role' | 'text' | 'aria';
-
-export interface LocatorStrategy {
-  by: LocatorBy;
+export interface ClrSelector {
+  using: "css" | "xpath" | "text" | "role" | "testid"| "aria" | "label" | "placeholder";
   value: string;
-  name?: string; // for role/text/aria where needed
 }
 
 export interface LocatorDefinition {
-  contexts: string[];
-  strategies: LocatorStrategy[];
-  description?: string;
+  strategy?: "firstMatch";
+  contexts?: string[];
+  selectors: ClrSelector[];
 }
 
 export type LocatorDictionary = Record<string, LocatorDefinition>;
@@ -22,24 +19,18 @@ export interface ParsedTarget {
 }
 
 export interface ResolutionAttempt {
-  by: LocatorBy;
+  using: ClrSelector["using"];
   value: string;
-  name?: string;
-  result: 'success' | 'not_found' | 'error';
-  errorMessage?: string;
+  result: "success" | "not_found";
 }
 
-export interface LocatorResolutionResult {
+export interface LocatorResolutionResult<THandle = unknown> {
   resolved: boolean;
-  resolvedBy?: LocatorStrategy;
+  handle?: THandle;
+  resolvedBy?: ClrSelector;
   attempts: ResolutionAttempt[];
 }
 
 export interface StrategyExecutor<THandle = unknown> {
-  /**
-   * Try resolving a strategy in the current execution surface.
-   * Return a handle if found, or null if not found.
-   * Throw only for "real" errors (driver errors), not for "not found".
-   */
-  tryResolve(strategy: LocatorStrategy): Promise<THandle | null>;
+  tryResolve(selector: ClrSelector): Promise<THandle | null>;
 }

@@ -1,5 +1,5 @@
 import type { Locator, Page } from '@playwright/test';
-import type { LocatorStrategy, StrategyExecutor } from '../../core/locators/types';
+import type { ClrSelector, StrategyExecutor } from '../../core/locators/types';
 
 export class PlaywrightStrategyExecutor implements StrategyExecutor<Locator> {
   private readonly page: Page;
@@ -8,8 +8,8 @@ export class PlaywrightStrategyExecutor implements StrategyExecutor<Locator> {
     this.page = page;
   }
 
-  async tryResolve(strategy: LocatorStrategy): Promise<Locator | null> {
-    const locator = this.toLocator(strategy);
+  async tryResolve(selector: ClrSelector): Promise<Locator | null> {
+    const locator = this.toLocator(selector);
 
     // Deterministic existence check: count() is stable and doesn't click/type.
     // No custom waits, no retries.
@@ -17,8 +17,8 @@ export class PlaywrightStrategyExecutor implements StrategyExecutor<Locator> {
     return count > 0 ? locator : null;
   }
 
-  private toLocator(s: LocatorStrategy): Locator {
-    switch (s.by) {
+  private toLocator(s: ClrSelector): Locator {
+    switch (s.using) {
       case 'css':
         return this.page.locator(s.value);
 
@@ -26,11 +26,11 @@ export class PlaywrightStrategyExecutor implements StrategyExecutor<Locator> {
         // Playwright supports `locator("xpath=...")`
         return this.page.locator(`xpath=${s.value}`);
 
-      case 'testId':
+      case 'testid':
         return this.page.getByTestId(s.value);
 
       case 'role':
-        return this.page.getByRole(s.value as any, s.name ? { name: s.name } : undefined);
+        return this.page.getByRole(s.value as any);
 
       case 'text':
         // value is the text; name is unused here
@@ -40,12 +40,17 @@ export class PlaywrightStrategyExecutor implements StrategyExecutor<Locator> {
         // Use aria-label / accessible name pattern via locator
         // Kept simple and explicit
         return this.page.locator(`[aria-label="${cssEscape(s.value)}"]`);
+        
+      case 'label':
+        return this.page.getByLabel(s.value);
+      case 'placeholder':
+        return this.page.getByPlaceholder(s.value);
 
       default:
         // Exhaustive check
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const _never: never = s.by;
-        throw new Error(`Unsupported locator strategy: ${String(s.by)}`);
+        const _never: never = s.using;
+        throw new Error(`Unsupported locator strategy: ${String(s.using)}`);
     }
   }
 }
