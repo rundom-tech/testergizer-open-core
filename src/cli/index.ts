@@ -25,7 +25,7 @@ yargs(hideBin(process.argv))
     (y: any) =>
       y
         .positional("file", {
-          describe: "Path to suite or test JSON",
+          describe: "Path to suite JSON",
           type: "string",
           demandOption: true
         })
@@ -61,7 +61,7 @@ yargs(hideBin(process.argv))
         })
         .option("workers", {
           type: "number",
-          describe: "Number of Playwright workers (parallel execution)",
+          describe: "Suite scheduling workers (orchestration parallelism)",
           demandOption: false,
           coerce: (v: number) => {
             if (!Number.isFinite(v) || v < 1) {
@@ -91,15 +91,20 @@ yargs(hideBin(process.argv))
       const validationMode: ValidationMode =
         args.debug ? "debug" : "strict";
 
+      // validationMode is currently derived but not plumbed; kept here to preserve CLI semantics doc.
+      void validationMode;
+
       const runArgs: RunArgs = {
         suitePath: args.file,
         executionEngine: engine,
         executionIntent,
         debug: args.debug,
+
         headless,
         retries: args.retries,
         slowMoMs: args["slow-mo"],
         baseUrl: args["base-url"],
+
         workers: args.workers
       };
 

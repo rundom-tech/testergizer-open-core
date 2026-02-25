@@ -18,6 +18,8 @@ export interface RunArgs {
   headless?: boolean;
   slowMoMs?: number;
   retries?: number;
+
+  // NEW: orchestration scheduling
   workers?: number;
 }
 
