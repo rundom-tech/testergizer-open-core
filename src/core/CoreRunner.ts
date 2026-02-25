@@ -1,6 +1,5 @@
 // src/core/CoreRunner.ts
 
-import { loadCLRFromFile } from "./locators/clrLoader";
 import { evaluateVersionCompatibility } from "./locators/clrVersionGuard";
 import { evaluateDomFingerprint } from "./locators/clrDomGuard";
 
@@ -40,11 +39,18 @@ import type {
   TestAttemptResult,
   InstrumentationState,
   CacheState,
-  StepWarning
+  StepWarning,
+  RunSummary
 } from "./resultTypes";
 
+import { loadCLRFromFile } from "./locators/clrLoader";
 import { CLRDefinition } from "./locators/clrDefinition";
+
+import { LocatorRepository } from "./locators/repository";
+import { resolveLocator } from "./locators/resolver";
+import { parseTarget } from "./locators/target";
 import { ClrSelector } from "./locators/types";
+
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -131,6 +137,7 @@ export class CoreRunner {
   private clrDefinition?: CLRDefinition;
   private clrResolution?: any;
   private clrInitialized = false;
+  private locatorRepo?: LocatorRepository;
 
   constructor(options: CoreRunnerOptions = {}) {
     this.options = options;
@@ -159,70 +166,69 @@ export class CoreRunner {
   }
 
   private async initCLR(): Promise<void> {
-    if (this.clrInitialized) return;
+  if (this.clrInitialized) return;
 
-    const autVersion =
-      this.autVersion ??
-      (this.engine === "testergizer" ? "demo" : undefined);
+  // If suite did not provide CLR, do nothing.
+  // Suite-level governance decides whether CLR exists.
+  if (!this.clrDefinition) {
+    this.clrInitialized = true;
+    return;
+  }
 
-    if (this.engine !== "testergizer" && !autVersion) {
-      throw new Error(
-        "CLR_REQUIRED: autVersion must be provided for live execution"
-      );
-    }
+  const autVersion =
+    this.autVersion ??
+    (this.engine === "testergizer" ? "demo" : undefined);
 
-    const clrPath = process.env.TESTERGIZER_CLR ?? "clr.json";
-    const clrAbs = path.isAbsolute(clrPath)
-      ? clrPath
-      : path.resolve(process.cwd(), clrPath);
+  if (this.engine !== "testergizer" && !autVersion) {
+    throw new Error(
+      "CLR_REQUIRED: autVersion must be provided for live execution"
+    );
+  }
 
-    const clrDef = await loadCLRFromFile(clrAbs);
+  const clrDef = this.clrDefinition;
 
-    const detectedAutVersion = autVersion ?? "demo";
+  const detectedAutVersion = autVersion ?? "demo";
 
-    const versionCheck = evaluateVersionCompatibility(clrDef, {
+  const versionCheck = evaluateVersionCompatibility(clrDef, {
+    executionEngine: this.engine,
+    executionIntent: this.options.executionIntent ?? "verify",
+    validationMode: this.options.validationMode ?? "strict",
+    detectedAutVersion,
+    detectedDomFingerprint: undefined
+  });
+
+  if (versionCheck.status === "out_of_range") {
+    throw new Error(
+      `CLR_VERSION_MISMATCH: appId=${clrDef.appId} autVersion=${detectedAutVersion} range=${clrDef.versionRange}`
+    );
+  }
+
+  const domCheck = evaluateDomFingerprint(
+    clrDef.domFingerprint,
+    {
       executionEngine: this.engine,
       executionIntent: this.options.executionIntent ?? "verify",
       validationMode: this.options.validationMode ?? "strict",
       detectedAutVersion,
       detectedDomFingerprint: undefined
-    });
-
-    if (versionCheck.status === "out_of_range") {
-      throw new Error(
-        `CLR_VERSION_MISMATCH: appId=${clrDef.appId} autVersion=${detectedAutVersion} range=${clrDef.versionRange}`
-      );
     }
+  );
 
-    const domCheck = evaluateDomFingerprint(
-      clrDef.domFingerprint,
-      {
-        executionEngine: this.engine,
-        executionIntent: this.options.executionIntent ?? "verify",
-        validationMode: this.options.validationMode ?? "strict",
-        detectedAutVersion,
-        detectedDomFingerprint: undefined
-      }
+  if (domCheck.status === "drift") {
+    throw new Error(
+      `CLR_DOM_DRIFT: appId=${clrDef.appId} autVersion=${detectedAutVersion}`
     );
-
-    if (domCheck.status === "drift") {
-      throw new Error(
-        `CLR_DOM_DRIFT: appId=${clrDef.appId} autVersion=${detectedAutVersion}`
-      );
-    }
-
-    this.clrDefinition = clrDef;
-
-    this.clrResolution = {
-      appId: clrDef.appId,
-      versionRange: clrDef.versionRange,
-      detectedAutVersion,
-      versionCheck,
-      domCheck
-    };
-
-    this.clrInitialized = true;
   }
+
+  this.clrResolution = {
+    appId: clrDef.appId,
+    versionRange: clrDef.versionRange,
+    detectedAutVersion,
+    versionCheck
+  };
+
+  this.clrInitialized = true;
+}
 
   /**
    * Execute exactly one test.
@@ -307,11 +313,87 @@ export class CoreRunner {
 
         for (const step of test.steps ?? []) {
           const stepStartedAt = nowIso();
+          const rawTargetBefore: any = (step as any).target;
           const errors: StepError[] = [];
           let status: StepStatus = isModelEngine ? "reviewed" : "passed";
 
           try {
+            // --- CLR resolution layer ---
+            if (
+              this.engine === "playwright" &&
+              this.clrDefinition &&
+              typeof (step as any).target === "string"
+            ) {
+              const action = String((step as any).action);
+
+              const needsSelector =
+                action === "click" ||
+                action === "fill" ||
+                action === "assertVisible" ||
+                action === "assertText";
+
+              if (needsSelector) {
+                const logicalTarget = String((step as any).target);
+
+                const looksLogical =
+                  logicalTarget.split(".").length === 3 &&
+                  !logicalTarget.includes("://");
+
+                if (looksLogical) {
+                  if (!this.locatorRepo) {
+                    this.locatorRepo = LocatorRepository.fromDictionary(
+                      (this.clrDefinition as any).locators
+                    );
+                  }
+
+                  const parsed = parseTarget(logicalTarget);
+                  const def = this.locatorRepo.get(parsed.elementKey);
+
+                  if (!def) {
+                    throw new Error(
+                      `CLR element "${parsed.elementKey}" not found. Available keys: ${this.locatorRepo.keys().join(", ")}`
+                    );
+                  }
+
+                  const res = await resolveLocator(
+                    parsed.elementKey,
+                    def,
+                    parsed.context,
+                    {
+                      tryResolve: async (s: ClrSelector) => {
+                        if (!page) return null;
+
+                        if (s.using === "css") {
+                          const h = await page.$(s.value);
+                          return h ? {} : null;
+                        }
+
+                        if (s.using === "xpath") {
+                          const selector = `xpath=${s.value}`;
+                          const h = await page.$(selector);
+                          return h ? {} : null;
+                        }
+
+                        return null;
+                      }
+                    }
+                  );
+
+                  if (!res.resolved || !res.resolvedBy) {
+                    throw new Error(`Failed to resolve CLR target: ${logicalTarget}`);
+                  }
+
+                  (step as any).target =
+                    res.resolvedBy.using === "xpath"
+                      ? `xpath=${res.resolvedBy.value}`
+                      : res.resolvedBy.value;
+                }
+              }
+            }
+            // --- end CLR resolution ---
+
             await this.executor.execute(step as JsonStep, page);
+
           } catch (err) {
             if (!isModelEngine) {
               status = "failed";
@@ -360,15 +442,82 @@ export class CoreRunner {
           const stepEndedAt = nowIso();
 
           // Normalize compiler/runtime passthroughs into report-friendly shapes.
-          const normalizedTarget = (() => {
-            const t: any = (step as any).target;
-            if (t === undefined || t === null) return undefined;
-            if (typeof t === "string") return { value: t, resolved: true };
-            if (typeof t === "object" && typeof t.value === "string") {
-              return { value: t.value, resolved: t.resolved !== false };
+          // CLR semantics:
+          // - Preserve the original logical key (pre-execution) when it matches a CLR entry.
+          // - Keep the resolved selector in value (post-execution).
+          // - Derive resolution attempts/resolvedBy from CLR + resolved selector when possible.
+          const normalizedTarget: StepResult["target"] = (() => {
+            const post: any = (step as any).target;
+            const pre: any = rawTargetBefore;
+
+            const normalizePostValue = (): { value: string; resolved: boolean } | undefined => {
+              if (post === undefined || post === null) return undefined;
+              if (typeof post === "string") return { value: post, resolved: true };
+              if (typeof post === "object" && typeof post.value === "string") {
+                return { value: post.value, resolved: post.resolved !== false };
+              }
+              // Fallback (do not throw in reporter path)
+              return { value: String(post), resolved: true };
+            };
+
+            const nv = normalizePostValue();
+            if (!nv) return undefined;
+
+            // Only treat string pre-targets as CLR logical keys if they exist in the loaded CLR.
+            const logicalCandidate = typeof pre === "string" ? pre : undefined;
+            const clrLocators: any = (this.clrDefinition as any)?.locators;
+            const clrEntry: any = logicalCandidate && clrLocators ? clrLocators[logicalCandidate] : undefined;
+
+            if (!clrEntry) {
+              // No CLR entry: keep legacy shape.
+              return { value: nv.value, resolved: nv.resolved };
             }
-            // Fallback (do not throw in reporter path)
-            return { value: String(t), resolved: true };
+
+            const selectors: any[] = Array.isArray(clrEntry.selectors) ? clrEntry.selectors : [];
+            const matchIdx = selectors.findIndex((s) => s && typeof s.value === "string" && s.value === nv.value);
+
+            if (selectors.length === 0) {
+              return {
+                ...(logicalCandidate ? { logical: logicalCandidate } : {}),
+                value: nv.value,
+                resolved: nv.resolved
+              };
+            }
+
+            if (matchIdx >= 0) {
+              const attempted = selectors.slice(0, matchIdx + 1);
+              return {
+                ...(logicalCandidate ? { logical: logicalCandidate } : {}),
+                value: nv.value,
+                resolved: true,
+                resolvedBy: {
+                  using: String(attempted[attempted.length - 1].using),
+                  value: String(attempted[attempted.length - 1].value)
+                },
+                attempts: attempted.map((s, i) => {
+                  const result: "success" | "not_found" =
+                    i === attempted.length - 1 ? "success" : "not_found";
+
+                  return {
+                    using: String(s.using),
+                    value: String(s.value),
+                    result
+                  };
+                })
+              };
+            }
+
+            // Resolved selector not found in CLR selectors list (unexpected, but keep report stable)
+            return {
+              ...(logicalCandidate ? { logical: logicalCandidate } : {}),
+              value: nv.value,
+              resolved: false,
+              attempts: selectors.map((s) => ({
+                using: String(s.using),
+                value: String(s.value),
+                result: "not_found"
+              }))
+            };
           })();
 
           const normalizedData = (() => {
@@ -564,76 +713,6 @@ export class CoreRunner {
     };
   }
 
-  private selectorToPlaywright(selector: ClrSelector): string {
-    switch (selector.using) {
-      case "css":
-        return selector.value;
-
-      case "xpath":
-        return `xpath=${selector.value}`;
-
-      case "text":
-        return `text=${selector.value}`;
-
-      case "role":
-        return `role=${selector.value}`;
-
-      case "testid":
-        return `[data-testid="${selector.value}"]`;
-
-      default:
-        throw new Error(`Unsupported selector strategy '${selector.using}'.`);
-    }
-  }
-
-  private compileClrTarget(
-    rawTarget: string
-  ): { resolvedValue: string; logical: string; warnings: StepWarning[] } | null {
-    if (!this.clrDefinition) return null;
-
-    // Strict 3-part rule for Beta
-    const parts = rawTarget.split(".");
-    if (parts.length !== 3) return null;
-
-    const [context, logicalName, type] = parts;
-    const key = `${logicalName}.${type}`;
-    const locator = this.clrDefinition.locators[key];
-
-    if (!locator) {
-      throw new Error(
-        `CLR locator '${key}' not found for target '${rawTarget}'.`
-      );
-    }
-
-    const warnings: StepWarning[] = [];
-
-    // Advisory context validation
-    if (Array.isArray(locator.contexts) && locator.contexts.length > 0) {
-      if (!locator.contexts.includes(context)) {
-        warnings.push({
-          code: "CLR_CONTEXT_MISMATCH",
-          message: `Context '${context}' not declared for locator '${key}'. Declared contexts: [${locator.contexts.join(", ")}]`
-        });
-      }
-    }
-
-    // Deterministic selector selection
-    const selector = locator.selectors[0];
-    if (!selector) {
-      throw new Error(
-        `CLR locator '${key}' has no selectors defined.`
-      );
-    }
-
-    const resolvedValue = this.selectorToPlaywright(selector);
-
-    return {
-      resolvedValue,
-      logical: rawTarget,
-      warnings
-    };
-  }
-
   async dispose(): Promise<void> {
     // no-op by design
   }
@@ -653,4 +732,3 @@ export class CoreRunner {
     };
   }
 }
-

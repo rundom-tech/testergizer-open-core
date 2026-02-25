@@ -59,6 +59,19 @@ yargs(hideBin(process.argv))
             return Math.floor(v);
           }
         })
+        .option("workers", {
+          type: "number",
+          describe: "Number of Playwright workers (parallel execution)",
+          demandOption: false,
+          coerce: (v: number) => {
+            if (!Number.isFinite(v) || v < 1) {
+              throw new Error(
+                "Invalid value for --workers. Must be a positive integer."
+              );
+            }
+            return Math.floor(v);
+          }
+        })
         .option("slow-mo", { type: "number", alias: "slowMo" })
         .option("base-url", { type: "string", alias: "baseUrl" })
         .option("out", { type: "string" }),
@@ -83,11 +96,11 @@ yargs(hideBin(process.argv))
         executionEngine: engine,
         executionIntent,
         debug: args.debug,
-
         headless,
         retries: args.retries,
         slowMoMs: args["slow-mo"],
-        baseUrl: args["base-url"]
+        baseUrl: args["base-url"],
+        workers: args.workers
       };
 
       run(runArgs).catch((err: Error) => {

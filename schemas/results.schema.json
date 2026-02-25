@@ -12,7 +12,9 @@
     "endedAt",
     "durationMs",
     "tests",
-    "summary"
+    "summary",
+    "suiteStatus",
+    "signalStrength"
   ],
   "additionalProperties": false,
   "properties": {
@@ -28,7 +30,25 @@
     "endedAt": { "type": "string", "format": "date-time" },
     "durationMs": { "type": "integer", "minimum": 0 },
     "tests": { "type": "array", "items": { "$ref": "#/$defs/testResult" } },
-    "summary": { "$ref": "#/$defs/runSummary" }
+    "summary": { "$ref": "#/$defs/runSummary" },
+    "suiteStatus": { "type": "string", "enum": ["valid", "invalid", "passed", "failed"] },
+    "signalStrength": { "type": "number", "minimum": -100, "maximum": 100 },
+    "clrDefinition": {
+  "type": "object",
+  "description": "Suite-level Contract Locator Resolution definition as declared in the suite document.",
+  "additionalProperties": true
+    },
+    "clrResolution": {
+      "type": "object",
+      "description": "Resolved CLR context for this run (appId, versionRange, detectedAutVersion).",
+      "properties": {
+        "appId": { "type": "string" },
+        "versionRange": { "type": "string" },
+        "detectedAutVersion": { "type": ["string", "null"] }
+      },
+      "required": ["appId", "versionRange"],
+      "additionalProperties": true
+    }
   },
   "$defs": {
     "testResult": {

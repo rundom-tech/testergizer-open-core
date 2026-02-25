@@ -50,7 +50,7 @@ import {
 
 import type { ExecutableDoc } from "./validate";
 import type { JsonTestDefinition, ExecutionEngine, ExecutionIntent, ValidationMode } from "../core/types";
-import type { RunResult, TestResult } from "../core/resultTypes";
+import type { RunResult, RunSummary, TestResult } from "../core/resultTypes";
 
 
 /**
@@ -773,6 +773,38 @@ function errorStack(err: any): string | undefined {
   return typeof err?.stack === "string" ? err.stack : undefined;
 }
 
+/*  ============================================================
+  * Function to compute signal strength (for potential future use in reporting or policy decisions)
+  * based on execution engine and run summary. 
+  * The formula differs for "playwright" and "testergizer" engines, reflecting their different result semantics.
+  * ============================================================ */
+function computeSignalStrength(
+  engine: ExecutionEngine,
+  summary: RunSummary
+): number {
+  if (engine === "playwright") {
+    const P = summary.passed;
+    const F = summary.failed;
+    const A = summary.aborted;
+
+    const E = P + F + A;
+    if (E === 0) return 0;
+
+    const raw = ((P - (F + A)) / E) * 100;
+    return Math.round(raw * 100) / 100; // 2 decimal precision
+  }
+
+  // testergizer engine
+  const V = summary.valid;
+  const I = summary.invalid;
+  const E = V + I;
+
+  if (E === 0) return 0;
+
+  const raw = ((V - I) / E) * 100;
+  return Math.round(raw * 100) / 100;
+}
+
 /* ============================================================
  * Execute one test
  * ============================================================ */
@@ -911,620 +943,647 @@ export async function runSuiteFromFile(inputPath: string, options: RunSuiteOptio
   const artifactsBaseDir = options.artifactsDir ?? "artifacts";
   const ci = isCiEnvironment();
 
-  /* ============================================================
- * Suite dispatcher (schema switch)
- * ============================================================ */
+  function computeSignalStrength(args: {
+    engine: ExecutionEngine;
+    passed: number;
+    failed: number;
+    aborted: number;
+    valid: number;
+    invalid: number;
+  }): number {
+    const { engine, passed, failed, aborted, valid, invalid } = args;
 
-if (!isObject(root) || typeof (root as any).schemaVersion !== "string") {
-  throw new Error("Single executable runs must be wrapped in a suite");
-}
+    // Normalized polarity metric:
+    // - Playwright: executable = passed + failed + aborted (skipped excluded by construction)
+    // - Testergizer: executable = valid + invalid
+    // Range: [-100, +100]
+    let executable = 0;
+    let numerator = 0;
 
-switch ((root as any).schemaVersion) {
-
-  /* ============================================================
-   * SUITE v2  (PRIMARY)
-   * ============================================================ */
-  case "v2": {
-    if (!isSuiteDocV2(root)) {
-      throw new Error("Invalid Suite v2 document structure");
+    if (engine === "playwright") {
+      executable = passed + failed + aborted;
+      numerator = passed - (failed + aborted);
+    } else {
+      executable = valid + invalid;
+      numerator = valid - invalid;
     }
 
-    const suite = root as SuiteDocV2;
+    if (executable <= 0) return 0;
 
-    const resolvedAutVersion =
-      options.autVersion ?? suite.autVersion;
-
-
-    // --- EXISTING v2 BLOCK STARTS HERE ---
-    // Paste your CURRENT v2 implementation here
-    // starting from:
-    //
-    //   const suiteDebugOnly = suite.debugOnly === true;
-    //
-    // and ending at:
-    //
-    //   return runResult;
-    //
-    // --- DO NOT MODIFY ITS INTERNAL LOGIC ---
-
-    // Contract: debugOnly defaults to false when omitted.
-    const suiteDebugOnly = suite.debugOnly === true;
-
-    // Contract: testergizer (model) implies debug semantics (model is debugOnly by default).
-    const engine =  options.executionEngine ?? "testergizer";
-    const { effectiveDebug, debugForced } = computeEffectiveDebug({
-      executionEngine: engine,
-      suiteDebugOnly,
-      userDebugFlag: options.debug === true,
-      ci,
-      suiteId: suite.suiteId
-    });
-
-    // CHANGE: explicit axis label for conversational semantics (schema-agnostic).
-    
-    // CHANGE: validationMode instead of the wrong executionType.
-    const validationMode: "debug" | "strict" =
-      effectiveDebug ? "debug" : "strict";
-
-    const executionIntent: ExecutionIntent =
-      engine === "testergizer"
-        ? "review"
-        : options.executionIntent ?? "verify";
-
-    const suiteRetries =
-      typeof suite.retries === "number"
-        ? Math.max(0, suite.retries)
-        : undefined;
-
-    const cliRetries =
-      typeof options.retries === "number"
-        ? Math.max(0, options.retries)
-        : undefined;
-
-    const effectiveRetries =
-      cliRetries !== undefined
-        ? cliRetries
-        : suiteRetries !== undefined
-        ? suiteRetries
-        : 0;
-
-    const effectiveOptions: RunSuiteOptions = {
-      ...options,
-      executionEngine: engine,
-      debug: effectiveDebug,
-      retries: effectiveRetries,
-      autVersion: resolvedAutVersion
-    };
-
-    const suiteDir = path.dirname(rootPath);
-    const resolveBase = suite.resolveFrom
-      ? path.resolve(suiteDir, suite.resolveFrom)
-      : suiteDir;
-
-    const startedAt = nowIso();
-    const runId = randomUUID();
-    const runDateFolder = toDateFolder(startedAt);
-
-    const runOutDir = path.join(artifactsBaseDir, suite.suiteId, runDateFolder, runId);
-    ensureArtifactsIndex({ runOutDir, suiteId: suite.suiteId, runId });
-    // const artifactObserver = createArtifactObserver({ runOutDir, suiteId: suite.suiteId, runId });
-
-    const tests: TestResult[] = [];
-    const provenanceByTestId: Record<string, Record<string, StepProvenance>> = {};
-    const debugWarningsAll: DebugWarning[] = [];
-
-    // NEW: runtime-only reporting channels (not schemas).
-    const invalidTests: InvalidTestEntry[] = [];
-    const skippedTests: SkippedTestEntry[] = [];
-
-    // Registry of reusable executables (flows/ by ID). Path-based includes are also supported.
-    const flowsDir = path.resolve(process.cwd(), "flows");
-    const flows = loadAllExecutablesWithPaths(flowsDir);
-
-    // Execution loop (v2)
-    for (let i = 0; i < suite.tests.length; i++) {
-      const artifactObserver = createArtifactObserver({
-        runOutDir,
-        suiteId: suite.suiteId,
-        runId
-      });
-
-      let normalized:
-        | {
-            doc?: ExecutableDoc;
-            filePath: string;
-            testId: string;
-            testParams?: Record<string, any>;
-            skip?: { reason?: string };
-          }
-        | undefined;
-
-      try {
-        normalized = normalizeSuiteV2TestEntry({
-          entry: suite.tests[i],
-          resolveBase
-        });
-
-        // CONTRACT: skip is intentional non-execution. It does not validate or execute.
-        if (normalized.skip) {
-          skippedTests.push({
-            testId: normalized.testId,
-            testPath: normalized.filePath,
-            reason: normalized.skip.reason
-          });
-          continue;
-        }
-
-        if (!normalized.doc) {
-          // Defensive: should not happen without skip, but keep run continuous.
-          throw new Error(`Suite v2 entry normalized without doc and without skip at index ${i}`);
-        }
-
-        const { doc, filePath, testId, testParams } = normalized;
-
-      /**
-       * CRITICAL FIX:
-       * Suite-level testId must be injected BEFORE execution,
-       * otherwise Playwright artifacts collide on internal executable id.
-       *
-       * No schema change.
-       * No refactor.
-       * Just override id deterministically.
-       */
-      const effectiveDoc: ExecutableDoc = {
-        ...doc,
-        id: testId
-      };
-
-      const { testResult: tr, provenanceByStepId, debugWarnings } = await runOneTest({
-        suiteId: suite.suiteId,
-        runId,
-        runDateFolder,
-        suiteContext: suite.context ?? {},
-        testContext: testParams ?? {},
-        suiteBaseUrl: suite.baseUrl,
-        doc: effectiveDoc,
-        filePath,
-        registry: flows.docs,
-        registryPaths: flows.paths,
-        options: effectiveOptions,
-        artifactsBaseDir,
-        runOutDir,
-        artifactObserver
-      });
-
-      tests.push(tr);
-      provenanceByTestId[tr.id] = provenanceByStepId;
-      debugWarningsAll.push(...debugWarnings);
-      } catch (err: any) {
-        const fallbackId = normalized?.testId ?? `invalid-test-${i + 1}`;
-        const fallbackPath =
-          normalized?.filePath ?? `${rootPath}#tests[${i}]`;
-
-        invalidTests.push({
-          testId: fallbackId,
-          testPath: fallbackPath,
-          phase: "compile",
-          reason: `Validation/prepare failed: ${errorMessage(err)}`,
-          stack: errorStack(err)
-        });
-
-        provenanceByTestId[fallbackId] = {};
-        continue;
-      }
-    }
-
-    const endedAt = nowIso();
-
-    // Summary is execution-only (tests[] only).
-    const summary = {
-      total: tests.length,
-      passed: tests.filter((t) => t.result === "passed").length,
-      failed: tests.filter((t) => t.result === "failed").length,
-      aborted: tests.filter((t) => t.result === "aborted").length
-    };
-
-    const projectId =
-      tests.length === 0
-        ? effectiveOptions.browserName ?? "chromium"
-        : tests.every((t) => t.projectId === tests[0].projectId)
-        ? tests[0].projectId
-        : "mixed";
-
-    /**
-     * PHASE 1 — Base URL Resolution (v2)
-     *
-     * Precedence:
-     * 1. CLI --baseUrl
-     * 2. suite.baseUrl
-     * 3. undefined
-     */
-    const resolvedBaseUrl =
-      options.baseUrl ??
-      (suite as any).baseUrl ??
-      undefined;
-
-    // applicationName for reporting (Suite v2 does not require it)
-    const applicationName = (root as any).applicationName ?? suite.suiteName ?? suite.suiteId;
-
-    const runResult: RunResult = {
-      schemaVersion: "v1",
-      suiteId: suite.suiteId,
-      suiteName: suite.suiteName,
-      suitePath: rootPath,
-      applicationName,
-      runId,
-      executionEngine: engine,      // "testergizer" | "playwright" | etc.
-      validationMode,               // "debug" | "strict"
-      executionIntent,              // "review" | "verify" | "baseline"
-      projectId,
-      /**
-       * PHASE 1 — Evidence Correction
-       * Expose resolved baseUrl for report + navigation resolution.
-       */
-      baseUrl: resolvedBaseUrl,
-      startedAt,
-      endedAt,
-      durationMs: durationMs(startedAt, endedAt),
-      tests,
-      summary
-    };
-
-    (runResult as any).debugOnly = suiteDebugOnly || engine === "testergizer";
-    (runResult as any).debugForced = debugForced;
-    (runResult as any).ci = ci === true;
-
-    if (effectiveOptions.launch?.command) {
-      (runResult as any).launch = {
-        command: effectiveOptions.launch.command,
-        cwd: effectiveOptions.launch.cwd
-      };
-    }
-
-    // NEW: invalidation and skip channels (schema-agnostic).
-    (runResult as any).invalidation = {
-      count: invalidTests.length,
-      tests: invalidTests
-    };
-    (runResult as any).skipped = {
-      count: skippedTests.length,
-      tests: skippedTests
-    };
-
-    new JsonReporter({ outputDir: runOutDir }).write("run.json", runResult);
-
-    const provenancePath = path.join(runOutDir, "provenance.json");
-    fs.writeFileSync(
-      provenancePath,
-      JSON.stringify({ schemaVersion: "v1", byTestId: provenanceByTestId }, null, 2),
-      "utf-8"
-    );
-
-    if (effectiveOptions.debug === true && debugWarningsAll.length > 0) {
-      const warningsPath = path.join(runOutDir, "debug-warnings.json");
-      fs.writeFileSync(
-        warningsPath,
-        JSON.stringify({ schemaVersion: "v1", warnings: debugWarningsAll }, null, 2),
-        "utf-8"
-      );
-
-      console.warn("\n⚠️  DEBUG SEMANTICS — reusable purity checks relaxed\n");
-      for (const w of debugWarningsAll) {
-        console.warn(
-          `⚠️  [${w.originExecutableId}] ${w.field} (step: ${w.stepId}) — ${w.message} — ${w.originPath} — stack: ${w.includeStack.join(
-            " → "
-          )}`
-        );
-      }
-      console.warn("");
-    }
-
-    const artifactsDoc = loadJson(path.join(runOutDir, "artifacts.json"));
-    new HtmlReporter({ outputDir: runOutDir }).write(runResult, artifactsDoc);
-
-    const reportPath = path.resolve(runOutDir, "report.html");
-    console.log("");
-    console.log("Testergizer HTML report:");
-    console.log(pathToFileURL(reportPath).href);
-    console.log("Tip: paste the URL into your browser to view the report");
-    console.log("");
-
-
-    return runResult;
+    const raw = (numerator / executable) * 100;
+    return Math.round(raw * 100) / 100; // 2 decimals
   }
-  // --- EXISTING v2 BLOCK ENDS HERE ---
-  
 
   /* ============================================================
-   * SUITE v1  (FALLBACK / BACKWARD COMPATIBILITY)
+   * Suite dispatcher (schema switch)
    * ============================================================ */
-  case "v1": {
-    if (!isSuiteDoc(root)) {
-      throw new Error("Invalid Suite v1 document structure");
-    }
 
-    const suite = root as SuiteDoc;
+  if (!isObject(root) || typeof (root as any).schemaVersion !== "string") {
+    throw new Error("Single executable runs must be wrapped in a suite");
+  }
 
-    const resolvedAutVersion =
-      options.autVersion ?? suite.autVersion;
+  switch ((root as any).schemaVersion) {
+    /* ============================================================
+     * SUITE v2  (PRIMARY)
+     * ============================================================ */
+    case "v2": {
+      if (!isSuiteDocV2(root)) {
+        throw new Error("Invalid Suite v2 document structure");
+      }
 
+      const suite = root as SuiteDocV2;
 
-    // --- EXISTING v1 BLOCK STARTS HERE ---
-    // Paste your CURRENT v1 implementation here
-    // starting from:
-    //
-    //   const suiteDebugOnly = suite.debugOnly === true;
-    //
-    // and ending at:
-    //
-    //   return runResult;
-    //
-    // --- DO NOT MODIFY ITS INTERNAL LOGIC ---
+      const resolvedAutVersion = options.autVersion ?? suite.autVersion;
+
       // Contract: debugOnly defaults to false when omitted.
-    const suiteDebugOnly = suite.debugOnly === true;
+      const suiteDebugOnly = suite.debugOnly === true;
 
-    // Contract: stub implies debug semantics (stub is debugOnly by default).
-    const engine =  options.executionEngine ?? "testergizer";
-    const { effectiveDebug, debugForced } = computeEffectiveDebug({
-      executionEngine: engine,
-      suiteDebugOnly,
-      userDebugFlag: options.debug === true,
-      ci,
-      suiteId: suite.suiteId
-    });
-
-    // CHANGE: explicit axis label for conversational semantics (schema-agnostic).
-    
-    // CHANGE: validationMode
-    const validationMode: "debug" | "strict" = effectiveDebug ? "debug" : "strict";
-
-    const executionIntent: ExecutionIntent =
-  engine === "testergizer"
-    ? "review"
-    : options.executionIntent ?? "verify";
-
-    // IMPORTANT: do not mutate caller-supplied object.
-    const effectiveOptions: RunSuiteOptions = {
-      ...options,
-      executionEngine: engine,
-      debug: effectiveDebug,
-      autVersion: resolvedAutVersion
-    };
-
-    const suiteDir = path.dirname(rootPath);
-
-    const startedAt = nowIso();
-    const runId = randomUUID();
-    const runDateFolder = toDateFolder(startedAt);
-
-    const runOutDir = path.join(artifactsBaseDir, suite.suiteId, runDateFolder, runId);
-    ensureArtifactsIndex({ runOutDir, suiteId: suite.suiteId, runId });
-    // const artifactObserver = createArtifactObserver({ runOutDir, suiteId: suite.suiteId, runId });
-
-    const tests: TestResult[] = [];
-    const provenanceByTestId: Record<string, Record<string, StepProvenance>> = {};
-    const debugWarningsAll: DebugWarning[] = [];
-
-    // NEW: runtime-only reporting channels (not schemas).
-    const invalidTests: InvalidTestEntry[] = [];
-    const skippedTests: SkippedTestEntry[] = [];
-
-    // Registry of reusable executables (legacy: flows/ by ID). Path-based includes are also supported.
-    const flowsDir = path.resolve(process.cwd(), "flows");
-    const flows = loadAllExecutablesWithPaths(flowsDir);
-
-    // Execution loop (v1)
-    for (let i = 0; i < suite.tests.length; i++) {
-      const artifactObserver = createArtifactObserver({
-        runOutDir,
-        suiteId: suite.suiteId,
-        runId
+      // Contract: testergizer implies review intent defaults.
+      const engine = options.executionEngine ?? "testergizer";
+      const { effectiveDebug, debugForced } = computeEffectiveDebug({
+        executionEngine: engine,
+        suiteDebugOnly,
+        userDebugFlag: options.debug === true,
+        ci,
+        suiteId: suite.suiteId
       });
 
-      let normalized:
-        | { doc?: ExecutableDoc; filePath: string; skip?: { reason?: string } }
-        | undefined;
+      const validationMode: "debug" | "strict" = effectiveDebug ? "debug" : "strict";
 
-      try {
-        normalized = normalizeSuiteTestEntry({
-          entry: suite.tests[i],
-          suiteDir,
-          suiteFilePath: rootPath,
-          index: i
+      const executionIntent: ExecutionIntent =
+        engine === "testergizer" ? "review" : options.executionIntent ?? "verify";
+
+      const suiteRetries =
+        typeof suite.retries === "number" ? Math.max(0, suite.retries) : undefined;
+
+      const cliRetries =
+        typeof options.retries === "number" ? Math.max(0, options.retries) : undefined;
+
+      const effectiveRetries =
+        cliRetries !== undefined ? cliRetries : suiteRetries !== undefined ? suiteRetries : 0;
+
+      const effectiveOptions: RunSuiteOptions = {
+        ...options,
+        executionEngine: engine,
+        debug: effectiveDebug,
+        retries: effectiveRetries,
+        autVersion: resolvedAutVersion
+      };
+
+      const suiteDir = path.dirname(rootPath);
+      const resolveBase = suite.resolveFrom ? path.resolve(suiteDir, suite.resolveFrom) : suiteDir;
+
+      // ----------------------------------------------------
+      // CLR (Suite-Level) — referenced by suite.clr.path
+      // ----------------------------------------------------
+      let clrDefinition: any | undefined;
+
+      if ((suite as any).clr?.path) {
+        const clrPath = path.resolve(resolveBase, (suite as any).clr.path);
+        if (fs.existsSync(clrPath)) {
+          clrDefinition = loadJson(clrPath);
+        } else {
+          throw new Error(`CLR file not found: ${clrPath}`);
+        }
+      }
+
+      const clrResolution = clrDefinition
+        ? {
+            appId: clrDefinition.appId,
+            versionRange: clrDefinition.versionRange,
+            detectedAutVersion: resolvedAutVersion ?? null
+          }
+        : undefined;
+
+      const startedAt = nowIso();
+      const runId = randomUUID();
+      const runDateFolder = toDateFolder(startedAt);
+
+      const runOutDir = path.join(artifactsBaseDir, suite.suiteId, runDateFolder, runId);
+      ensureArtifactsIndex({ runOutDir, suiteId: suite.suiteId, runId });
+
+      const tests: TestResult[] = [];
+      const provenanceByTestId: Record<string, Record<string, StepProvenance>> = {};
+      const debugWarningsAll: DebugWarning[] = [];
+
+      // NEW: runtime-only reporting channels (not schemas).
+      const invalidTests: InvalidTestEntry[] = [];
+      const skippedTests: SkippedTestEntry[] = [];
+
+      // Registry of reusable executables (flows/ by ID). Path-based includes are also supported.
+      const flowsDir = path.resolve(process.cwd(), "flows");
+      const flows = loadAllExecutablesWithPaths(flowsDir);
+
+      // Execution loop (v2)
+      for (let i = 0; i < suite.tests.length; i++) {
+        const artifactObserver = createArtifactObserver({
+          runOutDir,
+          suiteId: suite.suiteId,
+          runId
         });
 
-        // CONTRACT: skip is intentional non-execution. It does not validate or execute.
-        if (normalized.skip) {
-          const sid = normalized.filePath
-            ? path.basename(normalized.filePath)
-            : `skipped-test-${i + 1}`;
+        let normalized:
+          | {
+              doc?: ExecutableDoc;
+              filePath: string;
+              testId: string;
+              testParams?: Record<string, any>;
+              skip?: { reason?: string };
+            }
+          | undefined;
 
-          skippedTests.push({
-            testId: sid,
-            testPath: normalized.filePath,
-            reason: normalized.skip.reason
+        try {
+          normalized = normalizeSuiteV2TestEntry({
+            entry: suite.tests[i],
+            resolveBase
           });
+
+          // CONTRACT: skip is intentional non-execution. It does not validate or execute.
+          if (normalized.skip) {
+            skippedTests.push({
+              testId: normalized.testId,
+              testPath: normalized.filePath,
+              reason: normalized.skip.reason
+            });
+            continue;
+          }
+
+          if (!normalized.doc) {
+            throw new Error(
+              `Suite v2 entry normalized without doc and without skip at index ${i}`
+            );
+          }
+
+          const { doc, filePath, testId, testParams } = normalized;
+
+          // Evidence correction: enforce suite-level id before execution.
+          const effectiveDoc: ExecutableDoc = {
+            ...doc,
+            id: testId
+          };
+
+          const { testResult: tr, provenanceByStepId, debugWarnings } = await runOneTest({
+            suiteId: suite.suiteId,
+            runId,
+            runDateFolder,
+            suiteContext: suite.context ?? {},
+            testContext: testParams ?? {},
+            suiteBaseUrl: suite.baseUrl,
+            doc: effectiveDoc,
+            filePath,
+            registry: flows.docs,
+            registryPaths: flows.paths,
+            options: effectiveOptions,
+            artifactsBaseDir,
+            runOutDir,
+            artifactObserver
+          });
+
+          tests.push(tr);
+          provenanceByTestId[tr.id] = provenanceByStepId;
+          debugWarningsAll.push(...debugWarnings);
+        } catch (err: any) {
+          const fallbackId = normalized?.testId ?? `invalid-test-${i + 1}`;
+          const fallbackPath = normalized?.filePath ?? `${rootPath}#tests[${i}]`;
+
+          invalidTests.push({
+            testId: fallbackId,
+            testPath: fallbackPath,
+            phase: "compile",
+            reason: `Validation/prepare failed: ${errorMessage(err)}`,
+            stack: errorStack(err)
+          });
+
+          provenanceByTestId[fallbackId] = {};
           continue;
         }
-
-        if (!normalized.doc) {
-          // Defensive: should not happen without skip, but keep run continuous.
-          throw new Error(`Suite v1 entry normalized without doc and without skip at index ${i}`);
-        }
-
-        const { doc, filePath } = normalized;
-
-        const { testResult: tr, provenanceByStepId, debugWarnings } = await runOneTest({
-          testContext: undefined, // v1 has no per-test params
-          suiteId: suite.suiteId,
-          runId,
-          runDateFolder,
-          suiteContext: suite.context ?? {},
-          suiteBaseUrl: suite.baseUrl,
-          doc,
-          filePath,
-          registry: flows.docs,
-          registryPaths: flows.paths,
-          options: effectiveOptions,
-          artifactsBaseDir,
-          runOutDir,
-          artifactObserver
-        });
-
-        tests.push(tr);
-        provenanceByTestId[tr.id] = provenanceByStepId;
-        debugWarningsAll.push(...debugWarnings);
-      } catch (err: any) {
-        // CONTRACT: invalidation is compile/authoring concern, not a TestResult.
-        const fallbackPath =
-          normalized?.filePath ?? `${rootPath}#tests[${i}]`;
-
-        const fallbackId =
-          (normalized?.doc && typeof normalized.doc.id === "string" && normalized.doc.id) ||
-          `invalid-test-${i + 1}`;
-
-        invalidTests.push({
-          testId: fallbackId,
-          testPath: fallbackPath,
-          phase: "compile",
-          reason: `Validation/prepare failed: ${errorMessage(err)}`,
-          stack: errorStack(err)
-        });
-
-        // Minimal provenance slot so downstream consumers don't crash on missing keys.
-        provenanceByTestId[fallbackId] = {};
-        continue;
       }
-    }
 
-    const endedAt = nowIso();
+      const endedAt = nowIso();
 
-    // Summary is execution-only (tests[] only).
-    const summary = {
-      total: tests.length,
-      passed: tests.filter((t) => t.result === "passed").length,
-      failed: tests.filter((t) => t.result === "failed").length,
-      aborted: tests.filter((t) => t.result === "aborted").length
-    };
+      // Summary is execution-only (tests[] only).
+      const reviewed = tests.filter((t) => t.result === "reviewed").length;
+      const passed = tests.filter((t) => t.result === "passed").length;
+      const failed = tests.filter((t) => t.result === "failed").length;
+      const aborted = tests.filter((t) => t.result === "aborted").length;
 
-    const projectId =
-      tests.length === 0
-        ? effectiveOptions.browserName ?? "chromium"
-        : tests.every((t) => t.projectId === tests[0].projectId)
-        ? tests[0].projectId
-        : "mixed";
+      const valid = passed + reviewed;
+      const invalid = failed + aborted;
 
-    /**
-     * PHASE 1 — Base URL Resolution
-     *
-     * Precedence:
-     * 1. CLI --baseUrl
-     * 2. suite.baseUrl
-     * 3. undefined
-     */
-    const resolvedBaseUrl =
-      options.baseUrl ??
-      (suite as any).baseUrl ??
-      undefined;
-
-    const runResult: RunResult = {
-      schemaVersion: "v1",
-      suiteId: suite.suiteId,
-      suiteName: suite.suiteName,
-      suitePath: rootPath,
-      applicationName: suite.applicationName ?? suite.suiteName ?? suite.suiteId,
-      runId,
-      executionEngine: engine,      // "testergizer" | "playwright" | etc.
-      validationMode,               // "debug" | "srict"
-      executionIntent,              // "review" | "verify" | "baseline"
-      projectId,
-      /**
-       * PHASE 1 — Evidence Correction
-       * Expose resolved baseUrl for report + navigation resolution.
-       */
-      baseUrl: resolvedBaseUrl,
-      startedAt,
-      endedAt,
-      durationMs: durationMs(startedAt, endedAt),
-      tests,
-      summary
-    };
-
-    // Runtime metadata (kept out of schemas; consumers may use it if present).
-    (runResult as any).debugOnly = suiteDebugOnly || engine === "testergizer";
-    (runResult as any).debugForced = debugForced;
-    (runResult as any).ci = ci === true;
-
-    // Launch transparency (if provided by CLI/programmatic caller)
-    if (effectiveOptions.launch?.command) {
-      (runResult as any).launch = {
-        command: effectiveOptions.launch.command,
-        cwd: effectiveOptions.launch.cwd
+      const summary = {
+        total: tests.length,
+        passed,
+        failed,
+        aborted,
+        reviewed,
+        valid,
+        invalid
       };
-    }
 
-    // NEW: invalidation and skip channels (schema-agnostic).
-    (runResult as any).invalidation = {
-      count: invalidTests.length,
-      tests: invalidTests
-    };
-    (runResult as any).skipped = {
-      count: skippedTests.length,
-      tests: skippedTests
-    };
+      let suiteStatus: "valid" | "invalid" | "passed" | "failed";
+      if (engine === "testergizer") {
+        suiteStatus = invalid > 0 ? "invalid" : "valid";
+      } else {
+        suiteStatus = invalid > 0 ? "failed" : "passed";
+      }
 
-    new JsonReporter({ outputDir: runOutDir }).write("run.json", runResult);
+      const signalStrength = computeSignalStrength({
+        engine,
+        passed,
+        failed,
+        aborted,
+        valid,
+        invalid
+      });
 
-    // Runtime-only compiler metadata (no schema changes).
-    const provenancePath = path.join(runOutDir, "provenance.json");
-    fs.writeFileSync(
-      provenancePath,
-      JSON.stringify({ schemaVersion: "v1", byTestId: provenanceByTestId }, null, 2),
-      "utf-8"
-    );
+      const projectId =
+        tests.length === 0
+          ? effectiveOptions.browserName ?? "chromium"
+          : tests.every((t) => t.projectId === tests[0].projectId)
+          ? tests[0].projectId
+          : "mixed";
 
-    // Emit debug warnings file only when debug semantics are enabled and warnings exist.
-    if (effectiveOptions.debug === true && debugWarningsAll.length > 0) {
-      const warningsPath = path.join(runOutDir, "debug-warnings.json");
+      const resolvedBaseUrl = options.baseUrl ?? (suite as any).baseUrl ?? undefined;
+
+      const applicationName =
+        (root as any).applicationName ?? suite.suiteName ?? suite.suiteId;
+
+      const runResult: RunResult = {
+        schemaVersion: "v1",
+        suiteId: suite.suiteId,
+        suiteName: suite.suiteName,
+        suitePath: rootPath,
+        applicationName,
+        runId,
+        executionEngine: engine,
+        validationMode,
+        executionIntent,
+        projectId,
+        baseUrl: resolvedBaseUrl,
+        startedAt,
+        endedAt,
+        durationMs: durationMs(startedAt, endedAt),
+        tests,
+        summary,
+        suiteStatus,
+        signalStrength
+      };
+
+      // Attach CLR (suite-level)
+      if (clrDefinition) (runResult as any).clrDefinition = clrDefinition;
+      if (clrResolution) (runResult as any).clrResolution = clrResolution;
+
+      (runResult as any).debugOnly = suiteDebugOnly || engine === "testergizer";
+      (runResult as any).debugForced = debugForced;
+      (runResult as any).ci = ci === true;
+
+      if (effectiveOptions.launch?.command) {
+        (runResult as any).launch = {
+          command: effectiveOptions.launch.command,
+          cwd: effectiveOptions.launch.cwd
+        };
+      }
+
+      (runResult as any).invalidation = {
+        count: invalidTests.length,
+        tests: invalidTests
+      };
+      (runResult as any).skipped = {
+        count: skippedTests.length,
+        tests: skippedTests
+      };
+
+      new JsonReporter({ outputDir: runOutDir }).write("run.json", runResult);
+
+      const provenancePath = path.join(runOutDir, "provenance.json");
       fs.writeFileSync(
-        warningsPath,
-        JSON.stringify({ schemaVersion: "v1", warnings: debugWarningsAll }, null, 2),
+        provenancePath,
+        JSON.stringify({ schemaVersion: "v1", byTestId: provenanceByTestId }, null, 2),
         "utf-8"
       );
 
-      console.warn("\n⚠️  DEBUG SEMANTICS — reusable purity checks relaxed\n");
-      for (const w of debugWarningsAll) {
-        console.warn(
-          `⚠️  [${w.originExecutableId}] ${w.field} (step: ${w.stepId}) — ${w.message} — ${w.originPath} — stack: ${w.includeStack.join(
-            " → "
-          )}`
+      if (effectiveOptions.debug === true && debugWarningsAll.length > 0) {
+        const warningsPath = path.join(runOutDir, "debug-warnings.json");
+        fs.writeFileSync(
+          warningsPath,
+          JSON.stringify({ schemaVersion: "v1", warnings: debugWarningsAll }, null, 2),
+          "utf-8"
         );
+
+        console.warn("\n⚠️  DEBUG SEMANTICS — reusable purity checks relaxed\n");
+        for (const w of debugWarningsAll) {
+          console.warn(
+            `⚠️  [${w.originExecutableId}] ${w.field} (step: ${w.stepId}) — ${w.message} — ${w.originPath} — stack: ${w.includeStack.join(
+              " → "
+            )}`
+          );
+        }
+        console.warn("");
       }
-      console.warn("");
+
+      const artifactsDoc = loadJson(path.join(runOutDir, "artifacts.json"));
+      new HtmlReporter({ outputDir: runOutDir }).write(runResult, artifactsDoc);
+
+      const reportPath = path.resolve(runOutDir, "report.html");
+      console.log("");
+      console.log("Testergizer HTML report:");
+      console.log(pathToFileURL(reportPath).href);
+      console.log("Tip: paste the URL into your browser to view the report");
+      console.log("");
+
+      return runResult;
     }
 
-    const artifactsDoc = loadJson(path.join(runOutDir, "artifacts.json"));
-    new HtmlReporter({ outputDir: runOutDir }).write(runResult, artifactsDoc);
+    /* ============================================================
+     * SUITE v1  (FALLBACK / BACKWARD COMPATIBILITY)
+     * ============================================================ */
+    case "v1": {
+      if (!isSuiteDoc(root)) {
+        throw new Error("Invalid Suite v1 document structure");
+      }
 
-    const reportPath = path.resolve(runOutDir, "report.html");
-    console.log("");
-    console.log("Testergizer HTML report:");
-    console.log(pathToFileURL(reportPath).href);
-    console.log("Tip: paste the URL into your browser to view the report");
-    console.log("");
+      const suite = root as SuiteDoc;
 
-    return runResult;
-    // --- EXISTING v1 BLOCK ENDS HERE ---
+      const resolvedAutVersion = options.autVersion ?? suite.autVersion;
+
+      // Contract: debugOnly defaults to false when omitted.
+      const suiteDebugOnly = suite.debugOnly === true;
+
+      const engine = options.executionEngine ?? "testergizer";
+      const { effectiveDebug, debugForced } = computeEffectiveDebug({
+        executionEngine: engine,
+        suiteDebugOnly,
+        userDebugFlag: options.debug === true,
+        ci,
+        suiteId: suite.suiteId
+      });
+
+      const validationMode: "debug" | "strict" = effectiveDebug ? "debug" : "strict";
+
+      const executionIntent: ExecutionIntent =
+        engine === "testergizer" ? "review" : options.executionIntent ?? "verify";
+
+      const effectiveOptions: RunSuiteOptions = {
+        ...options,
+        executionEngine: engine,
+        debug: effectiveDebug,
+        autVersion: resolvedAutVersion
+      };
+
+      const suiteDir = path.dirname(rootPath);
+
+      // ----------------------------------------------------
+      // CLR (Suite-Level) — referenced by suite.clr.path
+      // ----------------------------------------------------
+      let clrDefinition: any | undefined;
+
+      if ((suite as any).clr?.path) {
+        const clrPath = path.resolve(suiteDir, (suite as any).clr.path);
+        if (fs.existsSync(clrPath)) {
+          clrDefinition = loadJson(clrPath);
+        } else {
+          throw new Error(`CLR file not found: ${clrPath}`);
+        }
+      }
+
+      const clrResolution = clrDefinition
+        ? {
+            appId: clrDefinition.appId,
+            versionRange: clrDefinition.versionRange,
+            detectedAutVersion: resolvedAutVersion ?? null
+          }
+        : undefined;
+
+      const startedAt = nowIso();
+      const runId = randomUUID();
+      const runDateFolder = toDateFolder(startedAt);
+
+      const runOutDir = path.join(artifactsBaseDir, suite.suiteId, runDateFolder, runId);
+      ensureArtifactsIndex({ runOutDir, suiteId: suite.suiteId, runId });
+
+      const tests: TestResult[] = [];
+      const provenanceByTestId: Record<string, Record<string, StepProvenance>> = {};
+      const debugWarningsAll: DebugWarning[] = [];
+
+      const invalidTests: InvalidTestEntry[] = [];
+      const skippedTests: SkippedTestEntry[] = [];
+
+      const flowsDir = path.resolve(process.cwd(), "flows");
+      const flows = loadAllExecutablesWithPaths(flowsDir);
+
+      // Execution loop (v1)
+      for (let i = 0; i < suite.tests.length; i++) {
+        const artifactObserver = createArtifactObserver({
+          runOutDir,
+          suiteId: suite.suiteId,
+          runId
+        });
+
+        let normalized:
+          | { doc?: ExecutableDoc; filePath: string; skip?: { reason?: string } }
+          | undefined;
+
+        try {
+          normalized = normalizeSuiteTestEntry({
+            entry: suite.tests[i],
+            suiteDir,
+            suiteFilePath: rootPath,
+            index: i
+          });
+
+          if (normalized.skip) {
+            const sid = normalized.filePath
+              ? path.basename(normalized.filePath)
+              : `skipped-test-${i + 1}`;
+
+            skippedTests.push({
+              testId: sid,
+              testPath: normalized.filePath,
+              reason: normalized.skip.reason
+            });
+            continue;
+          }
+
+          if (!normalized.doc) {
+            throw new Error(
+              `Suite v1 entry normalized without doc and without skip at index ${i}`
+            );
+          }
+
+          const { doc, filePath } = normalized;
+
+          const { testResult: tr, provenanceByStepId, debugWarnings } = await runOneTest({
+            testContext: undefined,
+            suiteId: suite.suiteId,
+            runId,
+            runDateFolder,
+            suiteContext: suite.context ?? {},
+            suiteBaseUrl: suite.baseUrl,
+            doc,
+            filePath,
+            registry: flows.docs,
+            registryPaths: flows.paths,
+            options: effectiveOptions,
+            artifactsBaseDir,
+            runOutDir,
+            artifactObserver
+          });
+
+          tests.push(tr);
+          provenanceByTestId[tr.id] = provenanceByStepId;
+          debugWarningsAll.push(...debugWarnings);
+        } catch (err: any) {
+          const fallbackPath = normalized?.filePath ?? `${rootPath}#tests[${i}]`;
+
+          const fallbackId =
+            (normalized?.doc && typeof normalized.doc.id === "string" && normalized.doc.id) ||
+            `invalid-test-${i + 1}`;
+
+          invalidTests.push({
+            testId: fallbackId,
+            testPath: fallbackPath,
+            phase: "compile",
+            reason: `Validation/prepare failed: ${errorMessage(err)}`,
+            stack: errorStack(err)
+          });
+
+          provenanceByTestId[fallbackId] = {};
+          continue;
+        }
+      }
+
+      const endedAt = nowIso();
+
+      const reviewed = tests.filter((t) => t.result === "reviewed").length;
+      const passed = tests.filter((t) => t.result === "passed").length;
+      const failed = tests.filter((t) => t.result === "failed").length;
+      const aborted = tests.filter((t) => t.result === "aborted").length;
+
+      const valid = passed + reviewed;
+      const invalid = failed + aborted;
+
+      const summary = {
+        total: tests.length,
+        passed,
+        failed,
+        aborted,
+        reviewed,
+        valid,
+        invalid
+      };
+
+      let suiteStatus: "valid" | "invalid" | "passed" | "failed";
+      if (engine === "testergizer") {
+        suiteStatus = invalid > 0 ? "invalid" : "valid";
+      } else {
+        suiteStatus = invalid > 0 ? "failed" : "passed";
+      }
+
+      const signalStrength = computeSignalStrength({
+        engine,
+        passed,
+        failed,
+        aborted,
+        valid,
+        invalid
+      });
+
+      const projectId =
+        tests.length === 0
+          ? effectiveOptions.browserName ?? "chromium"
+          : tests.every((t) => t.projectId === tests[0].projectId)
+          ? tests[0].projectId
+          : "mixed";
+
+      const resolvedBaseUrl = options.baseUrl ?? (suite as any).baseUrl ?? undefined;
+
+      const runResult: RunResult = {
+        schemaVersion: "v1",
+        suiteId: suite.suiteId,
+        suiteName: suite.suiteName,
+        suitePath: rootPath,
+        applicationName: suite.applicationName ?? suite.suiteName ?? suite.suiteId,
+        runId,
+        executionEngine: engine,
+        validationMode,
+        executionIntent,
+        projectId,
+        baseUrl: resolvedBaseUrl,
+        startedAt,
+        endedAt,
+        durationMs: durationMs(startedAt, endedAt),
+        tests,
+        summary,
+        suiteStatus,
+        signalStrength
+      };
+
+      // Attach CLR (suite-level)
+      if (clrDefinition) (runResult as any).clrDefinition = clrDefinition;
+      if (clrResolution) (runResult as any).clrResolution = clrResolution;
+
+      (runResult as any).debugOnly = suiteDebugOnly || engine === "testergizer";
+      (runResult as any).debugForced = debugForced;
+      (runResult as any).ci = ci === true;
+
+      if (effectiveOptions.launch?.command) {
+        (runResult as any).launch = {
+          command: effectiveOptions.launch.command,
+          cwd: effectiveOptions.launch.cwd
+        };
+      }
+
+      (runResult as any).invalidation = {
+        count: invalidTests.length,
+        tests: invalidTests
+      };
+      (runResult as any).skipped = {
+        count: skippedTests.length,
+        tests: skippedTests
+      };
+
+      new JsonReporter({ outputDir: runOutDir }).write("run.json", runResult);
+
+      const provenancePath = path.join(runOutDir, "provenance.json");
+      fs.writeFileSync(
+        provenancePath,
+        JSON.stringify({ schemaVersion: "v1", byTestId: provenanceByTestId }, null, 2),
+        "utf-8"
+      );
+
+      if (effectiveOptions.debug === true && debugWarningsAll.length > 0) {
+        const warningsPath = path.join(runOutDir, "debug-warnings.json");
+        fs.writeFileSync(
+          warningsPath,
+          JSON.stringify({ schemaVersion: "v1", warnings: debugWarningsAll }, null, 2),
+          "utf-8"
+        );
+
+        console.warn("\n⚠️  DEBUG SEMANTICS — reusable purity checks relaxed\n");
+        for (const w of debugWarningsAll) {
+          console.warn(
+            `⚠️  [${w.originExecutableId}] ${w.field} (step: ${w.stepId}) — ${w.message} — ${w.originPath} — stack: ${w.includeStack.join(
+              " → "
+            )}`
+          );
+        }
+        console.warn("");
+      }
+
+      const artifactsDoc = loadJson(path.join(runOutDir, "artifacts.json"));
+      new HtmlReporter({ outputDir: runOutDir }).write(runResult, artifactsDoc);
+
+      const reportPath = path.resolve(runOutDir, "report.html");
+      console.log("");
+      console.log("Testergizer HTML report:");
+      console.log(pathToFileURL(reportPath).href);
+      console.log("Tip: paste the URL into your browser to view the report");
+      console.log("");
+
+      return runResult;
+    }
+
+    default:
+      throw new Error(`Unsupported suite schemaVersion "${(root as any).schemaVersion}".`);
   }
-
-  /* ============================================================
-   * Unsupported version
-   * ============================================================ */
-  default:
-    throw new Error(
-      `Unsupported suite schemaVersion "${(root as any).schemaVersion}".`
-    );    
-} 
-  // Honest error message (no mention of applicationName).
-  throw new Error("Single executable runs must be wrapped in a suite");
-}		
+}

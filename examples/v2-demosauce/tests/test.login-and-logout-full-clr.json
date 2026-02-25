@@ -1,0 +1,9 @@
+{
+  "id": "login-and-logout",
+  "reusable": false,
+  "steps": [
+    { "type": "include", "ref": "../reusables/login.json" },
+    { "action": "assertVisible", "target": "inventory.items.container" },
+    { "type": "include", "ref": "../reusables/logout.json" }
+  ]
+}

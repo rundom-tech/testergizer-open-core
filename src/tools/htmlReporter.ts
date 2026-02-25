@@ -234,6 +234,73 @@ export class HtmlReporter {
     const provenanceByTestId: Record<string, Record<string, any>> =
       provenanceDoc && typeof provenanceDoc === "object" ? provenanceDoc.byTestId ?? {} : {};
 
+    // CLR helpers (report-level convenience)
+    // Goal: when steps carry only raw selectors (e.g. Playwright),
+    // try to display CLR logical keys as primary and keep selectors as collapsible details.
+    const clrLocators: Record<string, any> | undefined =
+      (run as any).clrDefinition && typeof (run as any).clrDefinition === "object"
+        ? ((run as any).clrDefinition as any).locators
+        : undefined;
+
+    const clrSelectorToKeys = new Map<string, string[]>();
+    const clrKeyToSelectors = new Map<string, Array<{ using: string; value: string }>>();
+
+    if (clrLocators && typeof clrLocators === "object") {
+      for (const [k, def] of Object.entries(clrLocators)) {
+        const sels: Array<{ using: string; value: string }> = Array.isArray((def as any).selectors)
+          ? ((def as any).selectors as any[])
+              .filter((s) => s && typeof s === "object" && typeof (s as any).using === "string" && typeof (s as any).value === "string")
+              .map((s) => ({ using: String((s as any).using), value: String((s as any).value) }))
+          : [];
+
+        if (sels.length) clrKeyToSelectors.set(k, sels);
+
+        for (const s of sels) {
+          const add = (v: string) => {
+            const vv = String(v);
+            if (!vv) return;
+            const cur = clrSelectorToKeys.get(vv);
+            if (cur) {
+              if (!cur.includes(k)) cur.push(k);
+            } else {
+              clrSelectorToKeys.set(vv, [k]);
+            }
+          };
+
+          add(s.value);
+          add(`${s.using}=${s.value}`);
+        }
+      }
+    }
+
+    const normalizeSelectorForMatch = (raw: string): string => {
+      const r = String(raw ?? "").trim();
+      if (!r) return r;
+      // Strip common "using=" prefixes
+      const m = r.match(/^(css|xpath|text|id)=/i);
+      if (m) return r.slice(m[0].length);
+      return r;
+    };
+
+    const pickClrKeyForSelector = (rawSelector: string): string | undefined => {
+      const raw = String(rawSelector ?? "").trim();
+      if (!raw) return undefined;
+
+      // Direct matches first, then normalized.
+      const direct = clrSelectorToKeys.get(raw);
+      if (direct && direct.length) return [...direct].sort()[0];
+
+      const normalized = normalizeSelectorForMatch(raw);
+      const normalizedHit = clrSelectorToKeys.get(normalized);
+      if (normalizedHit && normalizedHit.length) return [...normalizedHit].sort()[0];
+
+      // Also try "css=" + value for Playwright-style raw CSS
+      const cssHit = clrSelectorToKeys.get(`css=${normalized}`);
+      if (cssHit && cssHit.length) return [...cssHit].sort()[0];
+
+      return undefined;
+    };
+
     const debugWarningsDoc = tryReadJson(path.join(this.outputDir, "debug-warnings.json"));
     const debugWarnings: any[] =
       debugWarningsDoc && typeof debugWarningsDoc === "object" && Array.isArray(debugWarningsDoc.warnings)
@@ -368,6 +435,54 @@ export class HtmlReporter {
       }
     };
 
+    const renderClrResolution = (step: any): string => {
+      const t = (step as any).target;
+      if (!t || typeof t !== "object") return "";
+
+      const attempts = Array.isArray(t.attempts) ? t.attempts : [];
+      const resolvedBy = t.resolvedBy;
+
+      const value =
+        typeof t.value === "string" ? t.value : undefined;
+
+      const logical =
+        typeof t.logical === "string" ? t.logical : undefined;
+
+      const secondary =
+        logical && value && logical !== value
+          ? `<div class="clr-secondary muted"><code>${esc(value)}</code></div>`
+          : "";
+
+      if (!attempts.length) return secondary;
+
+      const resolvedLine =
+        resolvedBy && resolvedBy.using && resolvedBy.value
+          ? `<div><span class="k">resolved:</span> <span class="mono">${esc(resolvedBy.using)} → ${esc(resolvedBy.value)}</span></div>`
+          : "";
+
+      const attemptsHtml = attempts
+        .map((a: any, i: number) => {
+          const ok = a.result === "success";
+          return `<div>${i + 1}. ${esc(a.using)} → <span class="mono">${esc(a.value)}</span> ${ok ? "✓" : "✕"}</div>`;
+        })
+        .join("");
+
+      return `
+        <div class="clr-block">
+          ${secondary}
+          <details class="locator-resolution">
+            <summary class="muted">Locator resolution</summary>
+            <div class="locator-resolution-body mono">
+              ${resolvedLine}
+              <div class="locator-attempts">
+                ${attemptsHtml}
+              </div>
+            </div>
+          </details>
+        </div>
+      `;
+    };
+
     const renderStepRow = (step: any, testId: string, attempt: number) => {
       const errors = Array.isArray(step.errors) ? step.errors : [];
       const errHtml = errors.length
@@ -400,51 +515,85 @@ export class HtmlReporter {
       const targetHtml = (() => {
         const t = (step as any).target;
 
-        /**
-         * PHASE 1 — EVIDENCE CORRECTION (DISPLAY ONLY)
-         *
-         * For `goto` steps:
-         * - If the target is relative ("/", "/login", etc.)
-         * - AND it can be resolved against a known base URL
-         * - AND the resolved URL differs from the raw target
-         *
-         * Then we render the resolved URL for human readability.
-         *
-         * Execution, evidence, and JSON remain unchanged.
-         */
-        const resolvedGoto = resolveGotoUrl(step);
+        const renderDetails = (opts: { logical?: string; rawSelector?: string }) => {
+          const logical = opts.logical ? String(opts.logical) : undefined;
+          const rawSelector = opts.rawSelector ? String(opts.rawSelector) : undefined;
 
-        // Back-compat: target may be a plain string
+          const selectors =
+            logical && clrKeyToSelectors.has(logical)
+              ? (clrKeyToSelectors.get(logical) ?? [])
+              : [];
+
+          const selectorList = selectors.length
+            ? `<div class="mono" style="margin-top:6px">
+                 <div><span class="k">alternatives:</span></div>
+                 ${selectors
+                   .map((s) => `<div class="mono"><span class="muted">${esc(s.using)}</span> <code>${esc(s.value)}</code></div>`)
+                   .join("")}
+               </div>`
+            : "";
+
+          const rawLine = rawSelector
+            ? `<div class="mono"><span class="k">selector:</span> <code>${esc(rawSelector)}</code></div>`
+            : "";
+
+          if (!rawLine && !selectorList) return "";
+
+          return `
+            <details class="target-more">
+              <summary class="muted mono">locator</summary>
+              <div class="target-more-body">
+                ${rawLine}
+                ${selectorList}
+              </div>
+            </details>
+          `;
+        };
+
+        // Back-compat: target may be a plain string (Playwright often uses this).
         if (typeof t === "string") {
           const raw = t.trim();
           if (!raw) return `<span class="action-target unresolved">(no target)</span>`;
 
-          // ONLY_IF_DIFFERENT: avoid noise when resolution adds no information
-          const shown = resolvedGoto && resolvedGoto !== raw ? resolvedGoto : raw;
+          const inferred = pickClrKeyForSelector(raw);
+          const primary = inferred ?? raw;
 
           return `
-          <span class="action-arrow">→</span>
-          <span class="action-target"><code>${esc(shown)}</code></span>
-        `;
+            <span class="action-arrow">→</span>
+            <span class="action-target"><code>${esc(primary)}</code></span>
+            ${inferred ? renderDetails({ logical: inferred, rawSelector: raw }) : ""}
+          `;
         }
 
-        // Newer shape: { value, resolved? }
-        const raw =
-          String(step?.action).toLowerCase() === "goto" ? resolvedGoto ?? (t as any)?.value : (t as any)?.value;
+        if (!t || typeof t !== "object") {
+          return `<span class="action-target unresolved">(no target)</span>`;
+        }
 
-        if (!raw) return `<span class="action-target unresolved">(no target)</span>`;
+        const logical = typeof t.logical === "string" ? t.logical : undefined;
+        const value = typeof t.value === "string" ? t.value : undefined;
 
-        const unresolved = (t as any)?.resolved === false;
-        const shown = resolvedGoto ?? raw;
+        const unresolved = t.resolved === false;
+
+        // If logical is missing but we have a selector value, try to infer CLR key from run.clrDefinition.locators.
+        const inferred = !logical && value ? pickClrKeyForSelector(value) : undefined;
+
+        const primary = logical ?? inferred ?? value;
+
+        if (!primary) {
+          return `<span class="action-target unresolved">(no target)</span>`;
+        }
+
+        const detailsLogical = logical ?? inferred;
 
         return `
-        <span class="action-arrow">→</span>
-        <span class="action-target ${unresolved ? "unresolved" : ""}">
-          <code>${esc(shown)}</code>
-          ${unresolved ? " (not found)" : ""}
-        </span>
-      `;
-      })();
+          <span class="action-arrow">→</span>
+          <span class="action-target ${unresolved ? "unresolved" : ""}">
+            <code>${esc(primary)}</code>
+            ${unresolved ? " (not found)" : ""}
+          </span>
+          ${detailsLogical || value ? renderDetails({ logical: detailsLogical, rawSelector: value }) : ""}
+        `;
+      })();;
 
       const dataHtml = (() => {
         const forceMasked = isPasswordLikeFill(step);
@@ -533,6 +682,7 @@ export class HtmlReporter {
                 <div class="action-main">
                   <span class="action-name">${esc(step.action)}</span>
                   ${targetHtml}
+                  ${renderClrResolution(step)}
                   ${dataHtml}
                   ${warningsHtml}
                   ${execHtml}
@@ -699,12 +849,59 @@ export class HtmlReporter {
 
     const skippedTests: any[] = skippedBlock && Array.isArray(skippedBlock.tests) ? skippedBlock.tests : [];
 
-    const summary = `
+    const summary = run.summary;
+    const summaryHtml = `
       <div class="summary">
-        <div class="summary-item"><div class="k">total</div><div class="v mono">${esc((run as any).summary.total)}</div></div>
-        <div class="summary-item"><div class="k">passed</div><div class="v mono">${esc((run as any).summary.passed)}</div></div>
-        <div class="summary-item"><div class="k">failed</div><div class="v mono">${esc((run as any).summary.failed)}</div></div>
-        <div class="summary-item"><div class="k">aborted</div><div class="v mono">${esc((run as any).summary.aborted)}</div></div>
+        <div class="summary-item">
+          <span class="k">Total</span>
+          <span class="v">${esc(summary.total)}</span>
+        </div>
+
+        ${
+          run.executionEngine === "testergizer"
+            ? `
+        <div class="summary-item">
+          <span class="k">Valid</span>
+          <span class="v">${esc(summary.valid)}</span>
+        </div>
+        <div class="summary-item">
+          <span class="k">Invalid</span>
+          <span class="v">${esc(summary.invalid)}</span>
+        </div>
+        <div class="summary-item">
+          <span class="k">Reviewed</span>
+          <span class="v">${esc(summary.reviewed)}</span>
+        </div>
+            `
+            : `
+        <div class="summary-item">
+          <span class="k">Passed</span>
+          <span class="v">${esc(summary.passed)}</span>
+        </div>
+        <div class="summary-item">
+          <span class="k">Failed</span>
+          <span class="v">${esc(summary.failed)}</span>
+        </div>
+        <div class="summary-item">
+          <span class="k">Aborted</span>
+          <span class="v">${esc(summary.aborted)}</span>
+        </div>
+            `
+        }
+
+        <!-- Signal Strength -->
+        ${
+          (() => {
+            const signal = run.signalStrength ?? 0;
+            const sign = signal > 0 ? "+" : "";
+            return `
+        <div class="summary-item signal-item" data-signal="${signal}">
+          <span class="k">Signal</span>
+          <span class="v">${sign}${signal}%</span>
+        </div>
+            `;
+          })()
+        }
       </div>
     `;
 
@@ -958,7 +1155,7 @@ export class HtmlReporter {
     ${header}
     ${runMeta}
     ${clrSection}
-    ${summary}
+    ${summaryHtml}
     ${debugBanner}
     ${invalidBanner}
     ${skippedBanner}

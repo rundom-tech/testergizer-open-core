@@ -9,7 +9,11 @@ const test = {
     ],
 };
 async function run() {
-    const runner = new CoreRunner_1.CoreRunner({ executionMode: "stub" });
+    const runner = new CoreRunner_1.CoreRunner({
+        executionEngine: "testergizer",
+        executionIntent: "review",
+        validationMode: "strict"
+    });
     await runner.run(test);
     await runner.dispose();
 }

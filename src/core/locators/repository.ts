@@ -16,6 +16,12 @@ export class LocatorRepository {
     return new LocatorRepository(dict);
   }
 
+  // ✅ NEW: allow suite-level injected CLR
+  static fromDictionary(raw: unknown): LocatorRepository {
+    const dict = validateLocatorDictionary(raw);
+    return new LocatorRepository(dict);
+  }
+
   get(elementKey: string): LocatorDefinition | undefined {
     return this.dict[elementKey];
   }
@@ -25,7 +31,6 @@ export class LocatorRepository {
   }
 
   toJSON(): LocatorDictionary {
-    // read-only exposure: callers still can mutate their copy; that’s their problem.
     return this.dict;
   }
 }

@@ -131,6 +131,20 @@ a:hover {
   font-weight: 700;
 }
 
+/* ---------- Signal Strength ---------- */
+
+.summary-item.signal-item[data-signal^="-"] {
+  border-color: var(--danger, #f85149);
+}
+
+.summary-item.signal-item[data-signal="0"] {
+  opacity: 0.8;
+}
+
+.summary-item.signal-item:not([data-signal^="-"]) {
+  border-color: var(--success, #2ea043);
+}
+
 /* ---------- Actions ---------- */
 
 .actions {
@@ -552,4 +566,25 @@ pre.stack {
 
 .attempt-card {
   margin: 12px 0 12px 18px;
+}
+
+/* =========================
+   CLR target rendering
+   ========================= */
+.clr-block { margin-top: 6px; }
+.clr-secondary { margin-top: 4px; }
+
+.locator-resolution { margin-top: 6px; }
+.locator-resolution > summary { cursor: pointer; }
+
+.locator-resolution-body {
+  padding: 6px 10px;
+  border-left: 2px solid rgba(127,127,127,0.35);
+  margin-top: 6px;
+}
+
+.locator-attempts {
+  margin-top: 6px;
+  display: grid;
+  gap: 2px;
 }

@@ -5,6 +5,9 @@
   "resolveFrom": "..",
   "baseUrl": "https://www.saucedemo.com",
   "autVersion": "demo",
+  "clr": {
+    "path": "clr/clr.json"
+  },
   "tests": [
     {
       "id": "first-with-literals",

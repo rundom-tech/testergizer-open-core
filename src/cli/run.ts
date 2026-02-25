@@ -4,8 +4,7 @@ import path from "path";
 import { runSuiteFromFile } from "./runSuiteFromFile";
 import type {
   ExecutionEngine,
-  ExecutionIntent,
-  ValidationMode
+  ExecutionIntent
 } from "../core/types";
 
 export interface RunArgs {
@@ -19,6 +18,7 @@ export interface RunArgs {
   headless?: boolean;
   slowMoMs?: number;
   retries?: number;
+  workers?: number;
 }
 
 export async function run(args: RunArgs) {
@@ -26,7 +26,7 @@ export async function run(args: RunArgs) {
 }
 
 /* -----------------------------------------------------------
- * CLI Wrapper
+ * CLI Wrapper (direct invocation support)
  * ----------------------------------------------------------- */
 
 function getFlag(name: string): string | undefined {
@@ -92,6 +92,22 @@ if (require.main === module) {
       hasFlag("--headless") ? true :
       undefined;
 
+    const retries = getFlag("--retries")
+      ? Number(getFlag("--retries"))
+      : undefined;
+
+    const workers = getFlag("--workers")
+      ? Number(getFlag("--workers"))
+      : undefined;
+
+    if (workers !== undefined) {
+      if (!Number.isFinite(workers) || workers < 1) {
+        throw new Error(
+          `Invalid value for --workers. Must be a positive integer.`
+        );
+      }
+    }
+
     await run({
       suitePath,
       executionEngine: engine,
@@ -103,9 +119,8 @@ if (require.main === module) {
       slowMoMs: getFlag("--slowMo")
         ? Number(getFlag("--slowMo"))
         : undefined,
-      retries: getFlag("--retries")
-        ? Number(getFlag("--retries"))
-        : undefined
+      retries,
+      workers
     });
   })().catch((err) => {
     console.error(err);

@@ -17,9 +17,19 @@ yargs(hideBin(process.argv))
     type: "string",
     demandOption: true
 })
-    .option("mode", {
-    choices: ["stub", "execute", "baseline"],
-    default: "stub"
+    .option("engine", {
+    describe: "Execution engine",
+    choices: ["testergizer", "playwright"],
+    default: "testergizer"
+})
+    .option("intent", {
+    describe: "Execution intent",
+    choices: ["review", "verify", "baseline"]
+})
+    .option("debug", {
+    describe: "Allow debug-only behaviors (e.g., literals inside reusable executables)",
+    type: "boolean",
+    default: false
 })
     .option("headed", { type: "boolean" })
     .option("headless", { type: "boolean" })
@@ -36,13 +46,26 @@ yargs(hideBin(process.argv))
 })
     .option("slow-mo", { type: "number", alias: "slowMo" })
     .option("base-url", { type: "string", alias: "baseUrl" })
-    .option("debug", {
-    type: "boolean",
-    default: false,
-    describe: "Allow debug-only behaviors (e.g., literals inside reusable executables)"
-})
     .option("out", { type: "string" }), (args) => {
-    (0, run_1.run)(args).catch((err) => {
+    const headless = args.headed === true ? false :
+        args.headless === true ? true :
+            undefined;
+    const engine = args.engine;
+    const executionIntent = engine === "testergizer"
+        ? "review"
+        : args.intent ?? "verify";
+    const validationMode = args.debug ? "debug" : "strict";
+    const runArgs = {
+        suitePath: args.file,
+        executionEngine: engine,
+        executionIntent,
+        debug: args.debug,
+        headless,
+        retries: args.retries,
+        slowMoMs: args["slow-mo"],
+        baseUrl: args["base-url"]
+    };
+    (0, run_1.run)(runArgs).catch((err) => {
         console.error(err.message);
         process.exit(1);
     });

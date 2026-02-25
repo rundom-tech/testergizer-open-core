@@ -2,6 +2,37 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.2] – CLR Runtime & Report Surface Alignment
+
+### Added
+- Full runtime CLR resolution via logical element keys.
+- HTML report now renders CLR logical keys as primary step target.
+- Resolved locators displayed as collapsible implementation detail.
+
+### Changed
+- Steps using CLR targets now preserve semantic identity in run results.
+- Mixed-mode support retained: literal selectors remain supported when not defined in CLR.
+
+### Notes
+- No breaking changes.
+- Data-only migration required for tests moving from literal selectors to CLR keys.
+
+## [Unreleased] – 2026-02-23
+
+### Changed
+- CLR semantic shift completed.
+- `logicalKey` promoted to primary step identity across execution and reporting.
+- Locator demoted to execution adapter concern (no longer surfaced in reports).
+- Evidence structures aligned with model semantics.
+- `clr.json` introduced as resolution contract input for element location.
+- Schemas (`artifacts`, `results`) updated accordingly.
+- Examples updated to reflect logicalKey-first structure.
+
+### Notes
+- No architectural boundary crossings.
+- No execution model changes.
+- Deterministic evidence model preserved.
+
 ## [v1.2.0] – 2026-02-04
 
 ### Added

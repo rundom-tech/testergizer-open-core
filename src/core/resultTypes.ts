@@ -197,9 +197,15 @@ export interface TestResult {
 
 export interface RunSummary {
   total: number;
+
   passed: number;
   failed: number;
   aborted: number;
+
+  reviewed: number;
+
+  valid: number;
+  invalid: number;
 }
 
 export interface RunResult {
@@ -232,4 +238,6 @@ export interface RunResult {
 
   tests: TestResult[];
   summary: RunSummary;
+  suiteStatus: "valid" | "invalid" | "passed" | "failed";
+  signalStrength: number; // -100 to +100 normalized polarity metric
 }
