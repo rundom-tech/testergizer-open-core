@@ -28,7 +28,7 @@ import type {
 
 import { PlaywrightExecutor } from "./executors/PlaywrightExecutor";
 import type { StepExecutor } from "./executors/StepExecutor";
-import { StubExecutor } from "./executors/StubExecutor";
+import { TestergizerExecutor } from "./executors/TestergizerExecutor";
 
 import type {
   StepError,
@@ -146,7 +146,7 @@ export class CoreRunner {
 
     this.executor =
       this.engine === "testergizer"
-        ? new StubExecutor()
+        ? new TestergizerExecutor()
         : new PlaywrightExecutor();
 
     // Retry semantics:
