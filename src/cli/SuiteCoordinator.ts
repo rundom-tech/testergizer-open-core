@@ -1,4 +1,4 @@
-// src/cli/runSuiteFromFile.ts
+// src/cli/SuiteCoordinator.ts
 //
 // CHANGELOG (this file)
 //
@@ -23,12 +23,13 @@
 // - NEW (2026-02-11): Fixed Suite v2 branch referencing `resolvedBaseUrl`
 //   before initialization.
 
+import os from "os";
 import fs from "fs";
 import path from "path";
 import { randomUUID } from "crypto";
 import { pathToFileURL } from "url";
 
-import { CoreRunner } from "../core/CoreRunner";
+import { TestExecutor } from "../core/TestExecutor";
 import { JsonReporter } from "../tools/jsonReporter";
 import { HtmlReporter } from "../tools/htmlReporter";
 import {
@@ -51,6 +52,8 @@ import {
 import type { ExecutableDoc } from "./validate";
 import type { JsonTestDefinition, ExecutionEngine, ExecutionIntent, ValidationMode } from "../core/types";
 import type { RunResult, RunSummary, TestResult } from "../core/resultTypes";
+import { Orchestrator } from "../core/orchestration/Orchestrator";
+import type { ScheduledTask } from "../core/orchestration/types";
 
 
 /**
@@ -90,6 +93,12 @@ export interface RunSuiteOptions {
     command: string;
     cwd: string;
   };
+
+    /**
+   * Suite-level parallelism (orchestration workers).
+   * If undefined → sequential for now.
+   */
+  workers?: number;
 }
 
 
@@ -895,7 +904,7 @@ async function runOneTest(params: {
     steps: interpolatedSteps
   };
 
-  const runner = new CoreRunner({
+  const runner = new TestExecutor({
     executionEngine: options.executionEngine ?? "testergizer",
     headless: options.headless,
     slowMoMs: options.slowMoMs,
@@ -919,7 +928,7 @@ async function runOneTest(params: {
   });
 
 
-  const testResult = await runner.run(testDef);
+  const testResult = await runner.execute(testDef);
 
  const outDir = path.join(
   runOutDir,
@@ -935,8 +944,12 @@ async function runOneTest(params: {
 /* ============================================================
  * Public entrypoint
  * ============================================================ */
-
-export async function runSuiteFromFile(inputPath: string, options: RunSuiteOptions = {}) {
+export async function executeSuiteFromFile(inputPath: string, options: RunSuiteOptions = {}) {
+  if (options.workers !== undefined) {
+    console.log(`[suite] workers requested: ${options.workers}`);
+  }else {
+    console.log(`[suite] no workers option provided, defaulting to sequential execution`);
+  }
   const rootPath = path.resolve(inputPath);
   const root = loadJson(rootPath);
 
@@ -1074,13 +1087,34 @@ export async function runSuiteFromFile(inputPath: string, options: RunSuiteOptio
       const flowsDir = path.resolve(process.cwd(), "flows");
       const flows = loadAllExecutablesWithPaths(flowsDir);
 
-      // Execution loop (v2)
-      for (let i = 0; i < suite.tests.length; i++) {
-        const artifactObserver = createArtifactObserver({
-          runOutDir,
-          suiteId: suite.suiteId,
-          runId
-        });
+      type IndexedResult =
+        | {
+            index: number;
+            kind: "skipped";
+            testId: string;
+            testPath: string;
+            reason?: string;
+          }
+        | {
+            index: number;
+            kind: "invalid";
+            testId: string;
+            testPath: string;
+            phase: "compile";
+            reason: string;
+            stack?: string;
+          }
+        | {
+            index: number;
+            kind: "executed";
+            testResult: TestResult;
+            provenanceByStepId: Record<string, any>;
+            debugWarnings: any[];
+          };
+
+      async function processSuiteEntryAtIndex(
+        i: number
+      ): Promise<IndexedResult> {
 
         let normalized:
           | {
@@ -1098,14 +1132,15 @@ export async function runSuiteFromFile(inputPath: string, options: RunSuiteOptio
             resolveBase
           });
 
-          // CONTRACT: skip is intentional non-execution. It does not validate or execute.
+          // Skip case
           if (normalized.skip) {
-            skippedTests.push({
+            return {
+              index: i,
+              kind: "skipped",
               testId: normalized.testId,
               testPath: normalized.filePath,
               reason: normalized.skip.reason
-            });
-            continue;
+            };
           }
 
           if (!normalized.doc) {
@@ -1116,13 +1151,22 @@ export async function runSuiteFromFile(inputPath: string, options: RunSuiteOptio
 
           const { doc, filePath, testId, testParams } = normalized;
 
-          // Evidence correction: enforce suite-level id before execution.
           const effectiveDoc: ExecutableDoc = {
             ...doc,
             id: testId
           };
 
-          const { testResult: tr, provenanceByStepId, debugWarnings } = await runOneTest({
+          const artifactObserver = createArtifactObserver({
+            runOutDir,
+            suiteId: suite.suiteId,
+            runId
+          });
+
+          const {
+            testResult: tr,
+            provenanceByStepId,
+            debugWarnings
+          } = await runOneTest({
             suiteId: suite.suiteId,
             runId,
             runDateFolder,
@@ -1139,24 +1183,99 @@ export async function runSuiteFromFile(inputPath: string, options: RunSuiteOptio
             artifactObserver
           });
 
-          tests.push(tr);
-          provenanceByTestId[tr.id] = provenanceByStepId;
-          debugWarningsAll.push(...debugWarnings);
-        } catch (err: any) {
-          const fallbackId = normalized?.testId ?? `invalid-test-${i + 1}`;
-          const fallbackPath = normalized?.filePath ?? `${rootPath}#tests[${i}]`;
+          return {
+            index: i,
+            kind: "executed",
+            testResult: tr,
+            provenanceByStepId,
+            debugWarnings
+          };
 
-          invalidTests.push({
+        } catch (err: any) {
+
+          const fallbackId = normalized?.testId ?? `invalid-test-${i + 1}`;
+          const fallbackPath =
+            normalized?.filePath ?? `${rootPath}#tests[${i}]`;
+
+          return {
+            index: i,
+            kind: "invalid",
             testId: fallbackId,
             testPath: fallbackPath,
             phase: "compile",
             reason: `Validation/prepare failed: ${errorMessage(err)}`,
             stack: errorStack(err)
-          });
-
-          provenanceByTestId[fallbackId] = {};
-          continue;
+          };
         }
+      }
+
+      function commitIndexedResult(r: IndexedResult) {
+        if (r.kind === "skipped") {
+          skippedTests.push({
+            testId: r.testId,
+            testPath: r.testPath,
+            reason: r.reason
+          });
+          return;
+        }
+
+        if (r.kind === "invalid") {
+          invalidTests.push({
+            testId: r.testId,
+            testPath: r.testPath,
+            phase: r.phase,
+            reason: r.reason,
+            stack: r.stack
+          });
+          provenanceByTestId[r.testId] = {};
+          return;
+        }
+
+        // executed
+        tests.push(r.testResult);
+        provenanceByTestId[r.testResult.id] = r.provenanceByStepId;
+        debugWarningsAll.push(...r.debugWarnings);
+      }
+
+      // Execution loop (v2)
+      async function executeSequentially(): Promise<void> {
+        for (let i = 0; i < suite.tests.length; i++) {
+          const r = await processSuiteEntryAtIndex(i);
+          commitIndexedResult(r);
+        }
+      }     
+
+      async function executeInParallel(workers: number): Promise<void> {
+        // Build scheduled tasks
+        const tasks: ScheduledTask<IndexedResult>[] = suite.tests.map(
+          (_, i) => ({
+            index: i,
+            taskId: `suite-test-${i}`,
+            execute: async () => {
+              return await processSuiteEntryAtIndex(i);
+            }
+          })
+        );
+
+        const orchestrator = new Orchestrator({
+          parallelism: workers,
+          cpuCoresDetected: os.cpus().length
+        });
+
+        const orchestrationResult = await orchestrator.run(tasks);
+
+        // Deterministic commit
+        for (const item of orchestrationResult.items) {
+          commitIndexedResult(item);
+        }
+      }
+
+      const workers = options.workers ?? 1;
+
+      if (workers <= 1) {
+        await executeSequentially();
+      } else {
+        await executeInParallel(workers);
       }
 
       const endedAt = nowIso();

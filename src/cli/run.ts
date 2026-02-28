@@ -1,7 +1,7 @@
 // src/cli/run.ts
 
 import path from "path";
-import { runSuiteFromFile } from "./runSuiteFromFile";
+import { executeSuiteFromFile } from "./SuiteCoordinator";
 import type {
   ExecutionEngine,
   ExecutionIntent
@@ -24,7 +24,7 @@ export interface RunArgs {
 }
 
 export async function run(args: RunArgs) {
-  return runSuiteFromFile(args.suitePath, args);
+  return executeSuiteFromFile(args.suitePath, args);
 }
 
 /* -----------------------------------------------------------

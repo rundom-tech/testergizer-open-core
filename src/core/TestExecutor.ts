@@ -18,7 +18,7 @@ import {
 } from "playwright";
 
 import type {
-  CoreRunnerOptions,
+  CoreRunnerOptions as TestExecutorOptions,
   ExecutionEngine,
   ExecutionIntent,
   ValidationMode,
@@ -73,7 +73,7 @@ function pickBrowserType(name?: string): {
   return { projectId: "chromium", browserType: chromium };
 }
 
-function isHeadless(options: CoreRunnerOptions): boolean {
+function isHeadless(options: TestExecutorOptions): boolean {
   return options.headless ?? true;
 }
 
@@ -126,8 +126,8 @@ function instrumentationForAttempt(
   };
 }
 
-export class CoreRunner {
-  private readonly options: CoreRunnerOptions;
+export class TestExecutor {
+  private readonly options: TestExecutorOptions;
   private readonly engine: ExecutionEngine;
   private readonly executor: StepExecutor;
   private readonly retries: number;
@@ -139,7 +139,7 @@ export class CoreRunner {
   private clrInitialized = false;
   private locatorRepo?: LocatorRepository;
 
-  constructor(options: CoreRunnerOptions = {}) {
+  constructor(options: TestExecutorOptions = {}) {
     this.options = options;
 
     this.engine = options.executionEngine ?? "testergizer";
@@ -235,7 +235,7 @@ export class CoreRunner {
    * Owns its browser lifecycle.
    * Retries are handled mechanically.
    */
-  async run(test: JsonTestDefinition): Promise<TestResult> {
+  async execute(test: JsonTestDefinition): Promise<TestResult> {
     const testStartedAt = nowIso();
 
     // AUT version must be provided by suite (injected via JsonTestDefinition)

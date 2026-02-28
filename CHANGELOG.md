@@ -2,7 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.1.2] – CLR Runtime & Report Surface Alignment
+## [Unreleased] – Execution Core Stabilization & Deterministic Orchestration
+
+### Added
+- Bounded parallel orchestration with worker pool.
+- Deterministic result aggregation preserving suite order.
+- Proper worker degeneration: `--workers 1` behaves identically to sequential mode.
+
+### Changed
+- Removed legacy `runner.ts`.
+- Introduced `SuiteCoordinator` as single orchestration entry.
+- Introduced `TestExecutor` as isolated execution engine.
+- Clarified separation between orchestration and test execution.
+
+### Verified
+- Retry semantics preserved.
+- CLR resolution and reporting preserved.
+- Skip model remains compile-time.
+- Summary math and signal calculation intact.
+- Artifact escalation per retry intact.
+- No shared browser/context leakage across tests.
+
+## [Unreleased] – CLR Runtime & Report Surface Alignment
 
 ### Added
 - Full runtime CLR resolution via logical element keys.
