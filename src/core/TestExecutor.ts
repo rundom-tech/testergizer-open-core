@@ -1,4 +1,4 @@
-// src/core/CoreRunner.ts
+// src/core/TestExecutor.ts
 
 import { evaluateVersionCompatibility } from "./locators/clrVersionGuard";
 import { evaluateDomFingerprint } from "./locators/clrDomGuard";
