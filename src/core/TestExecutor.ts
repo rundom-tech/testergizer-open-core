@@ -51,6 +51,7 @@ import { resolveLocator } from "./locators/resolver";
 import { parseTarget } from "./locators/target";
 import { ClrSelector } from "./locators/types";
 
+import { ApiRepository, ApiDefinition } from "./api/ApiRepository";
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -139,6 +140,10 @@ export class TestExecutor {
   private clrInitialized = false;
   private locatorRepo?: LocatorRepository;
 
+  private apiDefinition?: ApiDefinition;
+  private apiRepo?: ApiRepository;
+  
+
   constructor(options: TestExecutorOptions = {}) {
     this.options = options;
 
@@ -166,69 +171,76 @@ export class TestExecutor {
   }
 
   private async initCLR(): Promise<void> {
-  if (this.clrInitialized) return;
+    if (this.clrInitialized) return;
 
-  // If suite did not provide CLR, do nothing.
-  // Suite-level governance decides whether CLR exists.
-  if (!this.clrDefinition) {
-    this.clrInitialized = true;
-    return;
-  }
+    // If suite did not provide CLR, do nothing.
+    // Suite-level governance decides whether CLR exists.
+    if (!this.clrDefinition) {
+      this.clrInitialized = true;
+      return;
+    }
 
-  const autVersion =
-    this.autVersion ??
-    (this.engine === "testergizer" ? "demo" : undefined);
+    const autVersion =
+      this.autVersion ??
+      (this.engine === "testergizer" ? "demo" : undefined);
 
-  if (this.engine !== "testergizer" && !autVersion) {
-    throw new Error(
-      "CLR_REQUIRED: autVersion must be provided for live execution"
-    );
-  }
+    if (this.engine !== "testergizer" && !autVersion) {
+      throw new Error(
+        "CLR_REQUIRED: autVersion must be provided for live execution"
+      );
+    }
 
-  const clrDef = this.clrDefinition;
+    const clrDef = this.clrDefinition;
 
-  const detectedAutVersion = autVersion ?? "demo";
+    const detectedAutVersion = autVersion ?? "demo";
 
-  const versionCheck = evaluateVersionCompatibility(clrDef, {
-    executionEngine: this.engine,
-    executionIntent: this.options.executionIntent ?? "verify",
-    validationMode: this.options.validationMode ?? "strict",
-    detectedAutVersion,
-    detectedDomFingerprint: undefined
-  });
-
-  if (versionCheck.status === "out_of_range") {
-    throw new Error(
-      `CLR_VERSION_MISMATCH: appId=${clrDef.appId} autVersion=${detectedAutVersion} range=${clrDef.versionRange}`
-    );
-  }
-
-  const domCheck = evaluateDomFingerprint(
-    clrDef.domFingerprint,
-    {
+    const versionCheck = evaluateVersionCompatibility(clrDef, {
       executionEngine: this.engine,
       executionIntent: this.options.executionIntent ?? "verify",
       validationMode: this.options.validationMode ?? "strict",
       detectedAutVersion,
       detectedDomFingerprint: undefined
-    }
-  );
+    });
 
-  if (domCheck.status === "drift") {
-    throw new Error(
-      `CLR_DOM_DRIFT: appId=${clrDef.appId} autVersion=${detectedAutVersion}`
+    if (versionCheck.status === "out_of_range") {
+      throw new Error(
+        `CLR_VERSION_MISMATCH: appId=${clrDef.appId} autVersion=${detectedAutVersion} range=${clrDef.versionRange}`
+      );
+    }
+
+    const domCheck = evaluateDomFingerprint(
+      clrDef.domFingerprint,
+      {
+        executionEngine: this.engine,
+        executionIntent: this.options.executionIntent ?? "verify",
+        validationMode: this.options.validationMode ?? "strict",
+        detectedAutVersion,
+        detectedDomFingerprint: undefined
+      }
     );
+
+    if (domCheck.status === "drift") {
+      throw new Error(
+        `CLR_DOM_DRIFT: appId=${clrDef.appId} autVersion=${detectedAutVersion}`
+      );
+    }
+
+    this.clrResolution = {
+      appId: clrDef.appId,
+      versionRange: clrDef.versionRange,
+      detectedAutVersion,
+      versionCheck
+    };
+
+    this.clrInitialized = true;
   }
 
-  this.clrResolution = {
-    appId: clrDef.appId,
-    versionRange: clrDef.versionRange,
-    detectedAutVersion,
-    versionCheck
-  };
+  private async initAPIRepo(test: JsonTestDefinition): Promise<void> {
+    if (!test.apiDefinition) return;
 
-  this.clrInitialized = true;
-}
+    this.apiDefinition = test.apiDefinition;
+    this.apiRepo = new ApiRepository(test.apiDefinition);
+  }
 
   /**
    * Execute exactly one test.
@@ -240,6 +252,7 @@ export class TestExecutor {
 
     // AUT version must be provided by suite (injected via JsonTestDefinition)
     await this.initCLR();
+    await this.initAPIRepo(test);
 
     const { projectId, browserType } = pickBrowserType(this.options.browserName);
 

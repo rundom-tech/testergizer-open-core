@@ -40,6 +40,10 @@ export interface JsonTestDefinition {
   /** Descriptive only; does not affect execution in Open Core */
   testDomain?: TestDomain;
   steps: JsonStep[];
+  apiDefinition?: {
+    baseUrl: string;
+    endpoints: Record<string, string>;
+  };
 }
 
 export interface JsonSuite {
