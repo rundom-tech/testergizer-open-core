@@ -569,10 +569,10 @@ pre.stack {
 }
 
 /* =========================
-   CLR target rendering
+   CTR target rendering
    ========================= */
-.clr-block { margin-top: 6px; }
-.clr-secondary { margin-top: 4px; }
+.ctr-block { margin-top: 6px; }
+.ctr-secondary { margin-top: 4px; }
 
 .locator-resolution { margin-top: 6px; }
 .locator-resolution > summary { cursor: pointer; }

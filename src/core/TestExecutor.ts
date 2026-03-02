@@ -1,7 +1,6 @@
 // src/core/TestExecutor.ts
-
-import { evaluateVersionCompatibility } from "./locators/clrVersionGuard";
-import { evaluateDomFingerprint } from "./locators/clrDomGuard";
+import { evaluateVersionCompatibility } from "./locators/ctrVersionGuard";
+import { evaluateDomFingerprint } from "./locators/ctrDomGuard";
 
 import fs from "fs";
 import path from "path";
@@ -18,7 +17,7 @@ import {
 } from "playwright";
 
 import type {
-  CoreRunnerOptions as TestExecutorOptions,
+  TestExecutorOptions as TestExecutorOptions,
   ExecutionEngine,
   ExecutionIntent,
   ValidationMode,
@@ -43,15 +42,18 @@ import type {
   RunSummary
 } from "./resultTypes";
 
-import { loadCLRFromFile } from "./locators/clrLoader";
-import { CLRDefinition } from "./locators/clrDefinition";
+import { loadCTRFromFile } from "./locators/ctrLoader";
+import { CTRDefinition } from "./locators/ctrDefinition";
 
 import { LocatorRepository } from "./locators/repository";
 import { resolveLocator } from "./locators/resolver";
 import { parseTarget } from "./locators/target";
 import { ClrSelector } from "./locators/types";
 
-import { ApiRepository, ApiDefinition } from "./api/ApiRepository";
+// Replace the old CentralTargetRegistry import with this:
+import { ApiTargetRegistry } from "./api/ApiRepository";
+import { ApiExecutable, ApiTargetDefinition } from "./api/types";
+import { ApiExecutor } from "./executors/ApiExecutor";
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -135,13 +137,13 @@ export class TestExecutor {
 
   // 🔽 NEW FIELDS (Step 2)
   private autVersion?: string;
-  private clrDefinition?: CLRDefinition;
-  private clrResolution?: any;
-  private clrInitialized = false;
+  private ctrDefinition?: CTRDefinition;
+  private ctrResolution?: any;
+  private ctrInitialized = false;
   private locatorRepo?: LocatorRepository;
 
-  private apiDefinition?: ApiDefinition;
-  private apiRepo?: ApiRepository;
+  private apiExecutable?: ApiExecutable;
+  private apiRepo?: ApiTargetRegistry; // <-- Renamed field for clarity
   
 
   constructor(options: TestExecutorOptions = {}) {
@@ -166,17 +168,17 @@ export class TestExecutor {
         ? 0
         : normalizeRetries((options as any).retries);
 
-    // 🔽 CLR autVersion injection
+    // 🔽 CTR autVersion injection
     this.autVersion = options.autVersion;
   }
 
-  private async initCLR(): Promise<void> {
-    if (this.clrInitialized) return;
+  private async initCTR(): Promise<void> {
+    if (this.ctrInitialized) return;
 
-    // If suite did not provide CLR, do nothing.
-    // Suite-level governance decides whether CLR exists.
-    if (!this.clrDefinition) {
-      this.clrInitialized = true;
+    // If suite did not provide CTR, do nothing.
+    // Suite-level governance decides whether CTR exists.
+    if (!this.ctrDefinition) {
+      this.ctrInitialized = true;
       return;
     }
 
@@ -186,15 +188,15 @@ export class TestExecutor {
 
     if (this.engine !== "testergizer" && !autVersion) {
       throw new Error(
-        "CLR_REQUIRED: autVersion must be provided for live execution"
+        "CTR_REQUIRED: autVersion must be provided for live execution"
       );
     }
 
-    const clrDef = this.clrDefinition;
+    const ctrDef = this.ctrDefinition;
 
     const detectedAutVersion = autVersion ?? "demo";
 
-    const versionCheck = evaluateVersionCompatibility(clrDef, {
+    const versionCheck = evaluateVersionCompatibility(ctrDef, {
       executionEngine: this.engine,
       executionIntent: this.options.executionIntent ?? "verify",
       validationMode: this.options.validationMode ?? "strict",
@@ -204,12 +206,12 @@ export class TestExecutor {
 
     if (versionCheck.status === "out_of_range") {
       throw new Error(
-        `CLR_VERSION_MISMATCH: appId=${clrDef.appId} autVersion=${detectedAutVersion} range=${clrDef.versionRange}`
+        `CTR_VERSION_MISMATCH: appId=${ctrDef.appId} autVersion=${detectedAutVersion} range=${ctrDef.versionRange}`
       );
     }
 
     const domCheck = evaluateDomFingerprint(
-      clrDef.domFingerprint,
+      ctrDef.domFingerprint,
       {
         executionEngine: this.engine,
         executionIntent: this.options.executionIntent ?? "verify",
@@ -221,25 +223,32 @@ export class TestExecutor {
 
     if (domCheck.status === "drift") {
       throw new Error(
-        `CLR_DOM_DRIFT: appId=${clrDef.appId} autVersion=${detectedAutVersion}`
+        `CTR_DOM_DRIFT: appId=${ctrDef.appId} autVersion=${detectedAutVersion}`
       );
     }
 
-    this.clrResolution = {
-      appId: clrDef.appId,
-      versionRange: clrDef.versionRange,
+    this.ctrResolution = {
+      appId: ctrDef.appId,
+      versionRange: ctrDef.versionRange,
       detectedAutVersion,
       versionCheck
     };
 
-    this.clrInitialized = true;
+    this.ctrInitialized = true;
   }
 
-  private async initAPIRepo(test: JsonTestDefinition): Promise<void> {
-    if (!test.apiDefinition) return;
-
-    this.apiDefinition = test.apiDefinition;
-    this.apiRepo = new ApiRepository(test.apiDefinition);
+  private async initAPIRepo(): Promise<void> {
+    this.apiRepo = new ApiTargetRegistry(); // <-- Renamed
+    
+    const injectedCtr = 
+      (this as any).ctrDefinition || 
+      (this as any).clrDefinition || 
+      (this.options as any).ctrDefinition || 
+      (this.options as any).clrDefinition;
+    
+    if (injectedCtr) {
+      this.apiRepo.loadFromObject(injectedCtr);
+    }
   }
 
   /**
@@ -251,8 +260,8 @@ export class TestExecutor {
     const testStartedAt = nowIso();
 
     // AUT version must be provided by suite (injected via JsonTestDefinition)
-    await this.initCLR();
-    await this.initAPIRepo(test);
+    await this.initCTR();
+    await this.initAPIRepo();
 
     const { projectId, browserType } = pickBrowserType(this.options.browserName);
 
@@ -331,10 +340,10 @@ export class TestExecutor {
           let status: StepStatus = isModelEngine ? "reviewed" : "passed";
 
           try {
-            // --- CLR resolution layer ---
+            // --- CTR resolution layer ---
             if (
               this.engine === "playwright" &&
-              this.clrDefinition &&
+              this.ctrDefinition &&
               typeof (step as any).target === "string"
             ) {
               const action = String((step as any).action);
@@ -355,7 +364,7 @@ export class TestExecutor {
                 if (looksLogical) {
                   if (!this.locatorRepo) {
                     this.locatorRepo = LocatorRepository.fromDictionary(
-                      (this.clrDefinition as any).locators
+                      (this.ctrDefinition as any).locators
                     );
                   }
 
@@ -364,7 +373,7 @@ export class TestExecutor {
 
                   if (!def) {
                     throw new Error(
-                      `CLR element "${parsed.elementKey}" not found. Available keys: ${this.locatorRepo.keys().join(", ")}`
+                      `CTR element "${parsed.elementKey}" not found. Available keys: ${this.locatorRepo.keys().join(", ")}`
                     );
                   }
 
@@ -393,7 +402,7 @@ export class TestExecutor {
                   );
 
                   if (!res.resolved || !res.resolvedBy) {
-                    throw new Error(`Failed to resolve CLR target: ${logicalTarget}`);
+                    throw new Error(`Failed to resolve CTR target: ${logicalTarget}`);
                   }
 
                   (step as any).target =
@@ -403,10 +412,59 @@ export class TestExecutor {
                 }
               }
             }
-            // --- end CLR resolution ---
+            // --- end CTR resolution ---
 
-            await this.executor.execute(step as JsonStep, page);
+            // 🔽 NEW API STEP ROUTING
+            if ((step.action as string) === "api-call") {
+              
+              // 1. Ensure the repository instance exists
+              if (!this.apiRepo) {
+                this.apiRepo = new ApiTargetRegistry(); // (Or ApiRepository if you kept the old name)
+              }
+              
+              // 2. Bulletproof CTR Extraction
+              // Gather all possible injection points from the Orchestrator
+              const possibleSources = [
+                (this as any).ctrDefinition,
+                (this as any).clrDefinition,
+                (this.options as any)?.ctrDefinition,
+                (this.options as any)?.clrDefinition
+              ];
 
+              // Isolate the one that actually contains the parsed REST payload
+              const validCtr = possibleSources.find(source => source && source.endpoints);
+
+              if (validCtr && (this.apiRepo as any).endpointsMap?.size === 0) {
+                this.apiRepo!.loadFromObject(validCtr); 
+              } else if (!validCtr) {
+                console.warn("[API Routing] CRITICAL: Orchestrator failed to pass parsed endpoints.");
+              }
+
+              const targetStr = String((step as any).target);
+              
+              // 3. Introspective check 
+              if (!this.apiRepo!.getEndpoint(targetStr)) {
+                const keys = Array.from((this.apiRepo as any).endpointsMap?.keys() || []).join(", ");
+                throw new Error(`[API Routing] Target '${targetStr}' missing. Available keys: [${keys}]`);
+              }
+              
+              // 4. Fire the native fetch
+              const apiEngine = new ApiExecutor(this.apiRepo!);
+              const apiResponse = await apiEngine.execute({
+                targetRef: targetStr,
+                method: (step as any).method || "GET",
+                payload: (step as any).payload
+              } as ApiExecutable, {}); 
+              
+              (step as any).target = { value: apiResponse.url, resolved: true };
+              (step as any).data = { value: apiResponse.status_code, masked: false };
+              status = "passed"; 
+
+            } else {
+              // Standard UI execution
+              await this.executor.execute(step as JsonStep, page);
+            }
+            // 🔼 END API STEP ROUTING
           } catch (err) {
             if (!isModelEngine) {
               status = "failed";
@@ -455,10 +513,10 @@ export class TestExecutor {
           const stepEndedAt = nowIso();
 
           // Normalize compiler/runtime passthroughs into report-friendly shapes.
-          // CLR semantics:
-          // - Preserve the original logical key (pre-execution) when it matches a CLR entry.
+          // CTR semantics:
+          // - Preserve the original logical key (pre-execution) when it matches a CTR entry.
           // - Keep the resolved selector in value (post-execution).
-          // - Derive resolution attempts/resolvedBy from CLR + resolved selector when possible.
+          // - Derive resolution attempts/resolvedBy from CTR + resolved selector when possible.
           const normalizedTarget: StepResult["target"] = (() => {
             const post: any = (step as any).target;
             const pre: any = rawTargetBefore;
@@ -476,17 +534,17 @@ export class TestExecutor {
             const nv = normalizePostValue();
             if (!nv) return undefined;
 
-            // Only treat string pre-targets as CLR logical keys if they exist in the loaded CLR.
+            // Only treat string pre-targets as CTR logical keys if they exist in the loaded CTR.
             const logicalCandidate = typeof pre === "string" ? pre : undefined;
-            const clrLocators: any = (this.clrDefinition as any)?.locators;
-            const clrEntry: any = logicalCandidate && clrLocators ? clrLocators[logicalCandidate] : undefined;
+            const ctrLocators: any = (this.ctrDefinition as any)?.locators;
+            const ctrEntry: any = logicalCandidate && ctrLocators ? ctrLocators[logicalCandidate] : undefined;
 
-            if (!clrEntry) {
-              // No CLR entry: keep legacy shape.
+            if (!ctrEntry) {
+              // No CTR entry: keep legacy shape.
               return { value: nv.value, resolved: nv.resolved };
             }
 
-            const selectors: any[] = Array.isArray(clrEntry.selectors) ? clrEntry.selectors : [];
+            const selectors: any[] = Array.isArray(ctrEntry.selectors) ? ctrEntry.selectors : [];
             const matchIdx = selectors.findIndex((s) => s && typeof s.value === "string" && s.value === nv.value);
 
             if (selectors.length === 0) {
@@ -520,7 +578,7 @@ export class TestExecutor {
               };
             }
 
-            // Resolved selector not found in CLR selectors list (unexpected, but keep report stable)
+            // Resolved selector not found in CTR selectors list (unexpected, but keep report stable)
             return {
               ...(logicalCandidate ? { logical: logicalCandidate } : {}),
               value: nv.value,

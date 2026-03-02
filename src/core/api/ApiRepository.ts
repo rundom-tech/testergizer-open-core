@@ -1,43 +1,35 @@
-export interface ApiDefinition {
-  baseUrl: string;
-  endpoints: Record<string, string>;
+export interface ApiTargetDefinition {
+  url: string;
+  defaultMethod?: string;
+  headers?: Record<string, string>;
+  [key: string]: any;
 }
 
-export class ApiRepository {
-  private readonly baseUrl: string;
-  private readonly endpoints: Record<string, string>;
+export class ApiTargetRegistry {
+  private endpointsMap: Map<string, ApiTargetDefinition> = new Map();
 
-  constructor(definition: ApiDefinition) {
-    if (!definition || typeof definition !== "object") {
-      throw new Error("Invalid apiDefinition: object expected.");
+  /**
+   * Loads ONLY API endpoints from an injected CTR document.
+   * UI locators are strictly ignored to preserve domain boundaries.
+   */
+  public loadFromObject(doc: any): void {
+    // 1. Guard against empty docs or docs without endpoints (like UI CTRs)
+    if (!doc || !doc.endpoints) {
+      return; 
     }
-
-    if (!definition.baseUrl || typeof definition.baseUrl !== "string") {
-      throw new Error("apiDefinition.baseUrl must be a non-empty string.");
+    
+    // 2. Map the endpoints directly to our internal memory using the exact target keys
+    for (const [key, val] of Object.entries(doc.endpoints)) {
+      this.endpointsMap.set(key, val as ApiTargetDefinition);
     }
-
-    if (!definition.endpoints || typeof definition.endpoints !== "object") {
-      throw new Error("apiDefinition.endpoints must be an object.");
-    }
-
-    this.baseUrl = definition.baseUrl;
-    this.endpoints = definition.endpoints;
+    
+    console.log(`[API] Loaded ${this.endpointsMap.size} REST targets. Boundaries secured.`);
   }
 
-  resolve(endpointKey: string): string {
-    const path = this.endpoints[endpointKey];
-
-    if (!path) {
-      const available = Object.keys(this.endpoints).join(", ");
-      throw new Error(
-        `API endpoint "${endpointKey}" not found. Available keys: ${available}`
-      );
-    }
-
-    return this.baseUrl.replace(/\/$/, "") + "/" + path.replace(/^\//, "");
-  }
-
-  keys(): string[] {
-    return Object.keys(this.endpoints);
+  /**
+   * Retrieves an API endpoint definition by its target reference ID.
+   */
+  public getEndpoint(targetRef: string): ApiTargetDefinition | undefined {
+    return this.endpointsMap.get(targetRef);
   }
 }

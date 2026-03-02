@@ -16,14 +16,14 @@ export async function resolveTargetWithEvidence<THandle>(args: {
 }): Promise<THandle> {
 
   const parsed = parseTarget(args.target);
-  const elementKey = parsed.elementKey;   // CLR logical key
+  const elementKey = parsed.elementKey;   // CTR logical key
   const context = parsed.context;
 
   const def = args.repo.get(elementKey);
 
   if (!def) {
     throw new Error(
-      `CLR element "${elementKey}" not found. Available keys: ${args.repo.keys().join(', ')}`
+      `CTR element "${elementKey}" not found. Available keys: ${args.repo.keys().join(', ')}`
     );
   }
 

@@ -81,7 +81,7 @@ export interface RunSuiteOptions {
   retries?: number;
 
   /**
-   * NEW: AUT version for CLR governance.
+   * NEW: AUT version for CTR governance.
    * If not provided, may fall back to suite JSON.
    */
   autVersion?: string;
@@ -834,6 +834,7 @@ async function runOneTest(params: {
   artifactsBaseDir: string;
   runOutDir: string;
   artifactObserver: ReturnType<typeof createArtifactObserver>;
+  ctrDefinition?: any; // 👈 NEW: Accept the CTR
 }): Promise<{
   testResult: TestResult;
   provenanceByStepId: Record<string, StepProvenance>;
@@ -924,7 +925,8 @@ async function runOneTest(params: {
     },
 
     artifactObserver,
-    autVersion: options.autVersion
+    autVersion: options.autVersion,
+    ctrDefinition: params.ctrDefinition
   });
 
 
@@ -1047,23 +1049,23 @@ export async function executeSuiteFromFile(inputPath: string, options: RunSuiteO
       const resolveBase = suite.resolveFrom ? path.resolve(suiteDir, suite.resolveFrom) : suiteDir;
 
       // ----------------------------------------------------
-      // CLR (Suite-Level) — referenced by suite.clr.path
+      // CTR (Suite-Level) — referenced by suite.ctr.path
       // ----------------------------------------------------
-      let clrDefinition: any | undefined;
+      let ctrDefinition: any | undefined;
 
-      if ((suite as any).clr?.path) {
-        const clrPath = path.resolve(resolveBase, (suite as any).clr.path);
-        if (fs.existsSync(clrPath)) {
-          clrDefinition = loadJson(clrPath);
+      if ((suite as any).ctr?.path) {
+        const ctrPath = path.resolve(resolveBase, (suite as any).ctr.path);
+        if (fs.existsSync(ctrPath)) {
+          ctrDefinition = loadJson(ctrPath);
         } else {
-          throw new Error(`CLR file not found: ${clrPath}`);
+          throw new Error(`CTR file not found: ${ctrPath}`);
         }
       }
 
-      const clrResolution = clrDefinition
+      const ctrResolution = ctrDefinition
         ? {
-            appId: clrDefinition.appId,
-            versionRange: clrDefinition.versionRange,
+            appId: ctrDefinition.appId,
+            versionRange: ctrDefinition.versionRange,
             detectedAutVersion: resolvedAutVersion ?? null
           }
         : undefined;
@@ -1180,7 +1182,8 @@ export async function executeSuiteFromFile(inputPath: string, options: RunSuiteO
             options: effectiveOptions,
             artifactsBaseDir,
             runOutDir,
-            artifactObserver
+            artifactObserver,
+            ctrDefinition
           });
 
           return {
@@ -1348,9 +1351,9 @@ export async function executeSuiteFromFile(inputPath: string, options: RunSuiteO
         signalStrength
       };
 
-      // Attach CLR (suite-level)
-      if (clrDefinition) (runResult as any).clrDefinition = clrDefinition;
-      if (clrResolution) (runResult as any).clrResolution = clrResolution;
+      // Attach CTR (suite-level)
+      if (ctrDefinition) (runResult as any).ctrDefinition = ctrDefinition;
+      if (ctrResolution) (runResult as any).ctrResolution = ctrResolution;
 
       (runResult as any).debugOnly = suiteDebugOnly || engine === "testergizer";
       (runResult as any).debugForced = debugForced;
@@ -1452,23 +1455,23 @@ export async function executeSuiteFromFile(inputPath: string, options: RunSuiteO
       const suiteDir = path.dirname(rootPath);
 
       // ----------------------------------------------------
-      // CLR (Suite-Level) — referenced by suite.clr.path
+      // CTR (Suite-Level) — referenced by suite.ctr.path
       // ----------------------------------------------------
-      let clrDefinition: any | undefined;
+      let ctrDefinition: any | undefined;
 
-      if ((suite as any).clr?.path) {
-        const clrPath = path.resolve(suiteDir, (suite as any).clr.path);
-        if (fs.existsSync(clrPath)) {
-          clrDefinition = loadJson(clrPath);
+      if ((suite as any).ctr?.path) {
+        const ctrPath = path.resolve(suiteDir, (suite as any).ctr.path);
+        if (fs.existsSync(ctrPath)) {
+          ctrDefinition = loadJson(ctrPath);
         } else {
-          throw new Error(`CLR file not found: ${clrPath}`);
+          throw new Error(`CTR file not found: ${ctrPath}`);
         }
       }
 
-      const clrResolution = clrDefinition
+      const ctrResolution = ctrDefinition
         ? {
-            appId: clrDefinition.appId,
-            versionRange: clrDefinition.versionRange,
+            appId: ctrDefinition.appId,
+            versionRange: ctrDefinition.versionRange,
             detectedAutVersion: resolvedAutVersion ?? null
           }
         : undefined;
@@ -1637,9 +1640,9 @@ export async function executeSuiteFromFile(inputPath: string, options: RunSuiteO
         signalStrength
       };
 
-      // Attach CLR (suite-level)
-      if (clrDefinition) (runResult as any).clrDefinition = clrDefinition;
-      if (clrResolution) (runResult as any).clrResolution = clrResolution;
+      // Attach CTR (suite-level)
+      if (ctrDefinition) (runResult as any).ctrDefinition = ctrDefinition;
+      if (ctrResolution) (runResult as any).ctrResolution = ctrResolution;
 
       (runResult as any).debugOnly = suiteDebugOnly || engine === "testergizer";
       (runResult as any).debugForced = debugForced;

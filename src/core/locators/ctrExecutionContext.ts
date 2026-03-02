@@ -1,4 +1,4 @@
-// src/core/locators/clrExecutionContext.ts
+// src/core/locators/ctrExecutionContext.ts
 
 import type {
   ExecutionEngine,
@@ -6,7 +6,7 @@ import type {
   ValidationMode
 } from "../types";
 
-export interface CLRExecutionContext {
+export interface CTRExecutionContext {
   executionEngine: ExecutionEngine;
   executionIntent: ExecutionIntent;
   validationMode: ValidationMode;

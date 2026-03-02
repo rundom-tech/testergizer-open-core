@@ -2,7 +2,8 @@
 // Core types and interfaces for test definitions, execution options, and artifact observation.
 export type ExecutionEngine =
   | "testergizer"
-  | "playwright";
+  | "playwright"
+  | "api"; // ← NEW: API testing engine
 
 export type ExecutionIntent =
   | "review"
@@ -62,7 +63,7 @@ export interface ArtifactObserver {
   append(entry: unknown): void;
 }
 
-export interface CoreRunnerOptions {
+export interface TestExecutorOptions {
   headless?: boolean;
   slowMoMs?: number;
   baseUrl?: string;
@@ -96,4 +97,5 @@ export interface CoreRunnerOptions {
 
   /** Optional append-only observer for artifacts (writes are performed by the CLI layer). */
   artifactObserver?: ArtifactObserver;
+  ctrDefinition?: any; // 👈 NEW: Accept the CTR definition for API testing
 }

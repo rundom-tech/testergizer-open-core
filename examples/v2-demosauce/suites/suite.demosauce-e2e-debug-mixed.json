@@ -5,8 +5,8 @@
   "resolveFrom": "..",
   "baseUrl": "https://www.saucedemo.com",
   "autVersion": "demo",
-  "clr": {
-    "path": "clr/clr.json"
+  "ctr": {
+    "path": "ctr/ctr.json"
   },
   "tests": [
     {

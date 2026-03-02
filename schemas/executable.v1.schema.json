@@ -3,10 +3,16 @@
   "title": "Testergizer Executable v1",
   "type": "object",
   "additionalProperties": true,
-  "required": ["id", "steps"],
+  "required": ["id"],
   "properties": {
     "id": { "type": "string", "minLength": 1 },
     "reusable": { "type": "boolean", "default": false },
+
+    "apiDefinition": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Used for API domain testing, bypassing traditional UI steps."
+    },
 
     "context": {
       "type": "object",
@@ -47,6 +53,11 @@
       }
     }
   },
+
+  "anyOf": [
+    { "required": ["steps"] },
+    { "required": ["apiDefinition"] }
+  ],
 
   "allOf": [
     {

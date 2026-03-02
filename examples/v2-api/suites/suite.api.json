@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "v2",
+  "suiteId": "api-sprint1",
+  "suiteName": "API Sprint 1 (Isolated Target)",
+  "resolveFrom": "..",
+  "baseUrl": "https://jsonplaceholder.typicode.com",
+  "ctr": {
+    "path": "ctr/endpoints.json"
+  },
+  "tests": [
+    {
+      "id": "run-get-user",
+      "testRef": "tests/get-user.json"
+    }
+  ]
+}

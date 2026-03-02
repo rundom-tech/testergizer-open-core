@@ -1,25 +1,25 @@
-// src/core/locators/clrVersionGuard.ts
+// src/core/locators/ctrVersionGuard.ts
 
 import { satisfies } from "semver";
-import type { CLRExecutionContext } from "./clrExecutionContext";
-import type { CLRDefinition } from "./clrDefinition";
+import type { CTRExecutionContext } from "./ctrExecutionContext";
+import type { CTRDefinition } from "./ctrDefinition";
 
-export type CLRVersionStatus =
+export type CTRVersionStatus =
   | "match"
   | "out_of_range"
   | "skipped";
 
-export interface CLRVersionCheckResult {
-  status: CLRVersionStatus;
+export interface CTRVersionCheckResult {
+  status: CTRVersionStatus;
   reason?: "engine_testergizer" | "demo_mode";
   detectedVersion?: string;
   expectedRange?: string;
 }
 
 export function evaluateVersionCompatibility(
-  definition: CLRDefinition,
-  context: CLRExecutionContext
-): CLRVersionCheckResult {
+  definition: CTRDefinition,
+  context: CTRExecutionContext
+): CTRVersionCheckResult {
 
   // Model mode → no real AUT
   if (context.executionEngine === "testergizer") {
@@ -30,7 +30,7 @@ export function evaluateVersionCompatibility(
     };
   }
 
-  // Demo CLR → version not applicable
+  // Demo CTR → version not applicable
   if (definition.versionRange === "demo") {
     return {
       status: "skipped",

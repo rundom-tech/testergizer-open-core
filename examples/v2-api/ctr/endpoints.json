@@ -1,0 +1,21 @@
+{
+  "id": "CTR-JSON-PLACEHOLDER",
+  "description": "API Targets for the JSONPlaceholder mock service",
+  "domain": "REST",
+  "endpoints": {
+    "T-USER-PROFILE": {
+      "url": "https://jsonplaceholder.typicode.com/users/{{userId}}",
+      "defaultMethod": "GET",
+      "headers": {
+        "Accept": "application/json"
+      }
+    },
+    "T-USER-POSTS": {
+      "url": "https://jsonplaceholder.typicode.com/posts",
+      "defaultMethod": "POST",
+      "headers": {
+        "Content-Type": "application/json; charset=UTF-8"
+      }
+    }
+  }
+}

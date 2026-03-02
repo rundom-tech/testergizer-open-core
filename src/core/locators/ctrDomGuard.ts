@@ -1,16 +1,16 @@
-// src/core/locators/clrDomGuard.ts
+// src/core/locators/ctrDomGuard.ts
 
-import type { CLRExecutionContext } from "./clrExecutionContext";
+import type { CTRExecutionContext } from "./ctrExecutionContext";
 
-export type CLRDomStatus =
+export type CTRDomStatus =
   | "match"
   | "drift"
   | "not_configured"
   | "not_implemented"
   | "skipped";
 
-export interface CLRDomCheckResult {
-  status: CLRDomStatus;
+export interface CTRDomCheckResult {
+  status: CTRDomStatus;
   reason?: "engine_testergizer";
   expectedFingerprint?: string;
   detectedFingerprint?: string;
@@ -18,8 +18,8 @@ export interface CLRDomCheckResult {
 
 export function evaluateDomFingerprint(
   expectedFingerprint: string | undefined,
-  context: CLRExecutionContext
-): CLRDomCheckResult {
+  context: CTRExecutionContext
+): CTRDomCheckResult {
   if (context.executionEngine === "testergizer") {
     return {
       status: "skipped",

@@ -1,0 +1,13 @@
+{
+  "id": "API-V2-001",
+  "name": "Verify JSONPlaceholder User Profile",
+  "testDomain": "api",
+  "steps": [
+    {
+      "id": "get-profile",
+      "action": "api-call",
+      "target": "T-USER-PROFILE",
+      "method": "GET"
+    }
+  ]
+}

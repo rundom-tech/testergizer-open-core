@@ -9,7 +9,7 @@
 # - Explicit workers (1,2,4,8)
 # - Sequential vs parallel structural parity
 # - Deterministic ordering
-# - CLR fail-fast
+# - CTR fail-fast
 # - v1 schema rejection
 #
 # Engine: testergizer (review only)
@@ -19,7 +19,7 @@ set +e
 
 ENGINE="testergizer"
 INTENT="review"
-SUITE="examples/v2-demosauce/suites/suite.demosauce-e2e-debug-full-clr.json"
+SUITE="examples/v2-demosauce/suites/suite.demosauce-e2e-debug-full-ctr.json"
 OUT_ROOT="artifacts/orch-matrix"
 
 WORKER_SET=("cpu" 1 2 4 8)
@@ -127,22 +127,22 @@ for W in "${WORKER_SET[@]}"; do
 done
 
 # ------------------------------------------------------------
-# CLR FAIL-FAST TEST
+# CTR FAIL-FAST TEST
 # ------------------------------------------------------------
 
 echo ""
-echo "================ CLR FAIL-FAST TEST ================"
+echo "================ CTR FAIL-FAST TEST ================"
 
-BAD_CLR_SUITE="examples/v2-demosauce/suites/suite.demosauce-e2e-debug.json"
+BAD_CTR_SUITE="examples/v2-demosauce/suites/suite.demosauce-e2e-debug.json"
 
-testergizer run "$BAD_CLR_SUITE" \
+testergizer run "$BAD_CTR_SUITE" \
   --engine "$ENGINE" \
   --intent "$INTENT"
 
 if [ $? -eq 0 ]; then
-  echo "FAIL: Missing CLR did not fail"
+  echo "FAIL: Missing CTR did not fail"
 else
-  echo "PASS: Missing CLR failed correctly"
+  echo "PASS: Missing CTR failed correctly"
 fi
 
 # ------------------------------------------------------------

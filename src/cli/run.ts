@@ -57,9 +57,10 @@ if (require.main === module) {
     const engine: ExecutionEngine =
       (engineRaw as ExecutionEngine) ?? "testergizer";
 
-    if (engine !== "testergizer" && engine !== "playwright") {
+    // 1. ADD "api" to the supported engine list
+    if (engine !== "testergizer" && engine !== "playwright" && engine !== "api") {
       throw new Error(
-        `Unsupported engine "${engine}". Supported: testergizer | playwright`
+        `Unsupported engine "${engine}". Supported: testergizer | playwright | api`
       );
     }
 
@@ -74,21 +75,22 @@ if (require.main === module) {
         );
       }
     } else {
+      // Handles both "playwright" and "api" engines
       intent = (intentRaw ?? "verify") as ExecutionIntent;
 
       if (intent === "review") {
         throw new Error(
-          `Intent "review" is not supported by engine "playwright".`
+          `Intent "review" is not supported by engine "${engine}".`
         );
       }
 
       if (intent !== "verify" && intent !== "baseline") {
         throw new Error(
-          `Unsupported intent "${intent}" for engine "playwright".`
+          `Unsupported intent "${intent}" for engine "${engine}".`
         );
       }
     }
-
+    
     const headless =
       hasFlag("--headed") ? false :
       hasFlag("--headless") ? true :

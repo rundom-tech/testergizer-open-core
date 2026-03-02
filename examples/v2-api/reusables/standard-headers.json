@@ -1,0 +1,11 @@
+{
+  "id": "R-HDR-STD",
+  "name": "Standard API Headers",
+  "version": "2.0",
+  "content": {
+    "Accept": "application/json",
+    "Content-Type": "application/json; charset=UTF-8",
+    "User-Agent": "Testergizer-Core/2.0 (Open-Source; Sprint-1)",
+    "X-Testergizer-Trace": "{{$guid}}"
+  }
+}

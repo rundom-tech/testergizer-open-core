@@ -1,8 +1,8 @@
-// src/core/locators/clrDefinition.ts
+// src/core/locators/ctrDefinition.ts
 
 import type { LocatorDictionary } from "./types";
 
-export interface CLRDefinition {
+export interface CTRDefinition {
   appId: string;
   versionRange: string;
   domFingerprint?: string;

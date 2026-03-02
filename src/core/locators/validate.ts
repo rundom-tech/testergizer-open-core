@@ -85,7 +85,7 @@ export function validateLocatorDictionary(
   raw: unknown
 ): Record<string, LocatorDefinition> {
   if (!raw || typeof raw !== "object") {
-    throw new Error("Invalid CLR locator dictionary.");
+    throw new Error("Invalid CTR locator dictionary.");
   }
 
   const result: Record<string, LocatorDefinition> = {};

@@ -31,7 +31,7 @@ yargs(hideBin(process.argv))
         })
         .option("engine", {
           describe: "Execution engine",
-          choices: ["testergizer", "playwright"],
+          choices: ["testergizer", "playwright", "api"], // <-- ADDED "api"
           default: "testergizer"
         })
         .option("intent", {

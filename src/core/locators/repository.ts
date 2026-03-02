@@ -16,7 +16,7 @@ export class LocatorRepository {
     return new LocatorRepository(dict);
   }
 
-  // ✅ NEW: allow suite-level injected CLR
+  // ✅ NEW: allow suite-level injected CTR
   static fromDictionary(raw: unknown): LocatorRepository {
     const dict = validateLocatorDictionary(raw);
     return new LocatorRepository(dict);

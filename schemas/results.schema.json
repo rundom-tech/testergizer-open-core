@@ -23,7 +23,7 @@
     "suiteId": { "type": "string" },
     "suiteName": { "type": "string" },
     "suitePath": { "type": "string" },
-    "executionEngine": { "type": "string", "enum": ["testergizer", "playwright"] },
+    "executionEngine": { "type": "string", "enum": ["testergizer", "playwright", "api"] },
     "executionIntent": { "type": "string", "enum": ["review", "verify", "baseline"] },
     "validationMode": { "type": "string", "enum": ["debug", "strict"] },
     "startedAt": { "type": "string", "format": "date-time" },
@@ -33,22 +33,7 @@
     "summary": { "$ref": "#/$defs/runSummary" },
     "suiteStatus": { "type": "string", "enum": ["valid", "invalid", "passed", "failed"] },
     "signalStrength": { "type": "number", "minimum": -100, "maximum": 100 },
-    "clrDefinition": {
-  "type": "object",
-  "description": "Suite-level Contract Locator Resolution definition as declared in the suite document.",
-  "additionalProperties": true
-    },
-    "clrResolution": {
-      "type": "object",
-      "description": "Resolved CLR context for this run (appId, versionRange, detectedAutVersion).",
-      "properties": {
-        "appId": { "type": "string" },
-        "versionRange": { "type": "string" },
-        "detectedAutVersion": { "type": ["string", "null"] }
-      },
-      "required": ["appId", "versionRange"],
-      "additionalProperties": true
-    }
+    
   },
   "$defs": {
     "testResult": {

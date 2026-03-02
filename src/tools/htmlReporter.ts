@@ -234,36 +234,36 @@ export class HtmlReporter {
     const provenanceByTestId: Record<string, Record<string, any>> =
       provenanceDoc && typeof provenanceDoc === "object" ? provenanceDoc.byTestId ?? {} : {};
 
-    // CLR helpers (report-level convenience)
+    // CTR helpers (report-level convenience)
     // Goal: when steps carry only raw selectors (e.g. Playwright),
-    // try to display CLR logical keys as primary and keep selectors as collapsible details.
-    const clrLocators: Record<string, any> | undefined =
-      (run as any).clrDefinition && typeof (run as any).clrDefinition === "object"
-        ? ((run as any).clrDefinition as any).locators
+    // try to display CTR logical keys as primary and keep selectors as collapsible details.
+    const ctrLocators: Record<string, any> | undefined =
+      (run as any).ctrDefinition && typeof (run as any).ctrDefinition === "object"
+        ? ((run as any).ctrDefinition as any).locators
         : undefined;
 
-    const clrSelectorToKeys = new Map<string, string[]>();
-    const clrKeyToSelectors = new Map<string, Array<{ using: string; value: string }>>();
+    const ctrSelectorToKeys = new Map<string, string[]>();
+    const ctrKeyToSelectors = new Map<string, Array<{ using: string; value: string }>>();
 
-    if (clrLocators && typeof clrLocators === "object") {
-      for (const [k, def] of Object.entries(clrLocators)) {
+    if (ctrLocators && typeof ctrLocators === "object") {
+      for (const [k, def] of Object.entries(ctrLocators)) {
         const sels: Array<{ using: string; value: string }> = Array.isArray((def as any).selectors)
           ? ((def as any).selectors as any[])
               .filter((s) => s && typeof s === "object" && typeof (s as any).using === "string" && typeof (s as any).value === "string")
               .map((s) => ({ using: String((s as any).using), value: String((s as any).value) }))
           : [];
 
-        if (sels.length) clrKeyToSelectors.set(k, sels);
+        if (sels.length) ctrKeyToSelectors.set(k, sels);
 
         for (const s of sels) {
           const add = (v: string) => {
             const vv = String(v);
             if (!vv) return;
-            const cur = clrSelectorToKeys.get(vv);
+            const cur = ctrSelectorToKeys.get(vv);
             if (cur) {
               if (!cur.includes(k)) cur.push(k);
             } else {
-              clrSelectorToKeys.set(vv, [k]);
+              ctrSelectorToKeys.set(vv, [k]);
             }
           };
 
@@ -287,15 +287,15 @@ export class HtmlReporter {
       if (!raw) return undefined;
 
       // Direct matches first, then normalized.
-      const direct = clrSelectorToKeys.get(raw);
+      const direct = ctrSelectorToKeys.get(raw);
       if (direct && direct.length) return [...direct].sort()[0];
 
       const normalized = normalizeSelectorForMatch(raw);
-      const normalizedHit = clrSelectorToKeys.get(normalized);
+      const normalizedHit = ctrSelectorToKeys.get(normalized);
       if (normalizedHit && normalizedHit.length) return [...normalizedHit].sort()[0];
 
       // Also try "css=" + value for Playwright-style raw CSS
-      const cssHit = clrSelectorToKeys.get(`css=${normalized}`);
+      const cssHit = ctrSelectorToKeys.get(`css=${normalized}`);
       if (cssHit && cssHit.length) return [...cssHit].sort()[0];
 
       return undefined;
@@ -450,7 +450,7 @@ export class HtmlReporter {
 
       const secondary =
         logical && value && logical !== value
-          ? `<div class="clr-secondary muted"><code>${esc(value)}</code></div>`
+          ? `<div class="ctr-secondary muted"><code>${esc(value)}</code></div>`
           : "";
 
       if (!attempts.length) return secondary;
@@ -468,7 +468,7 @@ export class HtmlReporter {
         .join("");
 
       return `
-        <div class="clr-block">
+        <div class="ctr-block">
           ${secondary}
           <details class="locator-resolution">
             <summary class="muted">Locator resolution</summary>
@@ -520,8 +520,8 @@ export class HtmlReporter {
           const rawSelector = opts.rawSelector ? String(opts.rawSelector) : undefined;
 
           const selectors =
-            logical && clrKeyToSelectors.has(logical)
-              ? (clrKeyToSelectors.get(logical) ?? [])
+            logical && ctrKeyToSelectors.has(logical)
+              ? (ctrKeyToSelectors.get(logical) ?? [])
               : [];
 
           const selectorList = selectors.length
@@ -574,7 +574,7 @@ export class HtmlReporter {
 
         const unresolved = t.resolved === false;
 
-        // If logical is missing but we have a selector value, try to infer CLR key from run.clrDefinition.locators.
+        // If logical is missing but we have a selector value, try to infer CTR key from run.ctrDefinition.locators.
         const inferred = !logical && value ? pickClrKeyForSelector(value) : undefined;
 
         const primary = logical ?? inferred ?? value;
@@ -1089,29 +1089,29 @@ export class HtmlReporter {
     `;
 
     // =========================
-    // CLR GOVERNANCE (runtime-only)
+    // CTR GOVERNANCE (runtime-only)
     // =========================
-    const clr = (run as any).clrResolution;
+    const ctr = (run as any).ctrResolution;
 
-    const clrSection = clr
+    const ctrSection = ctr
       ? `
       <div class="content">
         <details class="card" open>
           <summary class="card-title">
-            <span class="title">CLR governance</span>
-            <span class="badge badge-muted">clr</span>
+            <span class="title">CTR governance</span>
+            <span class="badge badge-muted">ctr</span>
           </summary>
           <div class="card-body mono run-meta">
-            <div><span class="k">App ID:</span> <span class="mono">${esc(clr.appId)}</span></div>
-            <div><span class="k">Version Range:</span> <span class="mono">${esc(clr.versionRange)}</span></div>
+            <div><span class="k">App ID:</span> <span class="mono">${esc(ctr.appId)}</span></div>
+            <div><span class="k">Version Range:</span> <span class="mono">${esc(ctr.versionRange)}</span></div>
             <div><span class="k">Detected AUT Version:</span> <span class="mono">${esc(
-              clr.detectedAutVersion ?? "-"
+              ctr.detectedAutVersion ?? "-"
             )}</span></div>
             <div><span class="k">Version Status:</span> <span class="mono">${esc(
-              clr.versionCheck?.status
+              ctr.versionCheck?.status
             )}</span></div>
             <div><span class="k">DOM Status:</span> <span class="mono">${esc(
-              clr.domCheck?.status
+              ctr.domCheck?.status
             )}</span></div>
           </div>
         </details>
@@ -1154,7 +1154,7 @@ export class HtmlReporter {
   <body>
     ${header}
     ${runMeta}
-    ${clrSection}
+    ${ctrSection}
     ${summaryHtml}
     ${debugBanner}
     ${invalidBanner}

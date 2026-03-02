@@ -31,9 +31,9 @@ export interface StepError {
 }
 
 /**
- * CLR-aware target metadata (optional, backwards compatible).
+ * CTR-aware target metadata (optional, backwards compatible).
  *
- * - logical: CLR key (semantic intent) e.g. "login.username.edit"
+ * - logical: CTR key (semantic intent) e.g. "login.username.edit"
  * - value: resolved selector value used at runtime e.g. "#user-name"
  * - resolvedBy / attempts: resolution diagnostics for report foldout
  */
@@ -61,13 +61,13 @@ export interface StepResult {
    *
    * Backwards compatible:
    * - Existing runs may only include { value, resolved? }.
-   * CLR-enhanced:
+   * CTR-enhanced:
    * - logical + resolvedBy + attempts enable report rendering as:
    *   logical key (primary) + expandable resolution section.
    */
   target?: {
     /**
-     * CLR logical key (semantic)
+     * CTR logical key (semantic)
      * e.g. login.username.edit
      */
     logical?: string;

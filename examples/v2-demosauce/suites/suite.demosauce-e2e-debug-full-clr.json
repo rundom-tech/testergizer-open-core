@@ -1,12 +1,12 @@
 {
   "schemaVersion": "v2",
-  "suiteId": "demosauce-e2e-debug-full-clr",
-  "suiteName": "DemoSauce E2E (Full CLR)",
+  "suiteId": "demosauce-e2e-debug-full-ctr",
+  "suiteName": "DemoSauce E2E (Full CTR)",
   "resolveFrom": "..",
   "baseUrl": "https://www.saucedemo.com",
   "autVersion": "demo",
-  "clr": {
-    "path": "clr/clr-full.json"
+  "ctr": {
+    "path": "ctr/ctr-full.json"
   },
   "tests": [
     {
@@ -20,7 +20,7 @@
     },
     {
       "id": "login-and-logout-success",
-      "testRef": "tests/test.login-and-logout-full-clr.json",
+      "testRef": "tests/test.login-and-logout-full-ctr.json",
       "params": {
         "USERNAME": "standard_user",
         "PASSWORD": "secret_sauce"
@@ -28,7 +28,7 @@
     },
     {
       "id": "login-and-logout-failure",
-      "testRef": "tests/test.login-and-logout-full-clr.json",
+      "testRef": "tests/test.login-and-logout-full-ctr.json",
       "params": {
         "USERNAME": "standard_user",
         "PASSWORD": "secret_cause"
