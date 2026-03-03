@@ -31,7 +31,7 @@ yargs(hideBin(process.argv))
         })
         .option("engine", {
           describe: "Execution engine",
-          choices: ["testergizer", "playwright", "api"], // <-- ADDED "api"
+          choices: ["testergizer", "playwright", "api"], 
           default: "testergizer"
         })
         .option("intent", {
@@ -74,7 +74,13 @@ yargs(hideBin(process.argv))
         })
         .option("slow-mo", { type: "number", alias: "slowMo" })
         .option("base-url", { type: "string", alias: "baseUrl" })
-        .option("out", { type: "string" }),
+        .option("out", { type: "string" })
+        // 👈 NEW: Expose the autVersion flag to the CLI
+        .option("aut-version", { 
+          type: "string", 
+          alias: "autVersion",
+          describe: "Detected Application Under Test (AUT) version for governance validation"
+        }),
     (args: any) => {
       const headless =
         args.headed === true ? false :
@@ -105,7 +111,8 @@ yargs(hideBin(process.argv))
         slowMoMs: args["slow-mo"],
         baseUrl: args["base-url"],
 
-        workers: args.workers
+        workers: args.workers,
+        autVersion: args.autVersion // 👈 NEW: Pass it down to the engine
       };
 
       run(runArgs).catch((err: Error) => {

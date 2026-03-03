@@ -263,7 +263,10 @@ export class TestExecutor {
     await this.initCTR();
     await this.initAPIRepo();
 
-    const { projectId, browserType } = pickBrowserType(this.options.browserName);
+    const { projectId: baseProjectId, browserType } = pickBrowserType(this.options.browserName);
+    
+    // Domain-aware project ID mapping
+    const projectId = this.engine === "api" ? "rest-api" : baseProjectId;
 
     const attempts: TestAttemptResult[] = [];
 
@@ -283,9 +286,11 @@ export class TestExecutor {
       let aborted: StepError | null = null;
 
       const isModelEngine = this.engine === "testergizer";
+      
+      // Bind UI artifacts strictly to Playwright
       const artifactsEnabled =
         this.options.artifacts?.enabled === true &&
-        this.engine !== "testergizer";
+        this.engine === "playwright";
 
       const attemptDir = artifactsEnabled
         ? path.join(
@@ -299,7 +304,8 @@ export class TestExecutor {
       const attemptStartedAt = nowIso();
 
       try {
-        if (this.engine !== "testergizer") {
+        // Only launch a browser if the engine is Playwright
+        if (this.engine === "playwright") {
           browser = await browserType.launch({
             headless: this.options.headless ?? true,
             slowMo: this.options.slowMoMs

@@ -343,22 +343,6 @@ export class HtmlReporter {
         (o) => o?.execution?.testId === testId && o?.execution?.attempt === attempt && o?.execution?.stepId === stepId
       );
 
-    /* const renderEvidenceLinks = (items: any[]) => {
-      if (!items.length) return "";
-      const links = items
-        .map((o) => {
-          const rel = String(o?.artifact?.path || "");
-          // Prefer relative paths in the report (so report remains portable inside the runOutDir)
-          const href = rel.startsWith(this.outputDir) ? rel.slice(this.outputDir.length + 1) : rel;
-          const label = o?.type ? String(o.type) : "evidence";
-          return `<a class="evidence" href="${esc(href)}" target="_blank" rel="noopener noreferrer">${esc(
-            label
-          )}</a>`;
-        })
-        .join(" ");
-      return `<div class="evidence-row">${links}</div>`;
-    }; */
-
     const renderEvidenceLinks = (items: any[]) => {
       if (!items.length) return "";
 
@@ -484,6 +468,7 @@ export class HtmlReporter {
     };
 
     const renderStepRow = (step: any, testId: string, attempt: number) => {
+      const isApi = run.executionEngine === "api";
       const errors = Array.isArray(step.errors) ? step.errors : [];
       const errHtml = errors.length
         ? `<details class="errors"><summary>${errors.length} error(s)</summary>${errors
@@ -519,6 +504,9 @@ export class HtmlReporter {
           const logical = opts.logical ? String(opts.logical) : undefined;
           const rawSelector = opts.rawSelector ? String(opts.rawSelector) : undefined;
 
+          const label = isApi ? "endpoint" : "locator";
+          const subLabel = isApi ? "url" : "selector";
+
           const selectors =
             logical && ctrKeyToSelectors.has(logical)
               ? (ctrKeyToSelectors.get(logical) ?? [])
@@ -534,14 +522,14 @@ export class HtmlReporter {
             : "";
 
           const rawLine = rawSelector
-            ? `<div class="mono"><span class="k">selector:</span> <code>${esc(rawSelector)}</code></div>`
+            ? `<div class="mono"><span class="k">${subLabel}:</span> <code>${esc(rawSelector)}</code></div>`
             : "";
 
           if (!rawLine && !selectorList) return "";
 
           return `
             <details class="target-more">
-              <summary class="muted mono">locator</summary>
+              <summary class="muted mono">${label}</summary>
               <div class="target-more-body">
                 ${rawLine}
                 ${selectorList}
@@ -593,7 +581,7 @@ export class HtmlReporter {
           </span>
           ${detailsLogical || value ? renderDetails({ logical: detailsLogical, rawSelector: value }) : ""}
         `;
-      })();;
+      })();
 
       const dataHtml = (() => {
         const forceMasked = isPasswordLikeFill(step);
@@ -604,7 +592,24 @@ export class HtmlReporter {
         if (dObj && typeof dObj === "object" && "value" in dObj) {
           const raw = sanitize((dObj as any).value);
           const masked = (dObj as any).masked === true || forceMasked;
-          const shown = masked ? "••••••" : String(raw);
+          let shown = masked ? "••••••" : String(raw);
+
+          // Semantic highlighting for API status codes
+          if (!masked && isApi && typeof raw === "number") {
+             const status = raw;
+             let colorClass = "badge-muted";
+             if (status >= 200 && status < 300) colorClass = "badge-passed";
+             else if (status >= 400) colorClass = "badge-failed";
+             else if (status >= 300) colorClass = "badge-aborted";
+
+             shown = `<span class="badge ${colorClass}">${status}</span>`;
+             return `
+               <span class="action-data ${masked ? "masked" : ""}">
+                 = ${shown}
+               </span>
+             `;
+          }
+
           return `
             <span class="action-data ${masked ? "masked" : ""}">
               = <code>${esc(shown)}</code>
@@ -806,6 +811,11 @@ export class HtmlReporter {
 
     const renderTestCard = (t: TestResult, idx: number) => {
       const attempts = Array.isArray((t as any).attempts) ? (t as any).attempts : [];
+      
+      const isApi = run.executionEngine === "api";
+      const engineLabel = isApi ? "engine: node" : `project: ${esc((t as any).projectId)}`;
+      const domainLabel = isApi ? "domain: REST API" : "";
+
       return `
         <details class="card" ${idx === 0 ? "open" : ""}>
           <summary>
@@ -815,9 +825,11 @@ export class HtmlReporter {
               <span class="muted mono">${esc((t as any).startedAt)} → ${esc((t as any).endedAt)}</span>
               <span class="mono">${esc(fmtMs((t as any).durationMs))}</span>
             </div>
-            <div class="card-meta mono">project: ${esc((t as any).projectId)} <span class="sep">|</span> attempts: ${esc(
-        attempts.length
-      )}</div>
+            <div class="card-meta mono">
+              ${engineLabel}
+              ${domainLabel ? `<span class="sep">|</span> ${domainLabel}` : ""}
+              <span class="sep">|</span> attempts: ${esc(attempts.length)}
+            </div>
           </summary>
 
           <div class="card-body">
@@ -889,7 +901,6 @@ export class HtmlReporter {
             `
         }
 
-        <!-- Signal Strength -->
         ${
           (() => {
             const signal = run.signalStrength ?? 0;
@@ -1088,12 +1099,15 @@ export class HtmlReporter {
       </div>
     `;
 
+    	// =========================
+    // CTR GOVERNANCE (Universal)
     // =========================
-    // CTR GOVERNANCE (runtime-only)
-    // =========================
-    const ctr = (run as any).ctrResolution;
+    const ctrRes = (run as any).ctrResolution;
+    const ctrDef = (run as any).ctrDefinition;
 
-    const ctrSection = ctr
+    const hasCtrData = ctrDef || ctrRes;
+
+    const ctrSection = hasCtrData
       ? `
       <div class="content">
         <details class="card" open>
@@ -1102,17 +1116,18 @@ export class HtmlReporter {
             <span class="badge badge-muted">ctr</span>
           </summary>
           <div class="card-body mono run-meta">
-            <div><span class="k">App ID:</span> <span class="mono">${esc(ctr.appId)}</span></div>
-            <div><span class="k">Version Range:</span> <span class="mono">${esc(ctr.versionRange)}</span></div>
+            ${ctrDef?.id ? `<div><span class="k">Registry ID:</span> <span class="mono">${esc(ctrDef.id)}</span></div>` : ""}
+            ${ctrDef?.domain ? `<div><span class="k">Domain:</span> <span class="mono">${esc(ctrDef.domain)}</span></div>` : ""}
+            <div><span class="k">App ID:</span> <span class="mono">${esc(ctrRes?.appId ?? ctrDef?.appId ?? "-")}</span></div>
+            <div><span class="k">Version Range:</span> <span class="mono">${esc(ctrRes?.versionRange ?? ctrDef?.versionRange ?? "-")}</span></div>
             <div><span class="k">Detected AUT Version:</span> <span class="mono">${esc(
-              ctr.detectedAutVersion ?? "-"
+              ctrRes?.detectedAutVersion ?? "-"
             )}</span></div>
             <div><span class="k">Version Status:</span> <span class="mono">${esc(
-              ctr.versionCheck?.status
+              ctrRes?.versionCheck?.status ?? "unmanaged"
             )}</span></div>
-            <div><span class="k">DOM Status:</span> <span class="mono">${esc(
-              ctr.domCheck?.status
-            )}</span></div>
+            ${ctrRes?.domCheck ? `<div><span class="k">DOM Status:</span> <span class="mono">${esc(ctrRes.domCheck.status)}</span></div>` : ""}
+            ${ctrDef?.endpoints ? `<div><span class="k">Endpoints Loaded:</span> <span class="mono">${Object.keys(ctrDef.endpoints).length}</span></div>` : ""}
           </div>
         </details>
       </div>
@@ -1144,10 +1159,8 @@ export class HtmlReporter {
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${esc(run.applicationName)} Automated Tests Run Report</title>
 
-    <!-- Base layout (structure, spacing, grids, typography) -->
     <link rel="stylesheet" href="${esc(layoutCssHref)}" />
 
-    <!-- Active theme (tokens only: colors, borders, accents) -->
     <link id="tg-theme" rel="stylesheet" href="${esc(defaultThemeHref)}" />
   </head>
 
@@ -1201,27 +1214,32 @@ export class HtmlReporter {
         var viewMenu = $('view-menu');
         var appearancePanel = $('appearance-panel');
 
+        // 1. Better target resolution (handles clicks on child elements)
+        var actionBtn = t.closest ? t.closest('[data-action]') : null;
+        var action = actionBtn ? actionBtn.getAttribute('data-action') : null;
+
         /* Expand / Collapse */
-        if (t.matches('[data-action="expand-all"]')) {
+        if (action === 'expand-all') {
           expandAll();
           return;
         }
 
-        if (t.matches('[data-action="collapse-all"]')) {
+        if (action === 'collapse-all') {
           collapseAll();
           return;
         }
 
         /* View ▾ button */
-        if (t.matches('[data-action="view"]')) {
+        if (action === 'view') {
           if (!viewMenu) return;
 
           if (viewMenu.hidden) {
             show(viewMenu);
-            var r = t.getBoundingClientRect();
+            var r = actionBtn.getBoundingClientRect();
             viewMenu.style.position = 'absolute';
-            viewMenu.style.top = (r.bottom + 6) + 'px';
-            viewMenu.style.left = r.left + 'px';
+            // 2. FIX: Include scroll offsets so menu doesn't fly away when scrolled down
+            viewMenu.style.top = (r.bottom + window.scrollY + 6) + 'px';
+            viewMenu.style.left = (r.left + window.scrollX) + 'px';
           } else {
             hide(viewMenu);
           }
@@ -1229,20 +1247,20 @@ export class HtmlReporter {
         }
 
         /* View → Appearance */
-        if (t.matches('[data-action="open-appearance"]')) {
+        if (action === 'open-appearance') {
           hide(viewMenu);
           show(appearancePanel);
           return;
         }
 
-        /* Click on backdrop closes appearance */
+        /* Click on backdrop closes appearance modal */
         if (t.classList.contains('ap-backdrop')) {
           hide(appearancePanel);
           return;
         }
 
         /* Click outside view menu closes it */
-        if (viewMenu && !viewMenu.contains(t) && !t.matches('[data-action="view"]')) {
+        if (viewMenu && !viewMenu.contains(t) && action !== 'view') {
           hide(viewMenu);
         }
       });
@@ -1270,14 +1288,12 @@ export class HtmlReporter {
 
     })();
     </script>
-    <!-- View menu (popup) -->
     <div id="view-menu" hidden>
       <button class="menu-item" data-action="open-appearance">
         Appearance
       </button>
     </div>
 
-    <!-- Appearance panel (floating) -->
     <div id="appearance-panel" hidden>
       <div class="ap-backdrop"></div>
       <div class="appearance-panel">
@@ -1286,6 +1302,7 @@ export class HtmlReporter {
           <div class="ap-label">Theme</div>
           <select id="ap-theme">
             <option value="default">Default</option>
+			<option value="light">Light</option>
             <option value="dark">Dark</option>
             <option value="high-contrast">High contrast</option>
           </select>

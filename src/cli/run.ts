@@ -21,6 +21,9 @@ export interface RunArgs {
 
   // NEW: orchestration scheduling
   workers?: number;
+  
+  // 👈 NEW: Governance injection
+  autVersion?: string;
 }
 
 export async function run(args: RunArgs) {
@@ -124,7 +127,8 @@ if (require.main === module) {
         ? Number(getFlag("--slowMo"))
         : undefined,
       retries,
-      workers
+      workers,
+      autVersion: getFlag("--autVersion") // 👈 NEW: Map the flag to the argument payload
     });
   })().catch((err) => {
     console.error(err);

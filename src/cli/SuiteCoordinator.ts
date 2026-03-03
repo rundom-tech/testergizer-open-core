@@ -29,6 +29,7 @@ import path from "path";
 import { randomUUID } from "crypto";
 import { pathToFileURL } from "url";
 
+import { evaluateVersionCompatibility } from "../core/locators/ctrVersionGuard";
 import { TestExecutor } from "../core/TestExecutor";
 import { JsonReporter } from "../tools/jsonReporter";
 import { HtmlReporter } from "../tools/htmlReporter";
@@ -1051,6 +1052,9 @@ export async function executeSuiteFromFile(inputPath: string, options: RunSuiteO
       // ----------------------------------------------------
       // CTR (Suite-Level) — referenced by suite.ctr.path
       // ----------------------------------------------------
+      // ----------------------------------------------------
+      // CTR (Suite-Level) — referenced by suite.ctr.path
+      // ----------------------------------------------------
       let ctrDefinition: any | undefined;
 
       if ((suite as any).ctr?.path) {
@@ -1062,11 +1066,24 @@ export async function executeSuiteFromFile(inputPath: string, options: RunSuiteO
         }
       }
 
+      let versionCheck: any = { status: "unmanaged" };
+
+      if (ctrDefinition && ctrDefinition.appId && ctrDefinition.versionRange) {
+        versionCheck = evaluateVersionCompatibility(ctrDefinition, {
+          executionEngine: engine,
+          executionIntent,
+          validationMode,
+          detectedAutVersion: resolvedAutVersion ?? "demo",
+          detectedDomFingerprint: undefined
+        });
+      }
+
       const ctrResolution = ctrDefinition
         ? {
             appId: ctrDefinition.appId,
             versionRange: ctrDefinition.versionRange,
-            detectedAutVersion: resolvedAutVersion ?? null
+            detectedAutVersion: resolvedAutVersion ?? null,
+            versionCheck
           }
         : undefined;
 
@@ -1318,9 +1335,12 @@ export async function executeSuiteFromFile(inputPath: string, options: RunSuiteO
         invalid
       });
 
+      // 👈 NEW: Domain-aware fallback
+      const fallbackProject = engine === "api" ? "rest-api" : "chromium";
+      
       const projectId =
         tests.length === 0
-          ? effectiveOptions.browserName ?? "chromium"
+          ? effectiveOptions.browserName ?? fallbackProject
           : tests.every((t) => t.projectId === tests[0].projectId)
           ? tests[0].projectId
           : "mixed";
@@ -1460,6 +1480,7 @@ export async function executeSuiteFromFile(inputPath: string, options: RunSuiteO
       let ctrDefinition: any | undefined;
 
       if ((suite as any).ctr?.path) {
+        // 👈 FIXED: Use suiteDir instead of resolveBase in the v1 block
         const ctrPath = path.resolve(suiteDir, (suite as any).ctr.path);
         if (fs.existsSync(ctrPath)) {
           ctrDefinition = loadJson(ctrPath);
@@ -1468,11 +1489,24 @@ export async function executeSuiteFromFile(inputPath: string, options: RunSuiteO
         }
       }
 
+      let versionCheck: any = { status: "unmanaged" };
+
+      if (ctrDefinition && ctrDefinition.appId && ctrDefinition.versionRange) {
+        versionCheck = evaluateVersionCompatibility(ctrDefinition, {
+          executionEngine: engine,
+          executionIntent,
+          validationMode,
+          detectedAutVersion: resolvedAutVersion ?? "demo",
+          detectedDomFingerprint: undefined
+        });
+      }
+
       const ctrResolution = ctrDefinition
         ? {
             appId: ctrDefinition.appId,
             versionRange: ctrDefinition.versionRange,
-            detectedAutVersion: resolvedAutVersion ?? null
+            detectedAutVersion: resolvedAutVersion ?? null,
+            versionCheck
           }
         : undefined;
 
@@ -1610,9 +1644,12 @@ export async function executeSuiteFromFile(inputPath: string, options: RunSuiteO
         invalid
       });
 
+      // 👈 NEW: Domain-aware fallback
+      const fallbackProject = engine === "api" ? "rest-api" : "chromium";
+      
       const projectId =
         tests.length === 0
-          ? effectiveOptions.browserName ?? "chromium"
+          ? effectiveOptions.browserName ?? fallbackProject
           : tests.every((t) => t.projectId === tests[0].projectId)
           ? tests[0].projectId
           : "mixed";

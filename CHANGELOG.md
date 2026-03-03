@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased] - 2026-03-03
+
+### Added
+- **Universal CTR Governance**: API test suites are now fully governed by the same version-control mechanics as Web UI tests.
+- **CLI AUT Version Injection**: Added support for the `--autVersion` flag (e.g., `--autVersion="1.5.0"`) to allow CI/CD pipelines to inject live API deployment versions for strict semantic version compatibility checks.
+- **API Assertion Schema**: Added the `expected` assertion block to the core JSON step schema to support upcoming HTTP response validation.
+
+### Changed
+- **Domain-Aware Reporting**: The HTML Report's "CTR governance" card now dynamically adapts its display based on the active test domain (showing DOM status for Web, and loaded endpoints for REST).
+- **Artifact Routing**: API test runs now output to a dedicated `rest-api` folder instead of defaulting to `chromium`.
+
+### Fixed
+- **Phantom Browser Launches**: Fixed an issue where the native-fetch API engine was unintentionally booting up a headless Playwright instance and provisioning empty UI artifact directories.
+
 ## [2026-03-02] - API Sprint 1: Live Execution & Domain Isolation
 ### Added
 API Execution Engine: Formally introduced the api engine as a first-class execution axis alongside testergizer and playwright.
