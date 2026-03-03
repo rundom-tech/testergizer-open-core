@@ -2,6 +2,33 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2026-03-02] - API Sprint 1: Live Execution & Domain Isolation
+### Added
+API Execution Engine: Formally introduced the api engine as a first-class execution axis alongside testergizer and playwright.
+
+Domain Isolation (REST): Implemented ApiTargetRegistry (isolated from LocatorRepository) to handle REST endpoints without leaking UI/Web logic.
+
+CLI Support: Updated index.ts (Yargs) and run.ts to support the --engine api flag.
+
+Orchestration Bridge: Enhanced SuiteCoordinator.ts to inject the ctrDefinition (targets) into the TestExecutor constructor.
+
+### Changed
+Deprecation: Formally renamed the internal CoreRunner references to TestExecutor and updated TestExecutorOptions to reflect the current architecture.
+
+Lazy Loading: Implemented lazy loading for API targets in TestExecutor.ts to ensure the registry populates exactly at the start of an api-call step.
+
+Result Telemetry: Updated the execution loop to capture real network data (Status Codes, URLs) and live durations for API actions.
+
+### Fixed
+Memory Starvation: Fixed a bug where the Orchestrator withheld CTR definitions from the engine during non-Playwright runs.
+
+Registry Mapping: Fixed a "Target not found" error by ensuring API targets map directly to keys without UI-style namespace prefixing.
+
+### Evidence
+Success Metric: Successfully verified a live GET request to JSONPlaceholder, capturing a real 404 status and 1.59s network duration.
+
+Report: Generated a valid HTML report under the api engine with passing steps and resolved targets.
+
 ## [Unreleased] – Execution Core Stabilization & Deterministic Orchestration
 
 ### Added
