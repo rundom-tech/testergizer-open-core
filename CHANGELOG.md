@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [API Sprint 2] - 2026-03-04
+
+### Added: The Assertion Engine (API Sprint 2)
+Decoupled Assertion Logic: Integrated the ApiExecutor as a standalone "Judge" that evaluates live HTTP responses against defined expectation blocks.
+
+Structured Assertions: Updated the ApiExecutable interface to support an array of ApiAssertion objects, allowing multiple checks per request.
+
+Native status_code Validation: Explicitly checks HTTP response codes (e.g., 200, 404, 201) and flags mismatches as failures.
+
+JSONPath Evaluation: Implemented a lightweight dot-notation parser to validate specific fields within deep JSON payloads (e.g., $.name, $.email).
+
+Execution Timing: Added sub-millisecond precision tracking using performance.now() to monitor API latency.
+
+### Fixed/Changed
+TestExecutor Routing: Refined the api-call action in TestExecutor.ts to map assertion failures directly into the main StepResult errors array, enabling native rendering in HTML reports.
+
+Artifact Isolation: Confirmed all REST domain results route strictly to the rest-api project ID, bypassing UI/Browser overhead.
+
 ## [Unreleased] - 2026-03-03
 
 ### Added

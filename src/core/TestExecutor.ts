@@ -425,11 +425,10 @@ export class TestExecutor {
               
               // 1. Ensure the repository instance exists
               if (!this.apiRepo) {
-                this.apiRepo = new ApiTargetRegistry(); // (Or ApiRepository if you kept the old name)
+                this.apiRepo = new ApiTargetRegistry(); 
               }
               
               // 2. Bulletproof CTR Extraction
-              // Gather all possible injection points from the Orchestrator
               const possibleSources = [
                 (this as any).ctrDefinition,
                 (this as any).clrDefinition,
@@ -437,7 +436,6 @@ export class TestExecutor {
                 (this.options as any)?.clrDefinition
               ];
 
-              // Isolate the one that actually contains the parsed REST payload
               const validCtr = possibleSources.find(source => source && source.endpoints);
 
               if (validCtr && (this.apiRepo as any).endpointsMap?.size === 0) {
@@ -454,23 +452,39 @@ export class TestExecutor {
                 throw new Error(`[API Routing] Target '${targetStr}' missing. Available keys: [${keys}]`);
               }
               
-              // 4. Fire the native fetch
+              // 4. Fire the native fetch with Assertions mapped!
               const apiEngine = new ApiExecutor(this.apiRepo!);
               const apiResponse = await apiEngine.execute({
+                id: step.id,
+                version: "2.0",
                 targetRef: targetStr,
                 method: (step as any).method || "GET",
-                payload: (step as any).payload
+                payload: (step as any).payload,
+                assertions: (step as any).assertions || [] // <-- Feeding the judge
               } as ApiExecutable, {}); 
               
               (step as any).target = { value: apiResponse.url, resolved: true };
               (step as any).data = { value: apiResponse.status_code, masked: false };
-              status = "passed"; 
+              
+              // 5. Evaluate the Judge's Verdict
+              if (apiResponse.passed) {
+                status = "passed"; 
+              } else {
+                status = "failed";
+                attemptFailed = true; // Marks the whole attempt as failed
+                // Push the assertion errors so they map directly to your HTML report
+                errors.push({
+                  reason: "AssertionFailure",
+                  message: apiResponse.assertionErrors.join(' \n ')
+                });
+              }
 
             } else {
               // Standard UI execution
               await this.executor.execute(step as JsonStep, page);
             }
             // 🔼 END API STEP ROUTING
+
           } catch (err) {
             if (!isModelEngine) {
               status = "failed";

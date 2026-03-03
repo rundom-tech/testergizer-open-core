@@ -6,7 +6,7 @@
   "versionRange": ">= 1.0.0 < 2.0.0", 
   "endpoints": {
     "T-USER-PROFILE": {
-      "url": "https://jsonplaceholder.typicode.com/users/{{userId}}",
+      "url": "https://jsonplaceholder.typicode.com/users/1",
       "defaultMethod": "GET",
       "headers": {
         "Accept": "application/json"

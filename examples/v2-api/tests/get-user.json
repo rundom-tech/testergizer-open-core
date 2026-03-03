@@ -7,7 +7,23 @@
       "id": "get-profile",
       "action": "api-call",
       "target": "T-USER-PROFILE",
-      "method": "GET"
+      "method": "GET",
+      "assertions": [
+        {
+          "check": "status_code",
+          "expected": 201
+        },
+        {
+          "check": "json_path",
+          "path": "$.name",
+          "expected": "Meir Bar-Tal"
+        },
+        {
+          "check": "json_path",
+          "path": "$.email",
+          "expected": "Sincere@april.biz"
+        }
+      ]
     }
   ]
 }
