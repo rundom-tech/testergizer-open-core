@@ -12,6 +12,38 @@ export class ApiExecutor {
   }
 
   /**
+   * Safely resolves a JSONPath string against a payload object.
+   * Supports standard dot notation ($.name) and array indices ($[0].userId).
+   */
+  private resolveJsonPath(payload: any, path: string): any {
+    if (!path) return undefined;
+    
+    // 1. Strip the root '$' if present
+    let normalized = path.startsWith('$') ? path.substring(1) : path;
+    
+    // 2. Strip leading dot if it exists (e.g., '$.name' became '.name')
+    if (normalized.startsWith('.')) {
+      normalized = normalized.substring(1);
+    }
+
+    // 3. Convert array brackets to dot notation (e.g., '[0].userId' -> '0.userId')
+    normalized = normalized.replace(/\[(\d+)\]/g, '.$1');
+
+    // 4. Handle edge case of leading dot after bracket replacement (e.g., '$[0]' -> '.0')
+    if (normalized.startsWith('.')) {
+      normalized = normalized.substring(1);
+    }
+
+    // If the path was just '$', return the whole payload
+    if (!normalized) return payload;
+
+    // 5. Traverse the object safely
+    return normalized.split('.').reduce((acc, part) => {
+      return acc !== undefined && acc !== null ? acc[part] : undefined;
+    }, payload);
+  }
+
+  /**
    * Executes the API test definition, evaluates assertions, and acts as the judge.
    * Now integrated with the Sprint 3 Variance Engine for dynamic data injection.
    */
@@ -85,16 +117,15 @@ export class ApiExecutor {
               break;
             }
 
-            // Lightweight dot-notation evaluator (strips leading "$." if present)
-            const cleanPath = assertion.path.startsWith('$.') 
-              ? assertion.path.slice(2) 
-              : assertion.path;
-            
-            const actualValue = cleanPath.split('.').reduce((acc, part) => acc && acc[part], body);
+            // USE THE ROBUST NORMALIZER INSTEAD OF THE LIGHTWEIGHT SPLIT
+            const actualValue = this.resolveJsonPath(body, assertion.path);
 
             // Using JSON.stringify for safe comparison of objects/arrays vs primitives
             if (JSON.stringify(actualValue) !== JSON.stringify(assertion.expected)) {
-              assertionErrors.push(`[json_path] Path '${assertion.path}' mismatch. Expected: ${JSON.stringify(assertion.expected)}, Actual: ${JSON.stringify(actualValue)}`);
+              // Ensure undefined is clearly reported instead of vanishing
+              const displayActual = actualValue === undefined ? "undefined" : JSON.stringify(actualValue);
+              const displayExpected = JSON.stringify(assertion.expected);
+              assertionErrors.push(`[json_path] Path '${assertion.path}' mismatch. Expected: ${displayExpected}, Actual: ${displayActual}`);
             }
             break;
 

@@ -18,6 +18,13 @@
       "headers": {
         "Content-Type": "application/json; charset=UTF-8"
       }
+    },
+    "T-USER-ALBUMS": {
+      "url": "https://jsonplaceholder.typicode.com/users/1/albums",
+      "defaultMethod": "GET",
+      "headers": {
+        "Accept": "application/json"
+      }
     }
   }
 }

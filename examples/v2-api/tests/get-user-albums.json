@@ -1,0 +1,17 @@
+{
+  "id": "api-004-user-albums",
+  "name": "Verify User Albums Retrieval",
+  "testDomain": "api",
+  "steps": [
+    {
+      "id": "step-get-albums",
+      "action": "api-call",
+      "target": "T-USER-ALBUMS",
+      "method": "GET",
+      "assertions": [
+        { "check": "status_code", "expected": 200 },
+        { "check": "json_path", "path": "$[0].userId", "expected": 1 }
+      ]
+    }
+  ]
+}

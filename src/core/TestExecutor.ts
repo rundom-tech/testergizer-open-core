@@ -457,8 +457,14 @@ export class TestExecutor {
                 assertions: (step as any).assertions || [] 
               } as ApiExecutable, initialVariables); 
               
+              // 1. Correctly map the Payload into the Step's data object
               (step as any).target = { value: apiResponse.url, resolved: true };
-              (step as any).data = { value: apiResponse.status_code, masked: false };
+              (step as any).data = { 
+                value: apiResponse.status_code, 
+                body: apiResponse.body,
+                headers: apiResponse.headers,
+                masked: false 
+              };
               
               if (apiResponse.passed) {
                 status = "passed"; 
@@ -592,9 +598,12 @@ export class TestExecutor {
             };
           })();
 
+          // 2. Ensure the full data object (including body) is preserved for the reporter
           const normalizedData = (() => {
             const d: any = (step as any).data;
-            if (d && typeof d === "object" && "value" in d) return d;
+            if (d && typeof d === "object" && "value" in d) {
+               return d; // Return the entire object so body/headers are passed through
+            }
 
             const v: any = (step as any).value ?? (step as any).input;
             if (v === undefined) return undefined;

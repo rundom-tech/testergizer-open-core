@@ -169,8 +169,6 @@ export class HtmlReporter {
       return `${m}m ${rs.toFixed(1)}s`;
     };
 
-    const isApi = run.executionEngine === "api";
-
     const resolveGotoUrl = (step: any): string | null => {
       if (String(step?.action).toLowerCase() !== "goto") return null;
 
@@ -470,6 +468,7 @@ export class HtmlReporter {
     };
 
     const renderStepRow = (step: any, testId: string, attempt: number) => {
+      const isApi = run.executionEngine === "api";
       const errors = Array.isArray(step.errors) ? step.errors : [];
       const errHtml = errors.length
         ? `<details class="errors"><summary>${errors.length} error(s)</summary>${errors
@@ -635,6 +634,41 @@ export class HtmlReporter {
         `;
       })();
 
+      // NEW BLOCK: Renders API headers and body payload securely from the step.data object
+      const payloadHtml = (() => {
+        if (!isApi) return "";
+        const dObj = (step as any).data;
+        if (!dObj) return "";
+
+        let parts = "";
+
+        if (dObj.headers && Object.keys(dObj.headers).length > 0) {
+          const hdrs = JSON.stringify(dObj.headers, null, 2);
+          parts += `
+            <details class="target-more" style="margin-top: 6px;">
+              <summary class="muted mono">headers</summary>
+              <div class="target-more-body" style="background: rgba(127,127,127,0.05); border-radius: 4px; padding: 8px;">
+                <pre class="mono" style="margin: 0; font-size: 11px; max-height: 200px; overflow-y: auto;">${esc(hdrs)}</pre>
+              </div>
+            </details>
+          `;
+        }
+
+        if (dObj.body !== undefined) {
+          const bodyStr = typeof dObj.body === 'object' ? JSON.stringify(dObj.body, null, 2) : String(dObj.body);
+          parts += `
+            <details class="target-more" style="margin-top: 6px;">
+              <summary class="muted mono">{ } payload</summary>
+              <div class="target-more-body" style="background: rgba(127,127,127,0.05); border-radius: 4px; padding: 8px;">
+                <pre class="mono" style="margin: 0; font-size: 11px; max-height: 400px; overflow-y: auto;">${esc(bodyStr)}</pre>
+              </div>
+            </details>
+          `;
+        }
+
+        return parts ? `<div class="api-response-details" style="margin-top: 8px; margin-left: 20px;">${parts}</div>` : "";
+      })();
+
       /*
        * ATTACH WARNING TO STEP
        * Inline reusable purity warnings (debug semantics).
@@ -693,7 +727,7 @@ export class HtmlReporter {
                   ${warningsHtml}
                   ${execHtml}
                 </div>
-                ${errHtml}
+                ${payloadHtml} ${errHtml}
                 ${evidence}
                 ${originHtml}
               </div>
@@ -721,7 +755,7 @@ export class HtmlReporter {
       headerBits.push(`<span class="muted mono">${esc((a as any).startedAt)} → ${esc((a as any).endedAt)}</span>`);
       headerBits.push(`<span class="mono">${esc(fmtMs((a as any).durationMs))}</span>`);
 
-      if (!isApi && (a as any).instrumentation) {
+      if ((a as any).instrumentation) {
         const ins = (a as any).instrumentation;
         const flags: string[] = [];
         if (ins.video) flags.push(`video=${ins.video.enabled ? "on" : "off"}`);
@@ -749,7 +783,7 @@ export class HtmlReporter {
         <details class="card attempt-card" ${(a as any).result !== "passed" ? "open" : ""}>
           <summary>
             <div class="card-title">
-              ${headerBits.join(" ")} <span class="state-icon"></span>
+              ${headerBits.join(" ")}
             </div>
           </summary>
 
@@ -813,6 +847,7 @@ export class HtmlReporter {
     const renderTestCard = (t: TestResult, idx: number) => {
       const attempts = Array.isArray((t as any).attempts) ? (t as any).attempts : [];
       
+      const isApi = run.executionEngine === "api";
       const engineLabel = isApi ? "engine: node" : `project: ${esc((t as any).projectId)}`;
       const domainLabel = isApi ? "domain: REST API" : "";
 
@@ -824,7 +859,6 @@ export class HtmlReporter {
               ${badge((t as any).result)}
               <span class="muted mono">${esc((t as any).startedAt)} → ${esc((t as any).endedAt)}</span>
               <span class="mono">${esc(fmtMs((t as any).durationMs))}</span>
-              <span class="state-icon"></span>
             </div>
             <div class="card-meta mono">
               ${engineLabel}
@@ -921,7 +955,7 @@ export class HtmlReporter {
         </div>
       </div>
     `;
-    
+
     const debugBanner = debugWarnings.length
       ? `
         <div class="content">
@@ -929,7 +963,6 @@ export class HtmlReporter {
             <summary class="card-title">
               <span class="title">Warnings & Notices</span>
               <span class="badge badge-warning">info</span>
-              <span class="state-icon"></span>
             </summary>
             <div class="card-body">
               <div class="debug-banner">
@@ -949,7 +982,6 @@ export class HtmlReporter {
             <summary class="card-title">
               <span class="title">Warnings & Notices</span>
               <span class="badge badge-warning">info</span>
-              <span class="state-icon"></span>
             </summary>
             <div class="card-body">
               ${invalidTests.length ? `<div class="debug-banner">⚠️ ${esc(invalidTests.length)} invalid test(s) detected during compile phase</div>` : ""}
@@ -985,8 +1017,7 @@ export class HtmlReporter {
     const list = `
       <div class="content">
         <div class="section-title">Tests</div>
-        ${tests.map((t: any, idx: number) => renderTestCard(t, idx)
-    ).join("")}
+        ${tests.map((t: any, idx: number) => renderTestCard(t, idx)).join("")}
       </div>
     `;
 
@@ -1003,7 +1034,6 @@ export class HtmlReporter {
                       <span class="title">${esc(t.testId)}</span>
                       <span class="badge badge-failed">invalid</span>
                       <span class="muted mono">compile</span>
-                      <span class="state-icon"></span>
                     </div>
                     <div class="card-meta mono">path: ${esc(t.testPath)}</div>
                   </summary>
@@ -1048,7 +1078,6 @@ export class HtmlReporter {
                       <span class="title">${esc(t.testId)}</span>
                       <span class="badge badge-skipped">skipped</span>
                       <span class="muted mono">intentional</span>
-                      <span class="state-icon"></span>
                     </div>
                     <div class="card-meta mono">path: ${esc(t.testPath)}</div>
                   </summary>
@@ -1091,16 +1120,8 @@ export class HtmlReporter {
             <div><span class="k">Execution engine:</span> <span class="mono">${esc(run.executionEngine)}</span></div>
             <div><span class="k">Execution intent:</span> <span class="mono">${esc(run.executionIntent)}</span></div>
             <div><span class="k">Validation mode:</span> <span class="mono">${esc(run.validationMode)}</span></div>
-            ${
-              (run as any).launch?.command
-                ? `<div><span class="k">Launch:</span> <span class="mono">${esc((run as any).launch.command)}</span></div>`
-                : ""
-            }
-            ${
-              (run as any).launch?.cwd
-                ? `<div><span class="k">Launch cwd:</span> <span class="mono">${esc((run as any).launch.cwd)}</span></div>`
-                : ""
-            }
+            ${(run as any).launch?.command ? `<div><span class="k">Launch:</span> <span class="mono">${esc((run as any).launch.command)}</span></div>` : ""}
+            ${(run as any).launch?.cwd ? `<div><span class="k">Launch cwd:</span> <span class="mono">${esc((run as any).launch.cwd)}</span></div>` : ""}
             <div><span class="k">Started at:</span> <span class="mono">${esc(run.startedAt)}</span></div>
             <div><span class="k">Ended at:</span> <span class="mono">${esc(run.endedAt)}</span></div>
             <div><span class="k">Duration:</span> <span class="mono">${fmtMs(run.durationMs)}</span></div>
@@ -1108,12 +1129,8 @@ export class HtmlReporter {
         </details>
     `;
 
-    	// =========================
-    // CTR GOVERNANCE (Universal)
-    // =========================
     const ctrRes = (run as any).ctrResolution;
     const ctrDef = (run as any).ctrDefinition;
-
     const hasCtrData = ctrDef || ctrRes;
 
     const ctrSectionInner = hasCtrData
@@ -1129,12 +1146,8 @@ export class HtmlReporter {
             ${ctrDef?.domain ? `<div><span class="k">Domain:</span> <span class="mono">${esc(ctrDef.domain)}</span></div>` : ""}
             <div><span class="k">App ID:</span> <span class="mono">${esc(ctrRes?.appId ?? ctrDef?.appId ?? "-")}</span></div>
             <div><span class="k">Version Range:</span> <span class="mono">${esc(ctrRes?.versionRange ?? ctrDef?.versionRange ?? "-")}</span></div>
-            <div><span class="k">Detected AUT Version:</span> <span class="mono">${esc(
-              ctrRes?.detectedAutVersion ?? "-"
-            )}</span></div>
-            <div><span class="k">Version Status:</span> <span class="mono">${esc(
-              ctrRes?.versionCheck?.status ?? "unmanaged"
-            )}</span></div>
+            <div><span class="k">Detected AUT Version:</span> <span class="mono">${esc(ctrRes?.detectedAutVersion ?? "-")}</span></div>
+            <div><span class="k">Version Status:</span> <span class="mono">${esc(ctrRes?.versionCheck?.status ?? "unmanaged")}</span></div>
             ${ctrRes?.domCheck ? `<div><span class="k">DOM Status:</span> <span class="mono">${esc(ctrRes.domCheck.status)}</span></div>` : ""}
             ${ctrDef?.endpoints ? `<div><span class="k">Endpoints Loaded:</span> <span class="mono">${Object.keys(ctrDef.endpoints).length}</span></div>` : ""}
           </div>
@@ -1161,11 +1174,6 @@ export class HtmlReporter {
       </div>
     `;
 
-    // NOTE:
-    // - report.html lives in artifacts/suiteId/date/runId/
-    // - repo root is ../../../../
-    // - base layout css currently lives under src/tools/
-    // - themes live under themes/<name>/theme.css
     const layoutCssHref = "../../../../src/tools/report.layout.css";
     const defaultThemeHref = "../../../../themes/default/theme.css";
 
@@ -1230,11 +1238,9 @@ export class HtmlReporter {
         var viewMenu = $('view-menu');
         var appearancePanel = $('appearance-panel');
 
-        // 1. Better target resolution (handles clicks on child elements)
         var actionBtn = t.closest ? t.closest('[data-action]') : null;
         var action = actionBtn ? actionBtn.getAttribute('data-action') : null;
 
-        /* Expand / Collapse */
         if (action === 'expand-all') {
           expandAll();
           return;
@@ -1245,7 +1251,6 @@ export class HtmlReporter {
           return;
         }
 
-        /* View ▾ button */
         if (action === 'view') {
           if (!viewMenu) return;
 
@@ -1253,7 +1258,6 @@ export class HtmlReporter {
             show(viewMenu);
             var r = actionBtn.getBoundingClientRect();
             viewMenu.style.position = 'absolute';
-            // 2. FIX: Include scroll offsets so menu doesn't fly away when scrolled down
             viewMenu.style.top = (r.bottom + window.scrollY + 6) + 'px';
             viewMenu.style.left = (r.left + window.scrollX) + 'px';
           } else {
@@ -1262,20 +1266,17 @@ export class HtmlReporter {
           return;
         }
 
-        /* View → Appearance */
         if (action === 'open-appearance') {
           hide(viewMenu);
           show(appearancePanel);
           return;
         }
 
-        /* Click on backdrop closes appearance modal */
         if (t.classList.contains('ap-backdrop')) {
           hide(appearancePanel);
           return;
         }
 
-        /* Click outside view menu closes it */
         if (viewMenu && !viewMenu.contains(t) && action !== 'view') {
           hide(viewMenu);
         }
