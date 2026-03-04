@@ -2,8 +2,8 @@
 
 All notable changes to this project will be documented in this file.
 
-## [API SPRINT 3] - 2026-03-04 (Data Variance
-)
+## [API SPRINT 3] - 2026-03-04 (Data Variance)
+
 ### Added
 - **Variance Engine**: Introduced `ExecutionContext` and `VarianceResolver` in `src/core/context/`.
 - **System Macros**: Added support for dynamic tokens like `{{$guid}}`, `{{$timestamp}}`, and `{{$isoDate}}`.
