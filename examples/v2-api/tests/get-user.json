@@ -11,12 +11,12 @@
       "assertions": [
         {
           "check": "status_code",
-          "expected": 201
+          "expected": 200
         },
         {
           "check": "json_path",
           "path": "$.name",
-          "expected": "Meir Bar-Tal"
+          "expected": "Leanne Graham"
         },
         {
           "check": "json_path",

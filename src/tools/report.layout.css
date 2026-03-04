@@ -588,3 +588,90 @@ pre.stack {
   display: grid;
   gap: 2px;
 }
+
+/* 🔽 NEW SEMANTIC & COSMETIC UPDATES */
+
+/* 1. State-aware Arrows */
+.card-title .state-icon {
+  margin-left: auto;
+  width: 20px;
+  text-align: center;
+}
+.card-title .state-icon::after {
+  content: '▼';
+  font-size: 10px;
+  opacity: 0.5;
+  transition: transform 0.2s;
+}
+details[open] > summary .state-icon::after {
+  content: '▲';
+}
+
+/* 2. Side-by-Side Metadata Layout */
+.metadata-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+@media (max-width: 768px) {
+  .metadata-grid { grid-template-columns: 1fr; }
+}
+
+/* 3. Dedicated Results Summary Box */
+.summary-container {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--panel-bg);
+  padding: 24px 20px;
+  margin-bottom: 24px;
+  /* Centers the inner wrapper */
+  display: flex;
+  justify-content: center; 
+}
+
+.summary-wrapper {
+  /* This is the magic bullet: forces it to ONLY be as wide as its content */
+  display: inline-flex; 
+  flex-direction: column;
+  /* Aligns the title with the left edge of the boxes */
+  align-items: flex-start; 
+}
+
+.summary-wrapper .section-title {
+  margin-top: 0;
+  margin-bottom: 16px;
+}
+
+.summary-box {
+  display: flex;
+  /* Fixed, tight spacing between the boxes */
+  gap: 16px; 
+  justify-content: flex-start !important; 
+}
+
+.summary-item {
+  /* Absolutely prevents the boxes from stretching to fill space */
+  flex: 0 0 auto !important;
+  min-width: 110px;
+}
+
+.summary-item .k {
+  display: block;
+  font-size: 12px;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.summary-item .v {
+  font-size: 24px;
+  font-weight: 800;
+}
+
+.signal-item[data-signal^="-"] { color: var(--danger); }
+.signal-item:not([data-signal^="-"]) { color: var(--success); }
+
+@media (max-width: 768px) {
+  .summary-box { flex-wrap: wrap; justify-content: center !important; }
+  .summary-wrapper { align-items: center; } /* Centers title on mobile */
+}

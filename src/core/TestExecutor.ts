@@ -1,4 +1,6 @@
 // src/core/TestExecutor.ts
+import { ExecutionContext } from "./context/ExecutionContext";
+import { VarianceResolver } from "./context/VarianceResolver";
 import { evaluateVersionCompatibility } from "./locators/ctrVersionGuard";
 import { evaluateDomFingerprint } from "./locators/ctrDomGuard";
 
@@ -118,7 +120,10 @@ function instrumentationForAttempt(
   executionEngine: ExecutionEngine,
   attemptNumber: number
 ): InstrumentationState | undefined {
-  if (executionEngine === "testergizer") return undefined;
+  // Semantic fix: API and Model engines do not support UI-based instrumentation
+  if (executionEngine === "api" || executionEngine === "testergizer") {
+    return undefined;
+  }
 
   const enabled = attemptNumber > 1;
 
@@ -135,7 +140,6 @@ export class TestExecutor {
   private readonly executor: StepExecutor;
   private readonly retries: number;
 
-  // 🔽 NEW FIELDS (Step 2)
   private autVersion?: string;
   private ctrDefinition?: CTRDefinition;
   private ctrResolution?: any;
@@ -143,7 +147,7 @@ export class TestExecutor {
   private locatorRepo?: LocatorRepository;
 
   private apiExecutable?: ApiExecutable;
-  private apiRepo?: ApiTargetRegistry; // <-- Renamed field for clarity
+  private apiRepo?: ApiTargetRegistry; 
   
 
   constructor(options: TestExecutorOptions = {}) {
@@ -156,27 +160,17 @@ export class TestExecutor {
         ? new TestergizerExecutor()
         : new PlaywrightExecutor();
 
-    // Retry semantics:
-    // - retries = number of *additional* attempts after the first one
-    // - maxAttempts = 1 + retries
-    // NOTE: retries are disabled for testergizer engine by policy.
-    //
-    // IMPORTANT: we normalize here because upstream CLI parsers may supply "2"
-    // (string) instead of 2 (number). Without this, retries silently become 0.
     this.retries =
       this.engine === "testergizer"
         ? 0
         : normalizeRetries((options as any).retries);
 
-    // 🔽 CTR autVersion injection
     this.autVersion = options.autVersion;
   }
 
   private async initCTR(): Promise<void> {
     if (this.ctrInitialized) return;
 
-    // If suite did not provide CTR, do nothing.
-    // Suite-level governance decides whether CTR exists.
     if (!this.ctrDefinition) {
       this.ctrInitialized = true;
       return;
@@ -238,7 +232,7 @@ export class TestExecutor {
   }
 
   private async initAPIRepo(): Promise<void> {
-    this.apiRepo = new ApiTargetRegistry(); // <-- Renamed
+    this.apiRepo = new ApiTargetRegistry(); 
     
     const injectedCtr = 
       (this as any).ctrDefinition || 
@@ -251,21 +245,19 @@ export class TestExecutor {
     }
   }
 
-  /**
-   * Execute exactly one test.
-   * Owns its browser lifecycle.
-   * Retries are handled mechanically.
-   */
   async execute(test: JsonTestDefinition): Promise<TestResult> {
     const testStartedAt = nowIso();
 
-    // AUT version must be provided by suite (injected via JsonTestDefinition)
     await this.initCTR();
     await this.initAPIRepo();
 
+    // Initialize execution context for Sprint 3
+    const initialVariables = (this.options as any).variables || {};
+    const executionContext = new ExecutionContext(initialVariables);
+    const varianceResolver = new VarianceResolver(executionContext);
+
     const { projectId: baseProjectId, browserType } = pickBrowserType(this.options.browserName);
     
-    // Domain-aware project ID mapping
     const projectId = this.engine === "api" ? "rest-api" : baseProjectId;
 
     const attempts: TestAttemptResult[] = [];
@@ -287,7 +279,6 @@ export class TestExecutor {
 
       const isModelEngine = this.engine === "testergizer";
       
-      // Bind UI artifacts strictly to Playwright
       const artifactsEnabled =
         this.options.artifacts?.enabled === true &&
         this.engine === "playwright";
@@ -304,7 +295,6 @@ export class TestExecutor {
       const attemptStartedAt = nowIso();
 
       try {
-        // Only launch a browser if the engine is Playwright
         if (this.engine === "playwright") {
           browser = await browserType.launch({
             headless: this.options.headless ?? true,
@@ -342,11 +332,23 @@ export class TestExecutor {
         for (const step of test.steps ?? []) {
           const stepStartedAt = nowIso();
           const rawTargetBefore: any = (step as any).target;
+
+          // SPRINT 3: Resolve Variance on Target and Data BEFORE domain execution
+          if (typeof (step as any).target === 'string') {
+            (step as any).target = varianceResolver.resolveString((step as any).target);
+          }
+          if ((step as any).data) {
+            (step as any).data = varianceResolver.resolveObject((step as any).data);
+          } else if ((step as any).value) {
+            (step as any).value = varianceResolver.resolveObject((step as any).value);
+          } else if ((step as any).input) {
+            (step as any).input = varianceResolver.resolveObject((step as any).input);
+          }
+
           const errors: StepError[] = [];
           let status: StepStatus = isModelEngine ? "reviewed" : "passed";
 
           try {
-            // --- CTR resolution layer ---
             if (
               this.engine === "playwright" &&
               this.ctrDefinition &&
@@ -418,17 +420,13 @@ export class TestExecutor {
                 }
               }
             }
-            // --- end CTR resolution ---
 
-            // 🔽 NEW API STEP ROUTING
             if ((step.action as string) === "api-call") {
               
-              // 1. Ensure the repository instance exists
               if (!this.apiRepo) {
                 this.apiRepo = new ApiTargetRegistry(); 
               }
               
-              // 2. Bulletproof CTR Extraction
               const possibleSources = [
                 (this as any).ctrDefinition,
                 (this as any).clrDefinition,
@@ -440,19 +438,15 @@ export class TestExecutor {
 
               if (validCtr && (this.apiRepo as any).endpointsMap?.size === 0) {
                 this.apiRepo!.loadFromObject(validCtr); 
-              } else if (!validCtr) {
-                console.warn("[API Routing] CRITICAL: Orchestrator failed to pass parsed endpoints.");
               }
 
               const targetStr = String((step as any).target);
               
-              // 3. Introspective check 
               if (!this.apiRepo!.getEndpoint(targetStr)) {
                 const keys = Array.from((this.apiRepo as any).endpointsMap?.keys() || []).join(", ");
                 throw new Error(`[API Routing] Target '${targetStr}' missing. Available keys: [${keys}]`);
               }
               
-              // 4. Fire the native fetch with Assertions mapped!
               const apiEngine = new ApiExecutor(this.apiRepo!);
               const apiResponse = await apiEngine.execute({
                 id: step.id,
@@ -460,19 +454,17 @@ export class TestExecutor {
                 targetRef: targetStr,
                 method: (step as any).method || "GET",
                 payload: (step as any).payload,
-                assertions: (step as any).assertions || [] // <-- Feeding the judge
-              } as ApiExecutable, {}); 
+                assertions: (step as any).assertions || [] 
+              } as ApiExecutable, initialVariables); 
               
               (step as any).target = { value: apiResponse.url, resolved: true };
               (step as any).data = { value: apiResponse.status_code, masked: false };
               
-              // 5. Evaluate the Judge's Verdict
               if (apiResponse.passed) {
                 status = "passed"; 
               } else {
                 status = "failed";
-                attemptFailed = true; // Marks the whole attempt as failed
-                // Push the assertion errors so they map directly to your HTML report
+                attemptFailed = true; 
                 errors.push({
                   reason: "AssertionFailure",
                   message: apiResponse.assertionErrors.join(' \n ')
@@ -480,10 +472,8 @@ export class TestExecutor {
               }
 
             } else {
-              // Standard UI execution
               await this.executor.execute(step as JsonStep, page);
             }
-            // 🔼 END API STEP ROUTING
 
           } catch (err) {
             if (!isModelEngine) {
@@ -525,18 +515,13 @@ export class TestExecutor {
                   }
                 });
               } catch {
-                // Evidence capture must not throw.
+                // ignore
               }
             }
           }
 
           const stepEndedAt = nowIso();
 
-          // Normalize compiler/runtime passthroughs into report-friendly shapes.
-          // CTR semantics:
-          // - Preserve the original logical key (pre-execution) when it matches a CTR entry.
-          // - Keep the resolved selector in value (post-execution).
-          // - Derive resolution attempts/resolvedBy from CTR + resolved selector when possible.
           const normalizedTarget: StepResult["target"] = (() => {
             const post: any = (step as any).target;
             const pre: any = rawTargetBefore;
@@ -547,20 +532,17 @@ export class TestExecutor {
               if (typeof post === "object" && typeof post.value === "string") {
                 return { value: post.value, resolved: post.resolved !== false };
               }
-              // Fallback (do not throw in reporter path)
               return { value: String(post), resolved: true };
             };
 
             const nv = normalizePostValue();
             if (!nv) return undefined;
 
-            // Only treat string pre-targets as CTR logical keys if they exist in the loaded CTR.
             const logicalCandidate = typeof pre === "string" ? pre : undefined;
             const ctrLocators: any = (this.ctrDefinition as any)?.locators;
             const ctrEntry: any = logicalCandidate && ctrLocators ? ctrLocators[logicalCandidate] : undefined;
 
             if (!ctrEntry) {
-              // No CTR entry: keep legacy shape.
               return { value: nv.value, resolved: nv.resolved };
             }
 
@@ -598,7 +580,6 @@ export class TestExecutor {
               };
             }
 
-            // Resolved selector not found in CTR selectors list (unexpected, but keep report stable)
             return {
               ...(logicalCandidate ? { logical: logicalCandidate } : {}),
               value: nv.value,
@@ -624,12 +605,9 @@ export class TestExecutor {
           stepResults.push({
             id: step.id,
             action: step.action,
-
-            // 🔽 REQUIRED passthroughs (compiler → runtime → report)
             group: (step as any).group,
             target: normalizedTarget,
             data: normalizedData,
-
             status,
             attempts: 1,
             errors,
@@ -642,7 +620,6 @@ export class TestExecutor {
         aborted = this.toStepError(err);
         attemptErrors.push(aborted);
       } finally {
-        // Trace stop must happen before context is closed.
         if (
           context &&
           artifactsEnabled &&
@@ -675,11 +652,10 @@ export class TestExecutor {
               await context.tracing.stop();
             }
           } catch {
-            // Evidence capture must not throw.
+            // ignore
           }
         }
 
-        // Close context to flush video files.
         const video = page?.video?.();
 
         if (context) {
@@ -690,7 +666,6 @@ export class TestExecutor {
           }
         }
 
-        // Video path is only reliably available after close.
         if (
           video &&
           artifactsEnabled &&
@@ -751,7 +726,7 @@ export class TestExecutor {
       );
 
       const cache: CacheState | undefined =
-        this.engine === "testergizer"
+        this.engine === "api" || this.engine === "testergizer"
           ? undefined
           : {
               mode: "enabled",
@@ -805,7 +780,7 @@ export class TestExecutor {
   }
 
   async dispose(): Promise<void> {
-    // no-op by design
+    // no-op
   }
 
   private toStepError(err: unknown): StepError {

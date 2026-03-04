@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [API SPRINT 3] - 2026-03-04 (Data Variance
+)
+### Added
+- **Variance Engine**: Introduced `ExecutionContext` and `VarianceResolver` in `src/core/context/`.
+- **System Macros**: Added support for dynamic tokens like `{{$guid}}`, `{{$timestamp}}`, and `{{$isoDate}}`.
+- **Diagnostic Logging**: Added resolved header logging to `ApiExecutor` for transparency.
+
+### Fixed
+- **Pre-processor Routing**: Updated `TestExecutor` to resolve logical targets (e.g., `{{userId}}`) before repository lookups, fixing UI resolution failures.
+- **Deep Resolution**: Enabled recursive placeholder swapping in nested JSON payloads and API headers.
+
 ## [API Sprint 2] - 2026-03-04
 
 ### Added: The Assertion Engine (API Sprint 2)

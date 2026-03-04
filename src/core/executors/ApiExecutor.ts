@@ -1,5 +1,8 @@
+// src/core/executors/ApiExecutor.ts
 import { ApiExecutable, ApiAssertion } from "../api/types";
 import { ApiTargetRegistry } from "../api/ApiRepository";
+import { ExecutionContext } from "../context/ExecutionContext";
+import { VarianceResolver } from "../context/VarianceResolver";
 
 export class ApiExecutor {
   private registry: ApiTargetRegistry;
@@ -10,31 +13,45 @@ export class ApiExecutor {
 
   /**
    * Executes the API test definition, evaluates assertions, and acts as the judge.
+   * Now integrated with the Sprint 3 Variance Engine for dynamic data injection.
    */
-  public async execute(test: ApiExecutable, variables: Record<string, string> = {}): Promise<any> {
-    // 1. Resolve target
+  public async execute(test: ApiExecutable, variables: Record<string, any> = {}): Promise<any> {
+    // 1. Initialize Context & Resolver
+    const context = new ExecutionContext(variables);
+    const resolver = new VarianceResolver(context);
+
+    // 2. Resolve target from the Registry
     const target = this.registry.getEndpoint(test.targetRef);
     if (!target) {
       throw new Error(`[API Executor] TargetRef '${test.targetRef}' not found in the CTR.`);
     }
 
-    // 2. Data Variance
-    const url = this.injectVariables(target.url, variables);
+    // 3. Domain-Agnostic Variance Resolution
+    // Resolves placeholders in URL (string), Headers (object), and Payload (object)
+    const url = resolver.resolveString(target.url);
     const method = test.method || target.defaultMethod || 'GET';
-    const headers = { ...target.headers }; 
+    
+    // Deep resolution of headers to support dynamic macros like {{$guid}}
+    const rawHeaders = target.headers ? { ...target.headers } : {};
+    const resolvedHeaders = resolver.resolveObject(rawHeaders);
+    
+    // Deep resolution of the JSON payload for data-driven testing
+    const payload = test.payload ? resolver.resolveObject(test.payload) : undefined;
 
+    // 4. Diagnostic Logging for Sprint 3 Verification
     console.log(`[API] Dispatching ${method} -> ${url}`);
+    console.log(`[API] Resolved Headers:`, JSON.stringify(resolvedHeaders, null, 2));
 
-    // 3. The Fetch Action & Timing
+    // 5. The Fetch Action & Timing
     const startTime = performance.now();
     const response = await fetch(url, {
       method,
-      headers,
-      body: test.payload ? JSON.stringify(test.payload) : undefined
+      headers: resolvedHeaders as Record<string, string>,
+      body: payload ? JSON.stringify(payload) : undefined
     });
     const durationMs = performance.now() - startTime;
 
-    // 4. Package Live Data
+    // 6. Package Live Data
     const status_code = response.status;
     const responseHeaders: Record<string, string> = {};
     response.headers.forEach((value, key) => {
@@ -49,7 +66,7 @@ export class ApiExecutor {
       body = { text: rawText };
     }
 
-    // 5. The Assertion Engine (The Judge)
+    // 7. The Assertion Engine (The Judge)
     const assertionErrors: string[] = [];
 
     if (test.assertions && test.assertions.length > 0) {
@@ -87,7 +104,7 @@ export class ApiExecutor {
       }
     }
 
-    // 6. Render Verdict
+    // 8. Render Verdict
     const passed = assertionErrors.length === 0;
 
     return {
@@ -99,15 +116,5 @@ export class ApiExecutor {
       url,
       assertionErrors 
     };
-  }
-
-  /**
-   * Replaces {{variableName}} in strings with the provided variance data.
-   */
-  private injectVariables(template: string, variables: Record<string, string>): string {
-    return template.replace(/\{\{([^}]+)\}\}/g, (_, key) => {
-      const cleanKey = key.trim();
-      return variables[cleanKey] !== undefined ? variables[cleanKey] : `{{${cleanKey}}}`;
-    });
   }
 }

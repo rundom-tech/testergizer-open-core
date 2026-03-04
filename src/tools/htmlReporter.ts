@@ -169,6 +169,8 @@ export class HtmlReporter {
       return `${m}m ${rs.toFixed(1)}s`;
     };
 
+    const isApi = run.executionEngine === "api";
+
     const resolveGotoUrl = (step: any): string | null => {
       if (String(step?.action).toLowerCase() !== "goto") return null;
 
@@ -468,7 +470,6 @@ export class HtmlReporter {
     };
 
     const renderStepRow = (step: any, testId: string, attempt: number) => {
-      const isApi = run.executionEngine === "api";
       const errors = Array.isArray(step.errors) ? step.errors : [];
       const errHtml = errors.length
         ? `<details class="errors"><summary>${errors.length} error(s)</summary>${errors
@@ -720,7 +721,7 @@ export class HtmlReporter {
       headerBits.push(`<span class="muted mono">${esc((a as any).startedAt)} → ${esc((a as any).endedAt)}</span>`);
       headerBits.push(`<span class="mono">${esc(fmtMs((a as any).durationMs))}</span>`);
 
-      if ((a as any).instrumentation) {
+      if (!isApi && (a as any).instrumentation) {
         const ins = (a as any).instrumentation;
         const flags: string[] = [];
         if (ins.video) flags.push(`video=${ins.video.enabled ? "on" : "off"}`);
@@ -748,7 +749,7 @@ export class HtmlReporter {
         <details class="card attempt-card" ${(a as any).result !== "passed" ? "open" : ""}>
           <summary>
             <div class="card-title">
-              ${headerBits.join(" ")}
+              ${headerBits.join(" ")} <span class="state-icon"></span>
             </div>
           </summary>
 
@@ -812,7 +813,6 @@ export class HtmlReporter {
     const renderTestCard = (t: TestResult, idx: number) => {
       const attempts = Array.isArray((t as any).attempts) ? (t as any).attempts : [];
       
-      const isApi = run.executionEngine === "api";
       const engineLabel = isApi ? "engine: node" : `project: ${esc((t as any).projectId)}`;
       const domainLabel = isApi ? "domain: REST API" : "";
 
@@ -824,6 +824,7 @@ export class HtmlReporter {
               ${badge((t as any).result)}
               <span class="muted mono">${esc((t as any).startedAt)} → ${esc((t as any).endedAt)}</span>
               <span class="mono">${esc(fmtMs((t as any).durationMs))}</span>
+              <span class="state-icon"></span>
             </div>
             <div class="card-meta mono">
               ${engineLabel}
@@ -863,59 +864,64 @@ export class HtmlReporter {
 
     const summary = run.summary;
     const summaryHtml = `
-      <div class="summary">
-        <div class="summary-item">
-          <span class="k">Total</span>
-          <span class="v">${esc(summary.total)}</span>
-        </div>
+      <div class="content">
+        <div class="summary-container">
+          <div class="summary-wrapper">
+            <div class="section-title" style="margin-top: 0;">Execution Summary</div>
+            <div class="summary-box">
+              <div class="summary-item">
+                <span class="k">Total</span>
+                <span class="v">${esc(summary.total)}</span>
+              </div>
 
-        ${
-          run.executionEngine === "testergizer"
-            ? `
-        <div class="summary-item">
-          <span class="k">Valid</span>
-          <span class="v">${esc(summary.valid)}</span>
-        </div>
-        <div class="summary-item">
-          <span class="k">Invalid</span>
-          <span class="v">${esc(summary.invalid)}</span>
-        </div>
-        <div class="summary-item">
-          <span class="k">Reviewed</span>
-          <span class="v">${esc(summary.reviewed)}</span>
-        </div>
-            `
-            : `
-        <div class="summary-item">
-          <span class="k">Passed</span>
-          <span class="v">${esc(summary.passed)}</span>
-        </div>
-        <div class="summary-item">
-          <span class="k">Failed</span>
-          <span class="v">${esc(summary.failed)}</span>
-        </div>
-        <div class="summary-item">
-          <span class="k">Aborted</span>
-          <span class="v">${esc(summary.aborted)}</span>
-        </div>
-            `
-        }
+              ${
+                run.executionEngine === "testergizer"
+                  ? `
+              <div class="summary-item">
+                <span class="k">Valid</span>
+                <span class="v">${esc(summary.valid)}</span>
+              </div>
+              <div class="summary-item">
+                <span class="k">Invalid</span>
+                <span class="v">${esc(summary.invalid)}</span>
+              </div>
+              <div class="summary-item">
+                <span class="k">Reviewed</span>
+                <span class="v">${esc(summary.reviewed)}</span>
+              </div>
+                  `
+                  : `
+              <div class="summary-item">
+                <span class="k">Passed</span>
+                <span class="v">${esc(summary.passed)}</span>
+              </div>
+              <div class="summary-item">
+                <span class="k">Failed</span>
+                <span class="v">${esc(summary.failed)}</span>
+              </div>
+              <div class="summary-item">
+                <span class="k">Aborted</span>
+                <span class="v">${esc(summary.aborted)}</span>
+              </div>
+                  `
+              }
 
-        ${
-          (() => {
-            const signal = run.signalStrength ?? 0;
-            const sign = signal > 0 ? "+" : "";
-            return `
-        <div class="summary-item signal-item" data-signal="${signal}">
-          <span class="k">Signal</span>
-          <span class="v">${sign}${signal}%</span>
+              ${(() => {
+                const signal = run.signalStrength ?? 0;
+                const sign = signal > 0 ? "+" : "";
+                return `
+              <div class="summary-item signal-item" data-signal="${signal}">
+                <span class="k">Signal</span>
+                <span class="v">${sign}${signal}%</span>
+              </div>
+                `;
+              })()}
+            </div>
+          </div>
         </div>
-            `;
-          })()
-        }
       </div>
     `;
-
+    
     const debugBanner = debugWarnings.length
       ? `
         <div class="content">
@@ -923,6 +929,7 @@ export class HtmlReporter {
             <summary class="card-title">
               <span class="title">Warnings & Notices</span>
               <span class="badge badge-warning">info</span>
+              <span class="state-icon"></span>
             </summary>
             <div class="card-body">
               <div class="debug-banner">
@@ -942,6 +949,7 @@ export class HtmlReporter {
             <summary class="card-title">
               <span class="title">Warnings & Notices</span>
               <span class="badge badge-warning">info</span>
+              <span class="state-icon"></span>
             </summary>
             <div class="card-body">
               ${invalidTests.length ? `<div class="debug-banner">⚠️ ${esc(invalidTests.length)} invalid test(s) detected during compile phase</div>` : ""}
@@ -995,6 +1003,7 @@ export class HtmlReporter {
                       <span class="title">${esc(t.testId)}</span>
                       <span class="badge badge-failed">invalid</span>
                       <span class="muted mono">compile</span>
+                      <span class="state-icon"></span>
                     </div>
                     <div class="card-meta mono">path: ${esc(t.testPath)}</div>
                   </summary>
@@ -1039,6 +1048,7 @@ export class HtmlReporter {
                       <span class="title">${esc(t.testId)}</span>
                       <span class="badge badge-skipped">skipped</span>
                       <span class="muted mono">intentional</span>
+                      <span class="state-icon"></span>
                     </div>
                     <div class="card-meta mono">path: ${esc(t.testPath)}</div>
                   </summary>
@@ -1065,12 +1075,12 @@ export class HtmlReporter {
       </div>
     `;
 
-    const runMeta = `
-      <div class="content">
+    const runMetaInner = `
         <details class="card" open>
           <summary class="card-title">
             <span class="title">Run metadata</span>
             <span class="badge badge-muted">run</span>
+            <span class="state-icon"></span>
           </summary>
           <div class="card-body mono run-meta">
             <div><span class="k">Suite:</span> <span class="mono">${esc(run.suiteId)}</span></div>
@@ -1096,7 +1106,6 @@ export class HtmlReporter {
             <div><span class="k">Duration:</span> <span class="mono">${fmtMs(run.durationMs)}</span></div>
           </div>
         </details>
-      </div>
     `;
 
     	// =========================
@@ -1107,13 +1116,13 @@ export class HtmlReporter {
 
     const hasCtrData = ctrDef || ctrRes;
 
-    const ctrSection = hasCtrData
+    const ctrSectionInner = hasCtrData
       ? `
-      <div class="content">
         <details class="card" open>
           <summary class="card-title">
             <span class="title">CTR governance</span>
             <span class="badge badge-muted">ctr</span>
+            <span class="state-icon"></span>
           </summary>
           <div class="card-body mono run-meta">
             ${ctrDef?.id ? `<div><span class="k">Registry ID:</span> <span class="mono">${esc(ctrDef.id)}</span></div>` : ""}
@@ -1130,9 +1139,17 @@ export class HtmlReporter {
             ${ctrDef?.endpoints ? `<div><span class="k">Endpoints Loaded:</span> <span class="mono">${Object.keys(ctrDef.endpoints).length}</span></div>` : ""}
           </div>
         </details>
-      </div>
       `
       : "";
+
+    const metadataGridHtml = `
+      <div class="content">
+        <div class="metadata-grid">
+          ${runMetaInner}
+          ${ctrSectionInner}
+        </div>
+      </div>
+    `;
 
     const actions = `
       <div class="actions">
@@ -1166,8 +1183,7 @@ export class HtmlReporter {
 
   <body>
     ${header}
-    ${runMeta}
-    ${ctrSection}
+    ${metadataGridHtml}
     ${summaryHtml}
     ${debugBanner}
     ${invalidBanner}
