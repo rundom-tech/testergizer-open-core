@@ -669,6 +669,38 @@ export class HtmlReporter {
         return parts ? `<div class="api-response-details" style="margin-top: 8px; margin-left: 20px;">${parts}</div>` : "";
       })();
 
+      // NEW BLOCK (SPRINT 4): Renders captured state / extracted variables for both UI and API
+      const extractedHtml = (() => {
+        const dObj = (step as any).data;
+        if (!dObj || !dObj.extracted || Object.keys(dObj.extracted).length === 0) return "";
+
+        const ext = dObj.extracted;
+        const count = Object.keys(ext).length;
+        
+        let rows = "";
+        for (const [k, v] of Object.entries(ext)) {
+          const displayValue = typeof v === 'object' ? JSON.stringify(v) : String(v);
+          const typeLabel = typeof v;
+          rows += `
+            <div class="extracted-row">
+              <span class="extracted-key mono" title="Type: ${esc(typeLabel)}">{{${esc(k)}}}</span>
+              <span class="extracted-val mono">${esc(displayValue)}</span>
+            </div>
+          `;
+        }
+
+        return `
+          <div class="api-response-details" style="margin-top: 8px; margin-left: 20px;">
+            <details class="target-more step-extracted" style="margin-top: 6px;">
+              <summary class="muted mono">🔗 captured state (${count})</summary>
+              <div class="target-more-body extracted-table">
+                ${rows}
+              </div>
+            </details>
+          </div>
+        `;
+      })();
+
       /*
        * ATTACH WARNING TO STEP
        * Inline reusable purity warnings (debug semantics).
@@ -727,7 +759,9 @@ export class HtmlReporter {
                   ${warningsHtml}
                   ${execHtml}
                 </div>
-                ${payloadHtml} ${errHtml}
+                ${payloadHtml}
+                ${extractedHtml}
+                ${errHtml}
                 ${evidence}
                 ${originHtml}
               </div>

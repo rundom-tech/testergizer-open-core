@@ -19,6 +19,10 @@
     {
       "id": "run-get-user-failed",
       "testRef": "tests/get-user-failed.json"
+    },
+    {
+      "id": "run-get-user-data-extraction",
+      "testRef": "tests/get-user-data-extraction.json"
     }
   ]
 }

@@ -1,0 +1,24 @@
+{
+  "id": "run-get-user-data-extraction",
+  "name": "Verify State Capture",
+  "testDomain": "system",
+  "steps": [
+    {
+      "id": "step-1-api-capture",
+      "action": "api-call",
+      "target": "T-USER-PROFILE",
+      "method": "GET",
+      "extract": [
+        {
+          "as": "capturedUserId",
+          "path": "$.id",
+          "transform": "number"
+        },
+        {
+          "as": "userEmail",
+          "path": "$.email"
+        }
+      ]
+    }
+  ]
+}

@@ -675,3 +675,49 @@ details[open] > summary .state-icon::after {
   .summary-box { flex-wrap: wrap; justify-content: center !important; }
   .summary-wrapper { align-items: center; } /* Centers title on mobile */
 }
+
+/* =========================
+   SPRINT 4: Extracted State Capture
+   ========================= */
+
+.step-extracted {
+  margin-left: 20px;
+}
+
+.extracted-table {
+  background: rgba(127,127,127,0.05);
+  border-radius: 4px;
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.extracted-row {
+  display: flex;
+  align-items: baseline;
+  font-size: 11px;
+  border-bottom: 1px solid var(--border-soft);
+  padding-bottom: 4px;
+}
+
+.extracted-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.extracted-key {
+  color: var(--accent);
+  font-weight: 600;
+  width: 30%;
+  min-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.extracted-val {
+  flex: 1;
+  word-break: break-all;
+  color: var(--fg);
+  opacity: 0.9;
+}
