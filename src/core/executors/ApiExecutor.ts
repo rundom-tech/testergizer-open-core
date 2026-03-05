@@ -4,6 +4,18 @@ import { ApiTargetRegistry } from "../api/ApiRepository";
 import { ExecutionContext } from "../context/ExecutionContext";
 import { VarianceResolver } from "../context/VarianceResolver";
 
+// Sprint 4: Define the extraction instruction structure
+export interface ExtractInstruction {
+  as: string;
+  path: string;
+  transform?: 'number' | 'string' | 'boolean';
+}
+
+// Extend the existing ApiExecutable locally for the Sprint 4 payload
+export interface ApiExecutableWithExtraction extends ApiExecutable {
+  extract?: ExtractInstruction[];
+}
+
 export class ApiExecutor {
   private registry: ApiTargetRegistry;
 
@@ -45,11 +57,18 @@ export class ApiExecutor {
 
   /**
    * Executes the API test definition, evaluates assertions, and acts as the judge.
-   * Now integrated with the Sprint 3 Variance Engine for dynamic data injection.
+   * Now integrated with the Sprint 3 Variance Engine for dynamic data injection
+   * and Sprint 4 State Capture for Output-to-Input chaining.
    */
-  public async execute(test: ApiExecutable, variables: Record<string, any> = {}): Promise<any> {
+  public async execute(
+    test: ApiExecutableWithExtraction, 
+    variables: Record<string, any> = {}, 
+    sharedContext?: ExecutionContext
+  ): Promise<any> {
+    
     // 1. Initialize Context & Resolver
-    const context = new ExecutionContext(variables);
+    // Use sharedContext if provided by the orchestrator loop (Sprint 4), otherwise create new (Sprint 3)
+    const context = sharedContext || new ExecutionContext(variables);
     const resolver = new VarianceResolver(context);
 
     // 2. Resolve target from the Registry
@@ -135,7 +154,28 @@ export class ApiExecutor {
       }
     }
 
-    // 8. Render Verdict
+    // 8. Sprint 4: State Capture & Extraction
+    const extractedData: Record<string, any> = {};
+    
+    if (test.extract && test.extract.length > 0) {
+      for (const instr of test.extract) {
+        if (!instr.path) continue;
+        
+        // Reusing the robust custom JSONPath resolver
+        const rawValue = this.resolveJsonPath(body, instr.path);
+        
+        if (rawValue !== undefined) {
+          // Context validation and type transformation
+          context.set(instr.as, rawValue, instr.transform);
+          extractedData[instr.as] = context.get(instr.as); 
+          console.log(`[API Extractor] Captured "${instr.as}" =`, extractedData[instr.as]);
+        } else {
+          console.warn(`[API Extractor] Path '${instr.path}' returned undefined. Cannot extract into '${instr.as}'.`);
+        }
+      }
+    }
+
+    // 9. Render Verdict
     const passed = assertionErrors.length === 0;
 
     return {
@@ -145,7 +185,8 @@ export class ApiExecutor {
       body,
       headers: responseHeaders,
       url,
-      assertionErrors 
+      assertionErrors,
+      extracted: extractedData // Added to output payload for visibility
     };
   }
 }

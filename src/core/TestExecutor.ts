@@ -448,14 +448,17 @@ export class TestExecutor {
               }
               
               const apiEngine = new ApiExecutor(this.apiRepo!);
+              
+              // SPRINT 4: Pass the shared ExecutionContext and the step extraction rules
               const apiResponse = await apiEngine.execute({
                 id: step.id,
                 version: "2.0",
                 targetRef: targetStr,
                 method: (step as any).method || "GET",
                 payload: (step as any).payload,
-                assertions: (step as any).assertions || [] 
-              } as ApiExecutable, initialVariables); 
+                assertions: (step as any).assertions || [],
+                extract: (step as any).extract 
+              } as any, initialVariables, executionContext); 
               
               // 1. Correctly map the Payload into the Step's data object
               (step as any).target = { value: apiResponse.url, resolved: true };
@@ -463,6 +466,7 @@ export class TestExecutor {
                 value: apiResponse.status_code, 
                 body: apiResponse.body,
                 headers: apiResponse.headers,
+                extracted: apiResponse.extracted, // SPRINT 4: Surface captured data for reporter
                 masked: false 
               };
               
@@ -479,6 +483,38 @@ export class TestExecutor {
 
             } else {
               await this.executor.execute(step as JsonStep, page);
+
+              // SPRINT 4: UI State Capture via Playwright
+              if (page && (step as any).extract && Array.isArray((step as any).extract) && status === "passed") {
+                const targetSelector = typeof (step as any).target === 'string' ? (step as any).target : undefined;
+                
+                for (const instr of (step as any).extract) {
+                  let extractedValue: any = undefined;
+                  
+                  if (targetSelector) {
+                    const locator = page.locator(targetSelector).first();
+                    try {
+                      if (instr.property) {
+                        extractedValue = await locator.evaluate((el: any, prop: string) => el[prop], instr.property);
+                      } else if (instr.attribute) {
+                        extractedValue = await locator.getAttribute(instr.attribute);
+                      }
+                    } catch (e) {
+                      console.warn(`[UI Extractor] DOM extraction failed for ${targetSelector}:`, e);
+                    }
+                  }
+                  
+                  if (extractedValue !== undefined && extractedValue !== null) {
+                    executionContext.set(instr.as, extractedValue, instr.transform);
+                    console.log(`[UI Extractor] Captured "${instr.as}" =`, extractedValue);
+                    
+                    // Attach to step data for reporter visibility
+                    if (!(step as any).data) (step as any).data = {};
+                    if (!(step as any).data.extracted) (step as any).data.extracted = {};
+                    (step as any).data.extracted[instr.as] = extractedValue;
+                  }
+                }
+              }
             }
 
           } catch (err) {

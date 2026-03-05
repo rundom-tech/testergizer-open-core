@@ -39,6 +39,7 @@
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
     "fast-glob": "^3.3.3",
+    "jsonpath-plus": "^10.4.0",
     "playwright": "^1.49.0",
     "semver": "^7.7.4",
     "yargs": "^18.0.0"
@@ -46,7 +47,8 @@
   "devDependencies": {
     "@types/node": "^20.19.26",
     "@types/semver": "^7.7.1",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vitest": "^4.0.18"
   },
   "engines": {
     "node": ">=18"

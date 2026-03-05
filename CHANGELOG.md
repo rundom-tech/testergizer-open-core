@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [API & UI DATA VARIANCE SPRINT 4] - 2026-03-05 (State Capture & Chaining Output to Input)
+
+### Added
+- **State Capture (Sprint 4):** Steps can now define an `extract` array to capture data mid-execution and store it as variables for subsequent steps.
+- **API Extraction:** `ApiExecutor` supports extracting values from JSON responses using JSONPath.
+- **UI Extraction:** `TestExecutor` supports extracting DOM properties (e.g., `innerText`) and attributes (e.g., `data-id`) via Playwright.
+- **Type Casting:** Captured variables can be strictly cast as `string`, `number`, or `boolean` using the `transform` property in the extraction instruction.
+- **System Macro Protection:** `ExecutionContext` now throws a protection violation if a step attempts to overwrite system macros like `{{$guid}}` or `{{$timestamp}}`.
+- **Unit Testing:** Added `vitest` dependency and test coverage for the `VarianceResolver`.
+
+### Fixed
+- **Type Coercion in Resolver:** `VarianceResolver` now preserves original data types (boolean, number) when a payload uses an exact match variable (e.g., `{{isActive}}`), rather than coercing everything to a string.
+
 ## [API SPRINT 3] - 2026-03-04 (Data Variance)
 
 ### Added

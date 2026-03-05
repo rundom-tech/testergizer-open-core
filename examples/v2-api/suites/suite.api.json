@@ -15,6 +15,10 @@
     {
       "id": "run-get-user-albums",
       "testRef": "tests/get-user-albums.json"
+    },
+    {
+      "id": "run-get-user-failed",
+      "testRef": "tests/get-user-failed.json"
     }
   ]
 }

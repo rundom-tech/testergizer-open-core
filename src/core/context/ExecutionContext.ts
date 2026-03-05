@@ -1,4 +1,3 @@
-// src/core/context/ExecutionContext.ts
 import crypto from "crypto";
 
 export type MacroFunction = () => string | number;
@@ -38,8 +37,21 @@ export class ExecutionContext {
 
   /**
    * Allows injecting or updating variables mid-execution.
+   * VALIDATION: Prevents overwriting reserved system macro keys.
    */
-  public set(key: string, value: any): void {
-    this.state.variables[key] = value;
+  public set(key: string, value: any, transform?: 'number' | 'string' | 'boolean'): void {
+    // Check if the key conflicts with a defined macro
+    if (key.startsWith("$") && this.state.macros[key]) {
+      throw new Error(`Protection Violation: Cannot overwrite system macro "${key}".`);
+    }
+
+    let finalValue = value;
+    
+    // Type Transformation Logic
+    if (transform === 'number') finalValue = Number(value);
+    if (transform === 'boolean') finalValue = (value === 'true' || value === true);
+    if (transform === 'string') finalValue = String(value);
+
+    this.state.variables[key] = finalValue;
   }
 }

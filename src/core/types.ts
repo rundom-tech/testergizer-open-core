@@ -24,14 +24,47 @@ export type StepAction =
   | "assertText"
   | "waitFor";
 
+// Add this new interface to define the Sprint 4 extraction rules
+export interface ExtractInstruction {
+  /** The variable name to store in the ExecutionContext */
+  as: string;
+  
+  /** JSONPath selector for API responses (e.g., "$.data.userId") */
+  path?: string;
+  
+  /** DOM property for UI extraction (e.g., "innerText", "value") */
+  property?: string;
+  
+  /** DOM attribute for UI extraction (e.g., "data-test-id", "href") */
+  attribute?: string;
+  
+  /** Optional type casting before storing in context */
+  transform?: "number" | "string" | "boolean";
+}
+
+// Update your existing JsonStep interface to include the extract property
 export interface JsonStep {
   id: string;
-  action: StepAction;
-  /** URL for goto or selector for DOM operations */
-  target?: string;
-  /** Used by fill, waitFor (ms), assertText expected substring */
-  value?: string | number | boolean;
-  timeoutMs?: number;
+  action: string;
+  target?: string | { value: string; resolved?: boolean };
+  
+  // Data inputs
+  data?: any;
+  value?: any;
+  input?: any;
+  
+  // API Specific
+  method?: string;
+  payload?: any;
+  assertions?: any[];
+  
+  // Execution Control
+  timeoutMs?: number; // <== Add this back
+  
+  // SPRINT 4: State Capture
+  extract?: ExtractInstruction[];
+  
+  group?: string;
 }
 
 export interface JsonTestDefinition {
