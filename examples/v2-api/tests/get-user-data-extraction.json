@@ -1,10 +1,10 @@
 {
   "id": "run-get-user-data-extraction",
-  "name": "Verify State Capture",
+  "name": "Verify API Sequential State Chaining",
   "testDomain": "system",
   "steps": [
     {
-      "id": "step-1-api-capture",
+      "id": "step-1-extract-profile",
       "action": "api-call",
       "target": "T-USER-PROFILE",
       "method": "GET",
@@ -13,10 +13,42 @@
           "as": "capturedUserId",
           "path": "$.id",
           "transform": "number"
+        }
+      ],
+      "assertions": [
+        {
+          "check": "status_code",
+          "expected": 200
+        }
+      ]
+    },
+    {
+      "id": "step-2-inject-post",
+      "action": "api-call",
+      "target": "T-USER-POSTS",
+      "method": "POST",
+      "payload": {
+        "title": "Chaining Proof",
+        "body": "This payload uses an ID extracted from the previous step.",
+        "userId": "{{capturedUserId}}"
+      },
+      "group": { 
+        "name": "Sequential Injection Verification" 
+      },
+      "assertions": [
+        {
+          "check": "status_code",
+          "expected": 201
         },
         {
-          "as": "userEmail",
-          "path": "$.email"
+          "check": "json_path",
+          "path": "$.userId",
+          "expected": "{{capturedUserId}}"
+        },
+        {
+          "check": "json_path",
+          "path": "$.title",
+          "expected": "Chaining Proof"
         }
       ]
     }

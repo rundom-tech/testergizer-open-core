@@ -25,34 +25,41 @@ export class ApiExecutor {
 
   /**
    * Safely resolves a JSONPath string against a payload object.
-   * Supports standard dot notation ($.name) and array indices ($[0].userId).
+   * Supports standard dot notation ($.name), array indices ($[0].userId), 
+   * and array wildcards ($[*].userId).
    */
   private resolveJsonPath(payload: any, path: string): any {
     if (!path) return undefined;
-    
-    // 1. Strip the root '$' if present
     let normalized = path.startsWith('$') ? path.substring(1) : path;
+    if (normalized.startsWith('.')) normalized = normalized.substring(1);
     
-    // 2. Strip leading dot if it exists (e.g., '$.name' became '.name')
-    if (normalized.startsWith('.')) {
-      normalized = normalized.substring(1);
-    }
-
-    // 3. Convert array brackets to dot notation (e.g., '[0].userId' -> '0.userId')
+    // Normalize array notations: [0] -> .0 and [*] -> .*
     normalized = normalized.replace(/\[(\d+)\]/g, '.$1');
-
-    // 4. Handle edge case of leading dot after bracket replacement (e.g., '$[0]' -> '.0')
-    if (normalized.startsWith('.')) {
-      normalized = normalized.substring(1);
-    }
-
-    // If the path was just '$', return the whole payload
+    normalized = normalized.replace(/\[\*\]/g, '.*');
+    if (normalized.startsWith('.')) normalized = normalized.substring(1);
+    
     if (!normalized) return payload;
+    
+    const parts = normalized.split('.');
+    
+    // Recursive traversal to handle branching on '*'
+    const traverse = (current: any, index: number): any => {
+      if (current === undefined || current === null) return undefined;
+      if (index >= parts.length) return current;
+      
+      const part = parts[index];
+      
+      // Wildcard array mapping
+      if (part === '*') {
+        if (!Array.isArray(current)) return undefined;
+        // Map the rest of the path over every element in the array
+        return current.map(item => traverse(item, index + 1));
+      }
+      
+      return traverse(current[part], index + 1);
+    };
 
-    // 5. Traverse the object safely
-    return normalized.split('.').reduce((acc, part) => {
-      return acc !== undefined && acc !== null ? acc[part] : undefined;
-    }, payload);
+    return traverse(payload, 0);
   }
 
   /**
@@ -87,7 +94,9 @@ export class ApiExecutor {
     const resolvedHeaders = resolver.resolveObject(rawHeaders);
     
     // Deep resolution of the JSON payload for data-driven testing
-    const payload = test.payload ? resolver.resolveObject(test.payload) : undefined;
+    // SPRINT 4 FIX: Support both 'data' and 'payload' properties depending on schema
+    const rawPayload = (test as any).data !== undefined ? (test as any).data : test.payload;
+    const payload = rawPayload !== undefined ? resolver.resolveObject(rawPayload) : undefined;
 
     // 4. Diagnostic Logging for Sprint 3 Verification
     console.log(`[API] Dispatching ${method} -> ${url}`);
@@ -117,36 +126,76 @@ export class ApiExecutor {
       body = { text: rawText };
     }
 
-    // 7. The Assertion Engine (The Judge)
+    // 7. The Assertion Engine (The Judge) with Transparency Audit
     const assertionErrors: string[] = [];
+    const audit: any[] = []; // NEW: Tracks all evaluations, passing or failing
 
-    if (test.assertions && test.assertions.length > 0) {
-      for (const assertion of test.assertions) {
+    // SPRINT 4 FIX: Resolve all {{variables}} inside the assertions array before evaluating
+    const resolvedAssertions = test.assertions ? resolver.resolveObject(test.assertions) : [];
+
+    if (resolvedAssertions && resolvedAssertions.length > 0) {
+      for (const assertion of resolvedAssertions) {
         switch (assertion.check) {
           
           case 'status_code':
             if (status_code !== assertion.expected) {
               assertionErrors.push(`[status_code] Expected ${assertion.expected}, got ${status_code}`);
+              audit.push({ check: 'status_code', path: 'HTTP Status', passed: false, detail: `Expected ${assertion.expected}, got ${status_code}` });
+            } else {
+              audit.push({ check: 'status_code', path: 'HTTP Status', passed: true, detail: `Matched expected ${status_code}` });
             }
             break;
 
-          case 'json_path':
+          case 'json_path': {
             if (!assertion.path) {
               assertionErrors.push(`[json_path] Missing 'path' property for assertion.`);
+              audit.push({ check: 'json_path', path: 'N/A', passed: false, detail: `Missing 'path' property` });
               break;
             }
 
             // USE THE ROBUST NORMALIZER INSTEAD OF THE LIGHTWEIGHT SPLIT
             const actualValue = this.resolveJsonPath(body, assertion.path);
 
-            // Using JSON.stringify for safe comparison of objects/arrays vs primitives
-            if (JSON.stringify(actualValue) !== JSON.stringify(assertion.expected)) {
-              // Ensure undefined is clearly reported instead of vanishing
-              const displayActual = actualValue === undefined ? "undefined" : JSON.stringify(actualValue);
-              const displayExpected = JSON.stringify(assertion.expected);
-              assertionErrors.push(`[json_path] Path '${assertion.path}' mismatch. Expected: ${displayExpected}, Actual: ${displayActual}`);
+            if (assertion.path.includes('[*]')) {
+              // SPRINT 4: Wildcard Array Check
+              if (!Array.isArray(actualValue)) {
+                assertionErrors.push(`[json_path] Path '${assertion.path}' did not resolve to an array.`);
+                audit.push({ check: 'json_path', path: assertion.path, passed: false, detail: `Target did not resolve to an array` });
+              } else if (actualValue.length === 0) {
+                // SPRINT 4: Protect against false positives on empty arrays
+                assertionErrors.push(`[json_path] Path '${assertion.path}' mismatch. Array is empty.`);
+                audit.push({ check: 'json_path', path: assertion.path, passed: false, detail: `Array is empty. Cannot verify elements.` });
+              } else {
+                // Use loose string comparison because VarianceResolver may inject expected values as strings
+                const expectedStr = String(assertion.expected);
+                const allMatch = actualValue.every((val: any) => String(val) === expectedStr);
+                
+                if (!allMatch) {
+                  assertionErrors.push(`[json_path] Path '${assertion.path}' mismatch. Not all array elements matched expected: "${assertion.expected}"`);
+                  audit.push({ check: 'json_path', path: assertion.path, passed: false, detail: `Not all array elements strictly matched "${assertion.expected}"` });
+                } else {
+                  // Transparent Success Registration
+                  audit.push({ check: 'json_path', path: assertion.path, passed: true, detail: `Verified ${actualValue.length}/${actualValue.length} items matched "${assertion.expected}"` });
+                }
+              }
+            } else {
+              // Standard Exact Check
+              // Allows strict object matching OR loose primitive matching (e.g. injected "1" == 1)
+              const isMatch = JSON.stringify(actualValue) === JSON.stringify(assertion.expected) || 
+                              String(actualValue) === String(assertion.expected);
+
+              if (!isMatch) {
+                // Ensure undefined is clearly reported instead of vanishing
+                const displayActual = actualValue === undefined ? "undefined" : JSON.stringify(actualValue);
+                const displayExpected = JSON.stringify(assertion.expected);
+                assertionErrors.push(`[json_path] Path '${assertion.path}' mismatch. Expected: ${displayExpected}, Actual: ${displayActual}`);
+                audit.push({ check: 'json_path', path: assertion.path, passed: false, detail: `Mismatch. Expected: ${displayExpected}, Actual: ${displayActual}` });
+              } else {
+                audit.push({ check: 'json_path', path: assertion.path, passed: true, detail: `Matched expected value "${assertion.expected}"` });
+              }
             }
             break;
+          }
 
           default:
             assertionErrors.push(`[UNKNOWN_ASSERTION] The check '${(assertion as any).check}' is not supported.`);
@@ -186,7 +235,8 @@ export class ApiExecutor {
       headers: responseHeaders,
       url,
       assertionErrors,
-      extracted: extractedData // Added to output payload for visibility
+      extracted: extractedData, // Added to output payload for visibility
+      audit                     // Added to pass the transparent ledger to the TestExecutor
     };
   }
 }

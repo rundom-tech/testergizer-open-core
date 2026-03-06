@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [API STATE EXTRACTION - SPRINT 4] - 2026-03-06 (State Capture & Chaining Output to Input)
+
+### Added
+- **API State Extraction:** Introduced a zero-dependency JSONPath resolver (`ApiExecutor.ts`) capable of extracting scalar values (strings, numbers, booleans) from deeply nested API response payloads.
+- **Output-to-Input Chaining:** Integrated the `VarianceResolver` into the API execution loop. The engine can now capture a value in Step A and dynamically inject it into the URLs, headers, payloads, and expected assertions of Step B.
+- **Wildcard Array Validation:** Upgraded `GovernanceValidator` to support recursive `[*]` array mapping. The engine can now automatically validate every item within a returned JSON array against a dynamically captured state variable.
+- **Report Visibility:** Enhanced `htmlReporter.ts` to automatically detect and render extracted context variables into a dedicated "🔗 captured state" UI table within the HTML run report.
+
 ## [API & UI DATA VARIANCE SPRINT 4] - 2026-03-05 (State Capture & Chaining Output to Input)
 
 ### Added

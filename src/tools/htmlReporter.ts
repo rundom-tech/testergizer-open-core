@@ -669,7 +669,7 @@ export class HtmlReporter {
         return parts ? `<div class="api-response-details" style="margin-top: 8px; margin-left: 20px;">${parts}</div>` : "";
       })();
 
-      // NEW BLOCK (SPRINT 4): Renders captured state / extracted variables for both UI and API
+      // SPRINT 4: Extracted State Rendering
       const extractedHtml = (() => {
         const dObj = (step as any).data;
         if (!dObj || !dObj.extracted || Object.keys(dObj.extracted).length === 0) return "";
@@ -693,6 +693,43 @@ export class HtmlReporter {
           <div class="api-response-details" style="margin-top: 8px; margin-left: 20px;">
             <details class="target-more step-extracted" style="margin-top: 6px;">
               <summary class="muted mono">🔗 captured state (${count})</summary>
+              <div class="target-more-body extracted-table">
+                ${rows}
+              </div>
+            </details>
+          </div>
+        `;
+      })();
+
+      // SPRINT 4: Assertion Transparency Audit
+      const auditHtml = (() => {
+        const dObj = (step as any).data;
+        if (!dObj || !Array.isArray(dObj.audit) || dObj.audit.length === 0) return "";
+
+        const count = dObj.audit.length;
+        let rows = "";
+        
+        for (const item of dObj.audit) {
+          const badgeClass = item.passed ? "badge-passed" : "badge-failed";
+          const icon = item.passed ? "✓" : "✕";
+          rows += `
+            <div class="extracted-row">
+              <span class="extracted-key mono" style="width: 35%; display: flex; align-items: center; gap: 6px;">
+                <span class="badge ${badgeClass}" style="padding: 1px 4px; font-size: 10px;">${icon}</span>
+                ${esc(item.check)}
+              </span>
+              <span class="extracted-val mono">
+                <span class="muted" style="margin-right: 4px;">[${esc(item.path)}]</span>
+                ${esc(item.detail)}
+              </span>
+            </div>
+          `;
+        }
+
+        return `
+          <div class="api-response-details" style="margin-top: 8px; margin-left: 20px;">
+            <details class="target-more step-extracted" style="margin-top: 6px;">
+              <summary class="muted mono">🛡️ verified assertions (${count})</summary>
               <div class="target-more-body extracted-table">
                 ${rows}
               </div>
@@ -761,6 +798,7 @@ export class HtmlReporter {
                 </div>
                 ${payloadHtml}
                 ${extractedHtml}
+                ${auditHtml}
                 ${errHtml}
                 ${evidence}
                 ${originHtml}

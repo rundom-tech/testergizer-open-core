@@ -10,7 +10,7 @@
       "method": "GET",
       "assertions": [
         { "check": "status_code", "expected": 200 },
-        { "check": "json_path", "path": "$[0].userId", "expected": 1 }
+        { "check": "json_path", "path": "$[*].userId", "expected": 1 }
       ]
     }
   ]

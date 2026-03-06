@@ -467,6 +467,7 @@ export class TestExecutor {
                 body: apiResponse.body,
                 headers: apiResponse.headers,
                 extracted: apiResponse.extracted, // SPRINT 4: Surface captured data for reporter
+                audit: apiResponse.audit,         // SPRINT 4: Surface assertion transparency
                 masked: false 
               };
               
