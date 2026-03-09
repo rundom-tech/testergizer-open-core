@@ -1,4 +1,9 @@
 // src/tools/htmlReporter.ts
+// CHANGELOG (2026-03-07)
+// - SPRINT 6: Hybrid Semantic Support
+// - Migrated from run-level `isApi` checks to step-level action checks.
+// - Fixed "locator" mislabeling for api-call and goto actions.
+// - Restored semantic status code badges for API steps in hybrid suites.
 // CHANGELOG (2026-02-11)
 // - Improved debug warning rendering semantics.
 // - Explicitly clarifies reusable purity relaxation.
@@ -36,9 +41,9 @@ export class HtmlReporter {
   private readonly secretVars?: Set<string>;
 
   // Frozen branding asset locations (repo-root relative)
-  private static readonly BRANDING_PRODUCT = "branding/vendor/product.png"; // Testergizer logo (optional)
-  private static readonly BRANDING_VENDOR = "branding/vendor/vendor.png"; // RunDOM logo (mandatory - provenance marker)
-  private static readonly BRANDING_CUSTOMER = "branding/customer/customer.png"; // Customer logo (optional)
+  private static readonly BRANDING_PRODUCT = "branding/vendor/product.png"; 
+  private static readonly BRANDING_VENDOR = "branding/vendor/vendor.png"; 
+  private static readonly BRANDING_CUSTOMER = "branding/customer/customer.png"; 
 
   constructor(opts: HtmlReporterOptions) {
     this.outputDir = path.resolve(opts.outputDir);
@@ -47,25 +52,11 @@ export class HtmlReporter {
     this.validateBrandingInvariant();
   }
 
-  /**
-   * Frozen: always writes report.html (caller does not choose the filename).
-   */
   write(run: RunResult, artifacts?: ArtifactsIndex): void {
     if (!fs.existsSync(this.outputDir)) fs.mkdirSync(this.outputDir, { recursive: true });
     const outPath = path.join(this.outputDir, "report.html");
     fs.writeFileSync(outPath, this.render(outPath, run, artifacts), "utf-8");
   }
-
-  /* =========================
-   * Branding invariant (hard gate)
-   * =========================
-   *
-   * Report lives at: artifacts/suiteId/date/runId/report.html
-   * Branding lives at repo root: branding/...
-   *
-   * We compute repoRoot as outputDir/../../../../
-   * and require vendor.png to exist there.
-   */
 
   private validateBrandingInvariant(): void {
     const repoRoot = this.getRepoRootFromOutputDir();
@@ -80,23 +71,16 @@ export class HtmlReporter {
       }
     };
 
-    // Vendor logo is mandatory (semantic provenance marker)
     mustExist(HtmlReporter.BRANDING_VENDOR, "vendor");
-
-    // Product/customer are optional by spec — no failure if missing.
   }
 
   private getRepoRootFromOutputDir(): string {
-    // outputDir is .../artifacts/suiteId/date/runId
-    // repoRoot is four levels up
     return path.resolve(this.outputDir, "../../../../");
   }
 
   private computeBrandingSrc(reportHtmlPath: string, repoRelativeBrandingPath: string): string {
     const repoRoot = this.getRepoRootFromOutputDir();
     const absBrand = path.resolve(repoRoot, repoRelativeBrandingPath);
-
-    // Convert to a relative URL from report.html directory, force forward slashes.
     return path.relative(path.dirname(reportHtmlPath), absBrand).replace(/\\/g, "/");
   }
 
@@ -106,18 +90,6 @@ export class HtmlReporter {
     return abs.startsWith(repoRoot) && fs.existsSync(abs);
   }
 
-  /**
-   * Single source of truth for evidence href generation.
-   *
-   * Handles:
-   * - absolute paths (e.g. video)
-   * - repo-root relative paths starting with "artifacts/"
-   * - run-root relative paths (relative to outputDir)
-   *
-   * Outputs:
-   * - encoded, browser-friendly relative href when inside outputDir
-   * - file:/// fallback when outside outputDir
-   */
   private toHref(rawPath: string): string {
     const p = String(rawPath || "");
     if (!p) return "";
@@ -125,23 +97,18 @@ export class HtmlReporter {
     let abs: string;
 
     if (path.isAbsolute(p)) {
-      // Absolute path (e.g., video)
       abs = p;
     } else {
       const normalized = p.replace(/\\/g, "/");
-
       if (normalized.startsWith("artifacts/")) {
-        // Repo-root relative
         abs = path.resolve(process.cwd(), normalized);
       } else {
-        // Run-root relative
         abs = path.resolve(this.outputDir, normalized);
       }
     }
 
     const rel = path.relative(this.outputDir, abs).replace(/\\/g, "/");
 
-    // If the artifact escapes outputDir, fall back to file://
     if (rel.startsWith("../") || rel === "..") {
       const fileUrl = "file:///" + abs.replace(/\\/g, "/").replace(/^\/+/, "");
       return encodeURI(fileUrl);
@@ -171,11 +138,8 @@ export class HtmlReporter {
 
     const resolveGotoUrl = (step: any): string | null => {
       if (String(step?.action).toLowerCase() !== "goto") return null;
-
       const raw = getTargetString(step);
       if (!raw) return null;
-
-      // Already absolute
       if (/^https?:\/\//i.test(raw)) return raw;
 
       const base =
@@ -183,7 +147,7 @@ export class HtmlReporter {
         (run as any).baseURL ??
         (run as any).projectBaseUrl;
 
-      if (!base) return raw; // last-resort fallback
+      if (!base) return raw;
 
       try {
         return new URL(raw, base).toString();
@@ -194,17 +158,13 @@ export class HtmlReporter {
 
     const badge = (result: string) => `<span class="badge badge-${esc(result)}">${esc(result)}</span>`;
 
-    // Mirror JsonReporter redaction semantics: secretVars contains *values*.
     const sanitize = (value: any): any => {
       if (value === null || value === undefined) return value;
-
       if (typeof value === "string") {
         if (this.secretVars && this.secretVars.has(value)) return "••••••";
         return value;
       }
-
       if (Array.isArray(value)) return value.map((v) => sanitize(v));
-
       if (typeof value === "object") {
         const out: any = {};
         for (const [k, v] of Object.entries(value)) {
@@ -216,7 +176,6 @@ export class HtmlReporter {
         }
         return out;
       }
-
       return value;
     };
 
@@ -229,14 +188,10 @@ export class HtmlReporter {
       }
     };
 
-    // Runtime-only compiler metadata (no schema changes).
     const provenanceDoc = tryReadJson(path.join(this.outputDir, "provenance.json"));
     const provenanceByTestId: Record<string, Record<string, any>> =
       provenanceDoc && typeof provenanceDoc === "object" ? provenanceDoc.byTestId ?? {} : {};
 
-    // CTR helpers (report-level convenience)
-    // Goal: when steps carry only raw selectors (e.g. Playwright),
-    // try to display CTR logical keys as primary and keep selectors as collapsible details.
     const ctrLocators: Record<string, any> | undefined =
       (run as any).ctrDefinition && typeof (run as any).ctrDefinition === "object"
         ? ((run as any).ctrDefinition as any).locators
@@ -266,7 +221,6 @@ export class HtmlReporter {
               ctrSelectorToKeys.set(vv, [k]);
             }
           };
-
           add(s.value);
           add(`${s.using}=${s.value}`);
         }
@@ -276,7 +230,6 @@ export class HtmlReporter {
     const normalizeSelectorForMatch = (raw: string): string => {
       const r = String(raw ?? "").trim();
       if (!r) return r;
-      // Strip common "using=" prefixes
       const m = r.match(/^(css|xpath|text|id)=/i);
       if (m) return r.slice(m[0].length);
       return r;
@@ -286,7 +239,6 @@ export class HtmlReporter {
       const raw = String(rawSelector ?? "").trim();
       if (!raw) return undefined;
 
-      // Direct matches first, then normalized.
       const direct = ctrSelectorToKeys.get(raw);
       if (direct && direct.length) return [...direct].sort()[0];
 
@@ -294,7 +246,6 @@ export class HtmlReporter {
       const normalizedHit = ctrSelectorToKeys.get(normalized);
       if (normalizedHit && normalizedHit.length) return [...normalizedHit].sort()[0];
 
-      // Also try "css=" + value for Playwright-style raw CSS
       const cssHit = ctrSelectorToKeys.get(`css=${normalized}`);
       if (cssHit && cssHit.length) return [...cssHit].sort()[0];
 
@@ -306,26 +257,16 @@ export class HtmlReporter {
       debugWarningsDoc && typeof debugWarningsDoc === "object" && Array.isArray(debugWarningsDoc.warnings)
         ? debugWarningsDoc.warnings
         : [];
-    // ========================================================
-    // DEBUG WARNINGS INDEX (by exact stepId)
-    // Runtime-only. No schema change.
-    // ========================================================
 
     const debugWarningsByStepId: Record<string, any[]> = {};
 
     for (const w of debugWarnings) {
       if (!w?.stepId) continue;
-
       if (!debugWarningsByStepId[w.stepId]) {
         debugWarningsByStepId[w.stepId] = [];
       }
-
       debugWarningsByStepId[w.stepId].push(w);
     }
-
-    /* =========================
-     * Branding rendering (frozen paths)
-     * ========================= */
 
     const renderBrandImg = (repoRel: string, alt: string, cls?: string) => {
       if (!this.brandingExists(repoRel)) return "";
@@ -345,23 +286,18 @@ export class HtmlReporter {
 
     const renderEvidenceLinks = (items: any[]) => {
       if (!items.length) return "";
-
       const links = items
         .map((o) => {
           const href = this.toHref(String(o?.artifact?.path || ""));
           if (!href) return "";
           const label = o?.type ? String(o.type) : "evidence";
-          return `<a class="evidence" href="${esc(href)}" target="_blank" rel="noopener noreferrer">${esc(
-            label
-          )}</a>`;
+          return `<a class="evidence" href="${esc(href)}" target="_blank" rel="noopener noreferrer">${esc(label)}</a>`;
         })
         .filter(Boolean)
         .join(" ");
-
       return links ? `<div class="evidence-row">${links}</div>` : "";
     };
 
-    // Step 2.1 (masking policy): redact password-like fills regardless of origin.
     const getTargetString = (step: any): string => {
       const t = step?.target;
       if (typeof t === "string") return t;
@@ -373,15 +309,8 @@ export class HtmlReporter {
       if (String(step?.action ?? "").toLowerCase() !== "fill") return false;
       const target = getTargetString(step);
       if (!target) return false;
-      // Heuristic: anything that *looks* like a password field.
-      // Examples: "#password", "input[name=password]", "[data-test=password]", etc.
       return /password/i.test(target);
     };
-
-    /* =========================
-     * Step 2.2 (visual rail):
-     * Icon + result-class rail on the left, vertically centered (Option A).
-     * ========================= */
 
     const normalizeResult = (r: any): string => {
       const s = String(r ?? "").trim().toLowerCase();
@@ -391,31 +320,21 @@ export class HtmlReporter {
 
     const stepRailClass = (result: string): string => {
       switch (result) {
-        case "passed":
-          return "step-passed";
-        case "failed":
-          return "step-failed";
-        case "aborted":
-          return "step-aborted";
-        case "skipped":
-          return "step-skipped";
-        default:
-          return "step-unknown";
+        case "passed": return "step-passed";
+        case "failed": return "step-failed";
+        case "aborted": return "step-aborted";
+        case "skipped": return "step-skipped";
+        default: return "step-unknown";
       }
     };
 
     const stepRailIcon = (result: string): string => {
       switch (result) {
-        case "passed":
-          return "✓";
-        case "failed":
-          return "✕";
-        case "aborted":
-          return "⦸";
-        case "skipped":
-          return "⏭";
-        default:
-          return "•";
+        case "passed": return "✓";
+        case "failed": return "✕";
+        case "aborted": return "⦸";
+        case "skipped": return "⏭";
+        default: return "•";
       }
     };
 
@@ -425,24 +344,18 @@ export class HtmlReporter {
 
       const attempts = Array.isArray(t.attempts) ? t.attempts : [];
       const resolvedBy = t.resolvedBy;
+      const value = typeof t.value === "string" ? t.value : undefined;
+      const logical = typeof t.logical === "string" ? t.logical : undefined;
 
-      const value =
-        typeof t.value === "string" ? t.value : undefined;
-
-      const logical =
-        typeof t.logical === "string" ? t.logical : undefined;
-
-      const secondary =
-        logical && value && logical !== value
-          ? `<div class="ctr-secondary muted"><code>${esc(value)}</code></div>`
-          : "";
+      const secondary = logical && value && logical !== value
+        ? `<div class="ctr-secondary muted"><code>${esc(value)}</code></div>`
+        : "";
 
       if (!attempts.length) return secondary;
 
-      const resolvedLine =
-        resolvedBy && resolvedBy.using && resolvedBy.value
-          ? `<div><span class="k">resolved:</span> <span class="mono">${esc(resolvedBy.using)} → ${esc(resolvedBy.value)}</span></div>`
-          : "";
+      const resolvedLine = resolvedBy && resolvedBy.using && resolvedBy.value
+        ? `<div><span class="k">resolved:</span> <span class="mono">${esc(resolvedBy.using)} → ${esc(resolvedBy.value)}</span></div>`
+        : "";
 
       const attemptsHtml = attempts
         .map((a: any, i: number) => {
@@ -468,7 +381,11 @@ export class HtmlReporter {
     };
 
     const renderStepRow = (step: any, testId: string, attempt: number) => {
-      const isApi = run.executionEngine === "api";
+      // SPRINT 6: Semantic Action Context
+      const actionStr = String(step?.action ?? "").toLowerCase();
+      const isApiStep = actionStr === "api-call";
+      const isGotoStep = actionStr === "goto";
+
       const errors = Array.isArray(step.errors) ? step.errors : [];
       const errHtml = errors.length
         ? `<details class="errors"><summary>${errors.length} error(s)</summary>${errors
@@ -504,8 +421,13 @@ export class HtmlReporter {
           const logical = opts.logical ? String(opts.logical) : undefined;
           const rawSelector = opts.rawSelector ? String(opts.rawSelector) : undefined;
 
-          const label = isApi ? "endpoint" : "locator";
-          const subLabel = isApi ? "url" : "selector";
+          // SPRINT 6: Dynamic semantic labels based on Step Action
+          let label = "locator";
+          let subLabel = "selector";
+          if (isApiStep || isGotoStep) {
+            label = "endpoint";
+            subLabel = "url";
+          }
 
           const selectors =
             logical && ctrKeyToSelectors.has(logical)
@@ -538,7 +460,6 @@ export class HtmlReporter {
           `;
         };
 
-        // Back-compat: target may be a plain string (Playwright often uses this).
         if (typeof t === "string") {
           const raw = t.trim();
           if (!raw) return `<span class="action-target unresolved">(no target)</span>`;
@@ -559,12 +480,9 @@ export class HtmlReporter {
 
         const logical = typeof t.logical === "string" ? t.logical : undefined;
         const value = typeof t.value === "string" ? t.value : undefined;
-
         const unresolved = t.resolved === false;
 
-        // If logical is missing but we have a selector value, try to infer CTR key from run.ctrDefinition.locators.
         const inferred = !logical && value ? pickClrKeyForSelector(value) : undefined;
-
         const primary = logical ?? inferred ?? value;
 
         if (!primary) {
@@ -585,8 +503,6 @@ export class HtmlReporter {
 
       const dataHtml = (() => {
         const forceMasked = isPasswordLikeFill(step);
-
-        // Prefer compiled/runtime metadata if present.
         const dObj = (step as any).data;
 
         if (dObj && typeof dObj === "object" && "value" in dObj) {
@@ -594,8 +510,8 @@ export class HtmlReporter {
           const masked = (dObj as any).masked === true || forceMasked;
           let shown = masked ? "••••••" : String(raw);
 
-          // Semantic highlighting for API status codes
-          if (!masked && isApi && typeof raw === "number") {
+          // SPRINT 6: Highlight status codes specifically for `api-call` steps
+          if (!masked && isApiStep && typeof raw === "number") {
              const status = raw;
              let colorClass = "badge-muted";
              if (status >= 200 && status < 300) colorClass = "badge-passed";
@@ -618,7 +534,6 @@ export class HtmlReporter {
           `;
         }
 
-        // Back-compat: many actions still store parameters in step.value / step.input
         const raw = (step as any).value ?? (step as any).input;
         if (raw === undefined) return "";
 
@@ -634,9 +549,9 @@ export class HtmlReporter {
         `;
       })();
 
-      // NEW BLOCK: Renders API headers and body payload securely from the step.data object
+      // SPRINT 6: Only render payloads for `api-call` actions
       const payloadHtml = (() => {
-        if (!isApi) return "";
+        if (!isApiStep) return "";
         const dObj = (step as any).data;
         if (!dObj) return "";
 
@@ -669,7 +584,6 @@ export class HtmlReporter {
         return parts ? `<div class="api-response-details" style="margin-top: 8px; margin-left: 20px;">${parts}</div>` : "";
       })();
 
-      // SPRINT 4: Extracted State Rendering
       const extractedHtml = (() => {
         const dObj = (step as any).data;
         if (!dObj || !dObj.extracted || Object.keys(dObj.extracted).length === 0) return "";
@@ -701,7 +615,6 @@ export class HtmlReporter {
         `;
       })();
 
-      // SPRINT 4: Assertion Transparency Audit
       const auditHtml = (() => {
         const dObj = (step as any).data;
         if (!dObj || !Array.isArray(dObj.audit) || dObj.audit.length === 0) return "";
@@ -738,10 +651,6 @@ export class HtmlReporter {
         `;
       })();
 
-      /*
-       * ATTACH WARNING TO STEP
-       * Inline reusable purity warnings (debug semantics).
-       */
       const warningsHtml = (() => {
         const ws = Array.isArray(step.warnings) ? step.warnings : [];
         const inlineDebugWarnings = debugWarningsByStepId[String(step.id)] ?? [];
@@ -788,6 +697,8 @@ export class HtmlReporter {
               </div>
 
               <div class="step-body">
+                ${step.promise ? `<div class="step-human-name" style="font-weight: 600; margin-bottom: 2px; font-size: 1.05em;">${esc(step.promise)}</div>` : ""}
+                ${step.description ? `<div class="step-description muted" style="font-size: 0.9em; margin-bottom: 6px; font-style: italic;">${esc(step.description)}</div>` : ""}
                 <div class="action-main">
                   <span class="action-name">${esc(step.action)}</span>
                   ${targetHtml}
@@ -811,14 +722,8 @@ export class HtmlReporter {
 
     const renderAttempt = (a: TestAttemptResult, testId: string, attemptIndex: number, totalAttempts: number) => {
       const attErrors = Array.isArray((a as any).errors) ? (a as any).errors : [];
-
       const headerBits: string[] = [];
-      /**
-       * PHASE 1 — EVIDENCE CORRECTION (attempt numbering)
-       *
-       * Attempt "X of Y" must be based on the test's attempts array length,
-       * NOT on number of steps.
-       */
+
       headerBits.push(
         `<span class="k">Attempt</span> <span class="mono">${esc(attemptIndex)} of ${esc(totalAttempts)}</span>`
       );
@@ -927,7 +832,8 @@ export class HtmlReporter {
         <details class="card" ${idx === 0 ? "open" : ""}>
           <summary>
             <div class="card-title">
-              <span class="title">${esc(t.id)}</span>
+              <span class="title">${(t as any).capability ? esc((t as any).capability) : esc(t.id)}</span>
+              ${(t as any).capability ? `<span class="muted mono" style="margin-left: 10px; font-size: 0.85em;">${esc(t.id)}</span>` : ""}
               ${badge((t as any).result)}
               <span class="muted mono">${esc((t as any).startedAt)} → ${esc((t as any).endedAt)}</span>
               <span class="mono">${esc(fmtMs((t as any).durationMs))}</span>
@@ -937,6 +843,8 @@ export class HtmlReporter {
               ${domainLabel ? `<span class="sep">|</span> ${domainLabel}` : ""}
               <span class="sep">|</span> attempts: ${esc(attempts.length)}
             </div>
+            ${(t as any).promise ? `<div style="padding-top: 8px; font-size: 0.95em; color: var(--fg-muted);"><strong>Promise:</strong> ${esc((t as any).promise)}</div>` : ""}
+            ${(t as any).description ? `<div style="padding-top: 4px; font-size: 0.9em; font-style: italic; color: var(--fg-muted);">${esc((t as any).description)}</div>` : ""}
           </summary>
 
           <div class="card-body">
@@ -957,15 +865,10 @@ export class HtmlReporter {
 
     const tests = Array.isArray((run as any).tests) ? (run as any).tests : [];
 
-    // ========================================================
-    // INVALID & SKIPPED (runtime-only channels)
-    // ========================================================
-
     const invalidBlock = (run as any).invalidation;
     const skippedBlock = (run as any).skipped;
 
     const invalidTests: any[] = invalidBlock && Array.isArray(invalidBlock.tests) ? invalidBlock.tests : [];
-
     const skippedTests: any[] = skippedBlock && Array.isArray(skippedBlock.tests) ? skippedBlock.tests : [];
 
     const summary = run.summary;
@@ -1067,7 +970,6 @@ export class HtmlReporter {
     const invalidBanner = "";
     const skippedBanner = "";
 
-    // Customer left, Testergizer right (both optional)
     const customerLogo = renderBrandImg(HtmlReporter.BRANDING_CUSTOMER, "Customer", "logo-large");
     const testergizerLogo = renderBrandImg(HtmlReporter.BRANDING_PRODUCT, "Testergizer", "logo-large");
 
@@ -1277,31 +1179,16 @@ export class HtmlReporter {
     (function () {
       'use strict';
 
-      /* ---------- helpers ---------- */
-
-      function $(id) {
-        return document.getElementById(id);
-      }
-
-      function show(el) {
-        if (el) el.hidden = false;
-      }
-
-      function hide(el) {
-        if (el) el.hidden = true;
-      }
-
-      /* ---------- core actions ---------- */
+      function $(id) { return document.getElementById(id); }
+      function show(el) { if (el) el.hidden = false; }
+      function hide(el) { if (el) el.hidden = true; }
 
       function expandAll() {
         document.querySelectorAll('details.card').forEach(d => d.open = true);
       }
-
       function collapseAll() {
         document.querySelectorAll('details.card').forEach(d => d.open = false);
       }
-
-      /* ---------- click handling ---------- */
 
       document.addEventListener('click', function (e) {
         var t = e.target;
@@ -1309,23 +1196,14 @@ export class HtmlReporter {
 
         var viewMenu = $('view-menu');
         var appearancePanel = $('appearance-panel');
-
         var actionBtn = t.closest ? t.closest('[data-action]') : null;
         var action = actionBtn ? actionBtn.getAttribute('data-action') : null;
 
-        if (action === 'expand-all') {
-          expandAll();
-          return;
-        }
-
-        if (action === 'collapse-all') {
-          collapseAll();
-          return;
-        }
+        if (action === 'expand-all') { expandAll(); return; }
+        if (action === 'collapse-all') { collapseAll(); return; }
 
         if (action === 'view') {
           if (!viewMenu) return;
-
           if (viewMenu.hidden) {
             show(viewMenu);
             var r = actionBtn.getBoundingClientRect();
@@ -1354,19 +1232,13 @@ export class HtmlReporter {
         }
       });
 
-      /* ---------- theme switching ---------- */
-
       document.addEventListener('change', function (e) {
         var t = e.target;
         if (!t || t.id !== 'ap-theme') return;
-
         var themeLink = $('tg-theme');
         if (!themeLink) return;
-
         themeLink.href = '../../../../themes/' + t.value + '/theme.css';
       });
-
-      /* ---------- ESC closes appearance ---------- */
 
       document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape') {
@@ -1374,7 +1246,6 @@ export class HtmlReporter {
           hide($('view-menu'));
         }
       });
-
     })();
     </script>
     <div id="view-menu" hidden>
@@ -1391,18 +1262,16 @@ export class HtmlReporter {
           <div class="ap-label">Theme</div>
           <select id="ap-theme">
             <option value="default">Default</option>
-			<option value="light">Light</option>
+            <option value="light">Light</option>
             <option value="dark">Dark</option>
             <option value="high-contrast">High contrast</option>
           </select>
         </div>
-
         <div class="ap-group">
           <div class="ap-hint mono">Changes affect this report only (no persistence yet).</div>
         </div>
       </div>
     </div>
-
   </body>
 </html>`;
   }

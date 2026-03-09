@@ -132,3 +132,4 @@ export interface TestExecutorOptions {
   artifactObserver?: ArtifactObserver;
   ctrDefinition?: any; // 👈 NEW: Accept the CTR definition for API testing
 }
+

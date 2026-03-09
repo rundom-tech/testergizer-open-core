@@ -1,0 +1,49 @@
+{
+  "id": "run-reverse-chaining-proof",
+  "capability": "Cross-Domain State Injection",
+  "promise": "Ensures that dynamic state can be extracted from a frontend DOM element and successfully piped into a backend REST payload.",
+  "testDomain": "system",
+  "context": {
+    "EXTRACTED_HEADING": "{{EXTRACTED_HEADING}}"
+  },
+  "steps": [
+    {
+      "id": "step-1-frontend-nav",
+      "promise": "The system routes the user to the secure login portal",
+      "action": "goto",
+      "target": "https://the-internet.herokuapp.com/login"
+    },
+    {
+      "id": "step-2-frontend-extraction",
+      "promise": "The DOM correctly exposes the primary heading text for state capture",
+      "action": "assertVisible",
+      "target": "h2",
+      "extract": [
+        {
+          "as": "EXTRACTED_HEADING",
+          "property": "innerText"
+        }
+      ]
+    },
+    {
+      "id": "step-3-backend-injection",
+      "promise": "The backend API accepts the frontend state via a REST payload",
+      "description": "Fires a POST request containing the extracted heading to ensure the data contract is respected.",
+      "action": "api-call",
+      "target": "T-ECHO-POST",
+      "method": "POST",
+      "data": {
+        "body": {
+          "source": "playwright-dom",
+          "capturedText": "{{EXTRACTED_HEADING}}"
+        }
+      },
+      "assertions": [
+        {
+          "check": "status_code",
+          "expected": 201
+        }
+      ]
+    }
+  ]
+}

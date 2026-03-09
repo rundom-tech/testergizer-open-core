@@ -1,0 +1,50 @@
+{
+  "id": "run-total-integrity-check",
+  "testDomain": 31,
+  "reusable": false,
+  "capability": "Full Stack Quality Intelligence",
+  "promise": "Verify the engine traverses UI, API, FS, DB, and Email in one continuous, composable session.",
+  "context": {
+    "USERNAME": "standard_user",
+    "PASSWORD": "secret_sauce"
+  },
+  "steps": [
+    { 
+      "id": "s1-api", 
+      "promise": "Seed user data via the API", 
+      "description": "Dispatches a POST request to initialize the test state with the context payload.",
+      "action": "api-post", 
+      "method": "POST",
+      "target": "/setup",
+      "payload": {
+        "user": "{{USERNAME}}",
+        "role": "tester"
+      }
+    },
+    { 
+      "type": "include", 
+      "ref": "../reusables/login.json"
+    },
+    { 
+      "id": "s3-email", 
+      "promise": "Catch the asynchronous OTP", 
+      "description": "Intercepts the email domain to retrieve the one-time password.",
+      "action": "email-get-latest", 
+      "target": "{{USERNAME}}" 
+    },
+    { 
+      "id": "s4-db", 
+      "promise": "Verify session state in the database", 
+      "description": "Queries the database to confirm the user session was written correctly.",
+      "action": "db-query", 
+      "target": "SESSIONS" 
+    },
+    { 
+      "id": "s5-fs", 
+      "promise": "Audit the physical file system logs", 
+      "description": "Checks the local file system to ensure the execution run log was generated securely.",
+      "action": "file-exists", 
+      "target": "./logs/run.log" 
+    }
+  ]
+}

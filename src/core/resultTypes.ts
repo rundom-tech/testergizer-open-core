@@ -50,6 +50,8 @@ export interface StepTargetAttempt {
 
 export interface StepResult {
   id: string;
+  promise?: string;
+  description?: string;
   action: string;
   // 🔽 passthrough metadata (compiler → runner → reporter)
   group?: {
@@ -103,6 +105,7 @@ export interface StepResult {
   data?: {
     value: any;
     masked?: boolean;
+    audit?: any[];
   };
   status: StepStatus;
   attempts: number;
@@ -168,6 +171,9 @@ export interface TestAttemptResult {
 
 export interface TestResult {
   id: string;
+  capability?: string;  
+  promise?: string;     
+  description?: string;
   name?: string;
   testDomain: TestDomain;
 
@@ -240,4 +246,12 @@ export interface RunResult {
   summary: RunSummary;
   suiteStatus: "valid" | "invalid" | "passed" | "failed";
   signalStrength: number; // -100 to +100 normalized polarity metric
+}
+
+// Define the structure of an audit log entry
+export interface AuditLog {
+  check: string;
+  path: string;
+  passed: boolean;
+  detail: string;
 }

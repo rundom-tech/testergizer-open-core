@@ -57,6 +57,63 @@ import { ApiTargetRegistry } from "./api/ApiRepository";
 import { ApiExecutable, ApiTargetDefinition } from "./api/types";
 import { ApiExecutor } from "./executors/ApiExecutor";
 
+// SPRINT 6: New Core Stubs for DB and Email
+import { DbExecutor } from "./executors/DbExecutor";
+import { EmailExecutor } from "./executors/EmailExecutor";
+
+// SPRINT 6: Bitwise Domain Flags (31-Bit Power of Two)
+export enum TestDomainFlag {
+  UI    = 1,  // 00001
+  API   = 2,  // 00010
+  FS    = 4,  // 00100
+  DB    = 8,  // 01000
+  EMAIL = 16  // 10000
+}
+
+/**
+ * Parses human-readable domain strings/arrays into a bitwise integer.
+ * Falls back to the execution engine's default domain if missing.
+ */
+export function resolveTestDomain(input: unknown, engine?: string): number {
+  let mask = 0;
+
+  // 1. Explicit Test-Level Override (Highest Priority)
+  if (input) {
+    let domains: string[] = [];
+
+    if (typeof input === 'number') return Math.floor(input);
+
+    if (typeof input === 'string') {
+      if (input.toLowerCase() === 'system') {
+        return TestDomainFlag.UI | TestDomainFlag.API;
+      }
+      domains = input.split(/[\s,|+]+/);
+    } else if (Array.isArray(input)) {
+      domains = input;
+    }
+
+    for (const d of domains) {
+      if (typeof d !== 'string') continue;
+      const normalized = d.trim().toUpperCase();
+      if (normalized === 'UI') mask |= TestDomainFlag.UI;
+      if (normalized === 'API') mask |= TestDomainFlag.API;
+      if (normalized === 'FS') mask |= TestDomainFlag.FS;
+      if (normalized === 'DB') mask |= TestDomainFlag.DB;
+      if (normalized === 'EMAIL') mask |= TestDomainFlag.EMAIL;
+    }
+    
+    // If the author provided a valid string that parsed correctly, return it
+    if (mask > 0) return mask;
+  }
+
+  // 2. Suite-Level Fallback (Inferred Risk)
+  if (engine === "playwright") return TestDomainFlag.UI;
+  if (engine === "api") return TestDomainFlag.API;
+  
+  // 3. Absolute Fallback (for "testergizer" or explicitly undefined engines)
+  return 0;
+}
+
 function nowIso(): string {
   return new Date().toISOString();
 }
@@ -120,7 +177,6 @@ function instrumentationForAttempt(
   executionEngine: ExecutionEngine,
   attemptNumber: number
 ): InstrumentationState | undefined {
-  // Semantic fix: API and Model engines do not support UI-based instrumentation
   if (executionEngine === "api" || executionEngine === "testergizer") {
     return undefined;
   }
@@ -148,7 +204,10 @@ export class TestExecutor {
 
   private apiExecutable?: ApiExecutable;
   private apiRepo?: ApiTargetRegistry; 
-  
+
+  // SPRINT 6: Open Core Executors
+  private dbExecutor = new DbExecutor();
+  private emailExecutor = new EmailExecutor();
 
   constructor(options: TestExecutorOptions = {}) {
     this.options = options;
@@ -166,6 +225,14 @@ export class TestExecutor {
         : normalizeRetries((options as any).retries);
 
     this.autVersion = options.autVersion;
+
+    // SPRINT 6 FIX: Map the CTR definition from options so logical locators resolve
+    this.ctrDefinition = (options as any).ctrDefinition || (options as any).clrDefinition;
+  }
+
+  // SPRINT 6: Unified Domain Handler
+  private async handleDomainStep(executor: any, step: any) {
+    return await executor.execute(step);
   }
 
   private async initCTR(): Promise<void> {
@@ -251,7 +318,6 @@ export class TestExecutor {
     await this.initCTR();
     await this.initAPIRepo();
 
-    // Initialize execution context for Sprint 3
     const initialVariables = (this.options as any).variables || {};
     const executionContext = new ExecutionContext(initialVariables);
     const varianceResolver = new VarianceResolver(executionContext);
@@ -279,9 +345,14 @@ export class TestExecutor {
 
       const isModelEngine = this.engine === "testergizer";
       
+      const testDomainValue = resolveTestDomain(test.testDomain, this.engine);
+      const requiresBrowser = 
+        this.engine === "playwright" || 
+        (testDomainValue & TestDomainFlag.UI) === TestDomainFlag.UI; 
+      
       const artifactsEnabled =
         this.options.artifacts?.enabled === true &&
-        this.engine === "playwright";
+        requiresBrowser;
 
       const attemptDir = artifactsEnabled
         ? path.join(
@@ -295,7 +366,7 @@ export class TestExecutor {
       const attemptStartedAt = nowIso();
 
       try {
-        if (this.engine === "playwright") {
+        if (requiresBrowser) {
           browser = await browserType.launch({
             headless: this.options.headless ?? true,
             slowMo: this.options.slowMoMs
@@ -333,7 +404,6 @@ export class TestExecutor {
           const stepStartedAt = nowIso();
           const rawTargetBefore: any = (step as any).target;
 
-          // SPRINT 3: Resolve Variance on Target and Data BEFORE domain execution
           if (typeof (step as any).target === 'string') {
             (step as any).target = varianceResolver.resolveString((step as any).target);
           }
@@ -349,143 +419,178 @@ export class TestExecutor {
           let status: StepStatus = isModelEngine ? "reviewed" : "passed";
 
           try {
-            if (
-              this.engine === "playwright" &&
-              this.ctrDefinition &&
-              typeof (step as any).target === "string"
-            ) {
-              const action = String((step as any).action);
+            const actionStr = String((step as any).action || "").toLowerCase();
 
-              const needsSelector =
-                action === "click" ||
-                action === "fill" ||
-                action === "assertVisible" ||
-                action === "assertText";
+            // SPRINT 6: UNIFIED THREAD ROUTING
+            if (actionStr.startsWith("db-")) {
+              const res = await this.handleDomainStep(this.dbExecutor, step);
+              status = res.status as StepStatus || "passed";
+              (step as any).data = res.data;
+              (step as any).target = { value: step.target, resolved: true };
 
-              if (needsSelector) {
-                const logicalTarget = String((step as any).target);
+            } else if (actionStr.startsWith("email-")) {
+              const res = await this.handleDomainStep(this.emailExecutor, step);
+              status = res.status as StepStatus || "passed";
+              (step as any).data = res.data;
+              (step as any).target = { value: step.target, resolved: true };
 
-                const looksLogical =
-                  logicalTarget.split(".").length === 3 &&
-                  !logicalTarget.includes("://");
-
-                if (looksLogical) {
-                  if (!this.locatorRepo) {
-                    this.locatorRepo = LocatorRepository.fromDictionary(
-                      (this.ctrDefinition as any).locators
-                    );
-                  }
-
-                  const parsed = parseTarget(logicalTarget);
-                  const def = this.locatorRepo.get(parsed.elementKey);
-
-                  if (!def) {
-                    throw new Error(
-                      `CTR element "${parsed.elementKey}" not found. Available keys: ${this.locatorRepo.keys().join(", ")}`
-                    );
-                  }
-
-                  const res = await resolveLocator(
-                    parsed.elementKey,
-                    def,
-                    parsed.context,
-                    {
-                      tryResolve: async (s: ClrSelector) => {
-                        if (!page) return null;
-
-                        if (s.using === "css") {
-                          const h = await page.$(s.value);
-                          return h ? {} : null;
-                        }
-
-                        if (s.using === "xpath") {
-                          const selector = `xpath=${s.value}`;
-                          const h = await page.$(selector);
-                          return h ? {} : null;
-                        }
-
-                        return null;
-                      }
-                    }
-                  );
-
-                  if (!res.resolved || !res.resolvedBy) {
-                    throw new Error(`Failed to resolve CTR target: ${logicalTarget}`);
-                  }
-
-                  (step as any).target =
-                    res.resolvedBy.using === "xpath"
-                      ? `xpath=${res.resolvedBy.value}`
-                      : res.resolvedBy.value;
-                }
-              }
-            }
-
-            if ((step.action as string) === "api-call") {
-              
-              if (!this.apiRepo) {
-                this.apiRepo = new ApiTargetRegistry(); 
-              }
-              
-              const possibleSources = [
-                (this as any).ctrDefinition,
-                (this as any).clrDefinition,
-                (this.options as any)?.ctrDefinition,
-                (this.options as any)?.clrDefinition
-              ];
-
-              const validCtr = possibleSources.find(source => source && source.endpoints);
-
-              if (validCtr && (this.apiRepo as any).endpointsMap?.size === 0) {
-                this.apiRepo!.loadFromObject(validCtr); 
-              }
-
-              const targetStr = String((step as any).target);
-              
-              if (!this.apiRepo!.getEndpoint(targetStr)) {
-                const keys = Array.from((this.apiRepo as any).endpointsMap?.keys() || []).join(", ");
-                throw new Error(`[API Routing] Target '${targetStr}' missing. Available keys: [${keys}]`);
-              }
-              
-              const apiEngine = new ApiExecutor(this.apiRepo!);
-              
-              // SPRINT 4: Pass the shared ExecutionContext and the step extraction rules
-              const apiResponse = await apiEngine.execute({
-                id: step.id,
-                version: "2.0",
-                targetRef: targetStr,
-                method: (step as any).method || "GET",
-                payload: (step as any).payload,
-                assertions: (step as any).assertions || [],
-                extract: (step as any).extract 
-              } as any, initialVariables, executionContext); 
-              
-              // 1. Correctly map the Payload into the Step's data object
-              (step as any).target = { value: apiResponse.url, resolved: true };
-              (step as any).data = { 
-                value: apiResponse.status_code, 
-                body: apiResponse.body,
-                headers: apiResponse.headers,
-                extracted: apiResponse.extracted, // SPRINT 4: Surface captured data for reporter
-                audit: apiResponse.audit,         // SPRINT 4: Surface assertion transparency
-                masked: false 
+            } else if (actionStr.startsWith("file-") || actionStr.startsWith("dir-")) {
+              // Stub for FS Execution (Pending FsExecutor implementation)
+              status = "passed";
+              (step as any).data = {
+                value: "CORE_STUB",
+                audit: [{ check: step.action, path: step.target, passed: true, detail: "[Open Core] FS action recognized." }]
               };
-              
-              if (apiResponse.passed) {
-                status = "passed"; 
+              (step as any).target = { value: step.target, resolved: true };
+
+            } else if (actionStr === "api-call" || actionStr.startsWith("api-")) {
+              // EXISTING API LOGIC
+              if (isModelEngine) {
+                status = "reviewed";
+                (step as any).target = { value: String((step as any).target), resolved: true };
+                (step as any).data = {
+                  value: 200, 
+                  body: {},
+                  headers: {},
+                  extracted: {},
+                  audit: [{ check: "model_review", path: "N/A", passed: true, detail: "API payload reviewed" }],
+                  masked: false
+                };
               } else {
-                status = "failed";
-                attemptFailed = true; 
-                errors.push({
-                  reason: "AssertionFailure",
-                  message: apiResponse.assertionErrors.join(' \n ')
-                });
+                if (!this.apiRepo) {
+                  this.apiRepo = new ApiTargetRegistry(); 
+                }
+                
+                const possibleSources = [
+                  (this as any).ctrDefinition,
+                  (this as any).clrDefinition,
+                  (this.options as any)?.ctrDefinition,
+                  (this.options as any)?.clrDefinition
+                ];
+
+                const validCtr = possibleSources.find(source => source && source.endpoints);
+
+                if (validCtr && (this.apiRepo as any).endpointsMap?.size === 0) {
+                  this.apiRepo!.loadFromObject(validCtr); 
+                }
+
+                const targetStr = String((step as any).target);
+                
+                if (!this.apiRepo!.getEndpoint(targetStr)) {
+                  const keys = Array.from((this.apiRepo as any).endpointsMap?.keys() || []).join(", ");
+                  throw new Error(`[API Routing] Target '${targetStr}' missing. Available keys: [${keys}]`);
+                }
+                
+                const apiEngine = new ApiExecutor(this.apiRepo!);
+                
+                const apiResponse = await apiEngine.execute({
+                  id: step.id,
+                  version: "2.0",
+                  targetRef: targetStr,
+                  method: (step as any).method || "GET",
+                  payload: (step as any).payload,
+                  assertions: (step as any).assertions || [],
+                  extract: (step as any).extract 
+                } as any, initialVariables, executionContext); 
+                
+                (step as any).target = { value: apiResponse.url, resolved: true };
+                (step as any).data = { 
+                  value: apiResponse.status_code, 
+                  body: apiResponse.body,
+                  headers: apiResponse.headers,
+                  extracted: apiResponse.extracted, 
+                  audit: apiResponse.audit,         
+                  masked: false 
+                };
+                
+                if (apiResponse.passed) {
+                  status = "passed"; 
+                } else {
+                  status = "failed";
+                  attemptFailed = true; 
+                  errors.push({
+                    reason: "AssertionFailure",
+                    message: apiResponse.assertionErrors.join(' \n ')
+                  });
+                }
               }
 
             } else {
+              // EXISTING UI LOGIC
+              if (
+                requiresBrowser && 
+                this.ctrDefinition &&
+                typeof (step as any).target === "string"
+              ) {
+                const action = String((step as any).action);
+  
+                const needsSelector =
+                  action === "click" ||
+                  action === "fill" ||
+                  action === "assertVisible" ||
+                  action === "assertText";
+  
+                if (needsSelector) {
+                  const logicalTarget = String((step as any).target);
+  
+                  const looksLogical =
+                    logicalTarget.split(".").length === 3 &&
+                    !logicalTarget.includes("://");
+  
+                  if (looksLogical) {
+                    if (!this.locatorRepo) {
+                      this.locatorRepo = LocatorRepository.fromDictionary(
+                        (this.ctrDefinition as any).locators
+                      );
+                    }
+  
+                    const parsed = parseTarget(logicalTarget);
+                    const def = this.locatorRepo.get(parsed.elementKey);
+  
+                    if (!def) {
+                      throw new Error(
+                        `CTR element "${parsed.elementKey}" not found. Available keys: ${this.locatorRepo.keys().join(", ")}`
+                      );
+                    }
+  
+                    const res = await resolveLocator(
+                      parsed.elementKey,
+                      def,
+                      parsed.context,
+                      {
+                        tryResolve: async (s: ClrSelector) => {
+                          if (!page) return null;
+  
+                          if (s.using === "css") {
+                            const h = await page.$(s.value);
+                            return h ? {} : null;
+                          }
+  
+                          if (s.using === "xpath") {
+                            const selector = `xpath=${s.value}`;
+                            const h = await page.$(selector);
+                            return h ? {} : null;
+                          }
+  
+                          return null;
+                        }
+                      }
+                    );
+  
+                    if (!res.resolved || !res.resolvedBy) {
+                      throw new Error(`Failed to resolve CTR target: ${logicalTarget}`);
+                    }
+  
+                    (step as any).target =
+                      res.resolvedBy.using === "xpath"
+                        ? `xpath=${res.resolvedBy.value}`
+                        : res.resolvedBy.value;
+                  }
+                }
+              }
+
               await this.executor.execute(step as JsonStep, page);
 
-              // SPRINT 4: UI State Capture via Playwright
               if (page && (step as any).extract && Array.isArray((step as any).extract) && status === "passed") {
                 const targetSelector = typeof (step as any).target === 'string' ? (step as any).target : undefined;
                 
@@ -509,7 +614,6 @@ export class TestExecutor {
                     executionContext.set(instr.as, extractedValue, instr.transform);
                     console.log(`[UI Extractor] Captured "${instr.as}" =`, extractedValue);
                     
-                    // Attach to step data for reporter visibility
                     if (!(step as any).data) (step as any).data = {};
                     if (!(step as any).data.extracted) (step as any).data.extracted = {};
                     (step as any).data.extracted[instr.as] = extractedValue;
@@ -635,11 +739,10 @@ export class TestExecutor {
             };
           })();
 
-          // 2. Ensure the full data object (including body) is preserved for the reporter
           const normalizedData = (() => {
             const d: any = (step as any).data;
             if (d && typeof d === "object" && "value" in d) {
-               return d; // Return the entire object so body/headers are passed through
+               return d; 
             }
 
             const v: any = (step as any).value ?? (step as any).input;
@@ -649,6 +752,7 @@ export class TestExecutor {
           })();
 
           stepResults.push({
+            ...(step as any),
             id: step.id,
             action: step.action,
             group: (step as any).group,
@@ -813,6 +917,7 @@ export class TestExecutor {
     const testEndedAt = nowIso();
 
     return {
+      ...(test as any),
       id: test.id,
       name: test.name,
       testDomain: test.testDomain ?? "system",

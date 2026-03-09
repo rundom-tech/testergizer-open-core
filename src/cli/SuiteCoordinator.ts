@@ -634,6 +634,7 @@ function expandIncludesWithProvenance(params: {
   }
 
   return {
+    ...root, // 👈 Ensures capability, promise, and description survive flattening
     id: root.id,
     reusable: false,
     context: root.context,
@@ -902,6 +903,7 @@ async function runOneTest(params: {
   const interpolatedSteps = interpolateDeepStrict(expanded.steps, resolvedContext.values);
 
   const testDef: JsonTestDefinition = {
+    ...(expanded as any), // 👈 Ensures metadata bridges from orchestrator to executor
     id: expanded.id,
     steps: interpolatedSteps
   };

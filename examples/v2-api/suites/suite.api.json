@@ -2,6 +2,7 @@
   "schemaVersion": "v2",
   "suiteId": "api-sprint1",
   "suiteName": "API Sprint 1 (Isolated Target)",
+  "description": "API tests for sprint 1.",
   "resolveFrom": "..",
   "baseUrl": "https://jsonplaceholder.typicode.com",
   "ctr": {

@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "v2",
+  "suiteId": "suite-31-bit-matrix",
+  "suiteName": "Full Stack Intelligence Matrix",
+  "resolveFrom": "..",
+  "baseUrl": "https://www.saucedemo.com",
+  "ctr": {
+    "path": "ctr/ctr-fullstack.json"
+  },
+  "tests": [
+    {
+      "id": "matrix-proof",
+      "testRef": "tests/full-stack-proof.json"
+    }
+  ]
+}

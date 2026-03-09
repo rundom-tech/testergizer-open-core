@@ -509,41 +509,36 @@ pre.stack {
    Step rows (evidence units)
    ========================= */
 .step-row {
-        display: flex;
-        align-items: center; /* Option A: center rail vertically vs the step block */
-        gap: 10px;
-      }
+  display: flex;
+  align-items: flex-start; /* Was 'center' before Sprint 6 */
+  gap: 12px;
+}
 
-      .step-rail {
-        width: 18px;
-        min-width: 18px;
-        height: 18px;
-        border-radius: 999px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 12px;
-        line-height: 1;
-        user-select: none;
-        /* structural separation cue even if theme provides no colors */
-        border: 1px solid rgba(127, 127, 127, 0.35);
-      }
+.step-rail {
+  margin-top: 4px; /* Drops the icon down slightly to align with text baseline */
+  flex-shrink: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 20px;
+  height: 20px;
+}
 
-      .step-body {
-        flex: 1;
-        min-width: 0;
-      }
+.step-body {
+  flex: 1;
+  min-width: 0;
+}
 
-      /* Fallback palette only (themes can override). */
-      .step-rail.step-passed { border-color: rgba(46, 160, 67, 0.7); }
-      .step-rail.step-failed { border-color: rgba(248, 81, 73, 0.75); }
-      .step-rail.step-aborted { border-color: rgba(210, 153, 34, 0.8); }
-      .step-rail.step-skipped { border-color: rgba(139, 148, 158, 0.75); }
-      .step-rail.step-unknown { border-color: rgba(127, 127, 127, 0.5); }
+/* Fallback palette only (themes can override). */
+.step-rail.step-passed { border-color: rgba(46, 160, 67, 0.7); }
+.step-rail.step-failed { border-color: rgba(248, 81, 73, 0.75); }
+.step-rail.step-aborted { border-color: rgba(210, 153, 34, 0.8); }
+.step-rail.step-skipped { border-color: rgba(139, 148, 158, 0.75); }
+.step-rail.step-unknown { border-color: rgba(127, 127, 127, 0.5); }
 
-      .step-icon {
-        font-weight: 700;
-      }
+.step-icon {
+  font-weight: 700;
+}
 
 .tg-attempt {
   border: 1px solid rgba(255,255,255,0.08);

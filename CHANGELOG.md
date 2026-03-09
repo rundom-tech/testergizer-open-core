@@ -1,6 +1,26 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+All notable changes to this project will be documented in this file.## [Unreleased] - SPRINT 6: Full Stack Intelligence Matrix
+
+## [Unreleased] - SPRINT 6: Full Stack Intelligence Matrix
+
+### Added
+* Introduced the 31-Bit Domain Flag system (`TestDomainFlag` in `enums.ts`) to route execution across UI, API, FS, DB, and EMAIL layers in a single thread.
+* Added `DbExecutor` and `EmailExecutor` as Open Core stubs to intercept backend interactions and generate physical audit trails.
+* Implemented schema-compliant component composition using the `include` directive to flatten reusable execution contracts at runtime.
+* Added the `examples/v2-fullstack/` directory, containing the comprehensive 31-bit matrix proof, context variables, and context-aware CTR locators.
+* Added the `examples/v2-hybrid/` directory to support mixed-engine execution models.
+
+### Changed
+* Upgraded `TestExecutor` to properly resolve context-aware logical locators (e.g., extracting the `login` context from `login.button.submit`) and map them to cascading physical selectors.
+* Refactored `SuiteCoordinator` to securely pass target definitions and inherited variable contexts down to the execution thread.
+* Expanded `resultTypes.ts` to support detailed `audit` log arrays injected by Open Core execution stubs.
+* Updated `htmlReporter` and layout CSS to cleanly render the new domain targets and audit trails in the visual execution report.
+
+### Removed
+* Removed legacy flat flow structures (`flows/auth/login.json` and `logout.json`) to enforce the new reusable component architecture.
+
+
 
 ## [API STATE EXTRACTION - SPRINT 4] - 2026-03-06 (State Capture & Chaining Output to Input)
 

@@ -1,0 +1,32 @@
+{
+  "appId": "com.saucedemo.matrix",
+  "versionRange": "*",
+  "domFingerprint": {
+    "hash": "bypass-for-stub"
+  },
+  "endpoints": {
+    "/setup": {
+      "url": "https://jsonplaceholder.typicode.com/posts",
+      "defaultMethod": "POST"
+    }
+  },
+  "locators": {
+    "input.username": {
+      "contexts": ["login"],
+      "selectors": [{ "using": "css", "value": "#user-name" }]
+    },
+    "input.password": {
+      "contexts": ["login"],
+      "selectors": [{ "using": "css", "value": "#password" }]
+    },
+    "button.submit": {
+      "contexts": ["login", "checkout", "save_info"],
+      "selectors": [
+        { "using": "css", "value": "#login-button" },
+        { "using": "css", "value": "#continue" },
+        { "using": "css", "value": "input[type='submit']" },
+        { "using": "css", "value": "button[type='submit']" }
+      ]
+    }
+  }
+}
