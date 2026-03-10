@@ -23,7 +23,10 @@ export class ApiTargetRegistry {
       this.endpointsMap.set(key, val as ApiTargetDefinition);
     }
     
-    console.log(`[API] Loaded ${this.endpointsMap.size} REST targets. Boundaries secured.`);
+    // Quality Intelligence: Silence empty domain boundaries to avoid terminal spam
+    if (this.endpointsMap.size > 0) {
+      console.log(`[API] Loaded ${this.endpointsMap.size} REST targets. Boundaries secured.`);
+    }
   }
 
   /**

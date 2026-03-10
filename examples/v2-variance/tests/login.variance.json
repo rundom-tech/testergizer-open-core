@@ -1,0 +1,122 @@
+[
+  {
+    "variationId": "standard_user_success",
+    "description": "Validates the primary success path for a standard user.",
+    "inputs": {
+      "USERNAME": "standard_user",
+      "PASSWORD": "secret_sauce"
+    },
+    "expect": [
+      {
+        "target": "url",
+        "matcher": "endsWith",
+        "value": "/inventory.html"
+      }
+    ]
+  },
+  {
+    "variationId": "locked_out_user_rejection",
+    "description": "Validates the system correctly halts and notifies a locked account.",
+    "inputs": {
+      "USERNAME": "locked_out_user",
+      "PASSWORD": "secret_sauce"
+    },
+    "expect": [
+      {
+        "target": "label.error",
+        "matcher": "containsText",
+        "value": "Epic sadface: Sorry, this user has been locked out."
+      }
+    ]
+  },
+  {
+    "variationId": "invalid_password_rejection",
+    "description": "Validates the boundary for incorrect credentials.",
+    "inputs": {
+      "USERNAME": "standard_user",
+      "PASSWORD": "wrong_password_123"
+    },
+    "expect": [
+      {
+        "target": "label.error",
+        "matcher": "containsText",
+        "value": "Epic sadface: Username and password do not match any user in this service"
+      }
+    ]
+  },
+  {
+    "variationId": "invalid_username_rejection",
+    "description": "Validates the boundary for an unregistered username.",
+    "inputs": {
+      "USERNAME": "unknown_user_404",
+      "PASSWORD": "secret_sauce"
+    },
+    "expect": [
+      {
+        "target": "label.error",
+        "matcher": "containsText",
+        "value": "Epic sadface: Username and password do not match any user in this service"
+      }
+    ]
+  },
+  {
+    "variationId": "missing_password_validation",
+    "description": "Validates client side or server side validation for missing password fields.",
+    "inputs": {
+      "USERNAME": "standard_user",
+      "PASSWORD": ""
+    },
+    "expect": [
+      {
+        "target": "label.error",
+        "matcher": "containsText",
+        "value": "Epic sadface: Password is required"
+      }
+    ]
+  },
+  {
+    "variationId": "missing_username_validation",
+    "description": "Validates validation triggers when the username is omitted.",
+    "inputs": {
+      "USERNAME": "",
+      "PASSWORD": "secret_sauce"
+    },
+    "expect": [
+      {
+        "target": "label.error",
+        "matcher": "containsText",
+        "value": "Epic sadface: Username is required"
+      }
+    ]
+  },
+  {
+    "variationId": "missing_credentials_validation",
+    "description": "Validates validation triggers when both fields are omitted entirely.",
+    "inputs": {
+      "USERNAME": "",
+      "PASSWORD": ""
+    },
+    "expect": [
+      {
+        "target": "label.error",
+        "matcher": "containsText",
+        "value": "Epic sadface: Username is required"
+      }
+    ]
+  },
+  {
+    "variationId": "performance_glitch_user_resilience",
+    "description": "Validates the runner's timeout resilience against a known slow loading profile.",
+    "inputs": {
+      "USERNAME": "performance_glitch_user",
+      "PASSWORD": "secret_sauce"
+    },
+    "expect": [
+      {
+        "target": "url",
+        "matcher": "endsWith",
+        "value": "/inventory.html"
+      }
+    ]
+  }
+]

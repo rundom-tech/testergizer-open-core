@@ -1,4 +1,4 @@
-export enum TestDomain {
+export enum TestMatrix {
   UI = 1,
   API = 2,
   FS = 4,

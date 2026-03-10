@@ -1,3 +1,4 @@
+// src/core/locators/resolveAndEmit.ts
 import type { EvidenceSink } from '../evidence/types';
 import type { StrategyExecutor } from './types';
 import { parseTarget } from './target';
@@ -23,21 +24,26 @@ export async function resolveTargetWithEvidence<THandle>(args: {
 
   if (!def) {
     throw new Error(
-      `CTR element "${elementKey}" not found. Available keys: ${args.repo.keys().join(', ')}`
+      `Strict Boundary Violation - CTR element "${elementKey}" not found. Available keys: ${args.repo.keys().join(', ')}`
     );
   }
 
   try {
-    const res = await resolveLocator(
+    // Pure data extraction boundary. No zero-latency DOM probing.
+    const res = resolveLocator(
       elementKey,
       def,
-      context,
-      args.executor
+      context !== "global" ? context : undefined
     );
 
-    if (!res.resolved || !res.handle) {
-      throw new Error(`Failed to resolve locator: ${args.target}`);
+    if (!res.resolved || !res.resolvedBy) {
+      throw new Error(`Strict Boundary Violation - Locator '${elementKey}' failed to yield a valid selector.`);
     }
+
+    // Format the selector string for the automation engine
+    const selectorString = res.resolvedBy.using === "xpath"
+      ? `xpath=${res.resolvedBy.value}`
+      : res.resolvedBy.value;
 
     // Emit full resolution evidence for report layer
     await args.evidence?.append({
@@ -58,15 +64,15 @@ export async function resolveTargetWithEvidence<THandle>(args: {
         result: a.result
       })) ?? [],
 
-      resolvedBy: res.resolvedBy
-        ? {
-            using: res.resolvedBy.using,
-            value: res.resolvedBy.value
-          }
-        : undefined
+      resolvedBy: {
+        using: res.resolvedBy.using,
+        value: res.resolvedBy.value
+      }
     });
 
-    return res.handle as THandle;
+    // In the pure data extraction model, the deterministic selector string 
+    // is the handle. We pass this to Playwright, trusting its native auto-wait.
+    return selectorString as unknown as THandle;
 
   } catch (err: any) {
 

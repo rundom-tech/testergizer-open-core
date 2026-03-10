@@ -3,16 +3,27 @@ import type { ParsedTarget } from './types';
 
 export function parseTarget(target: string): ParsedTarget {
   const parts = target.split('.');
-  if (parts.length !== 3) throw new InvalidTargetError(target);
 
-  const [context, logicalName, type] = parts;
+  // Support for 2-part global targets (e.g. "input.username")
+  if (parts.length === 2) {
+    return {
+      context: "global",
+      logicalName: parts[0],
+      type: parts[1],
+      elementKey: target
+    };
+  }
 
-  if (!context || !logicalName || !type) throw new InvalidTargetError(target);
+  // Support for 3-part contextual targets (e.g. "login.input.username")
+  if (parts.length === 3) {
+    const [context, logicalName, type] = parts;
+    return {
+      context,
+      logicalName,
+      type,
+      elementKey: `${logicalName}.${type}`
+    };
+  }
 
-  return {
-    context,
-    logicalName,
-    type,
-    elementKey: `${logicalName}.${type}`
-  };
+  throw new InvalidTargetError(target);
 }

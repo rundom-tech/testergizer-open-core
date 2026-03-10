@@ -47,6 +47,29 @@ export class PlaywrightExecutor implements StepExecutor {
         return;
       }
 
+      case "assertUrl": {
+        if (step.value === undefined || step.value === null) {
+          throw new Error("assertUrl requires value");
+        }
+        
+        const expected = String(step.value);
+        const matcher = (step as any).matcher || "equals";
+
+        try {
+          // Leverage Playwright's native URL polling to safely wait for navigation
+          await page.waitForURL((url) => {
+            const href = url.href;
+            if (matcher === "endsWith") return href.endsWith(expected);
+            if (matcher === "startsWith") return href.startsWith(expected);
+            if (matcher === "contains" || matcher === "containsText") return href.includes(expected);
+            return href === expected;
+          }, { timeout });
+        } catch (e) {
+          throw new Error(`Expected URL to ${matcher} "${expected}". Got: "${page.url()}"`);
+        }
+        return;
+      }
+
       case "waitFor": {
         const ms = Number(step.value ?? 1000);
         await page.waitForTimeout(Number.isFinite(ms) ? ms : 1000);
@@ -54,7 +77,6 @@ export class PlaywrightExecutor implements StepExecutor {
       }
 
       default:
-        // Exhaustive check, but keep runtime guard for JS builds
         throw new Error(`Unknown step action: ${String((step as any).action)}`);
     }
   }

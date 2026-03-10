@@ -46,6 +46,22 @@ By defining execution contracts that combine UI workflows with API seeding and O
 
 ---
 
+## Orchestration & Compile Phase
+
+Testergizer utilizes a dedicated **Compile Phase** to transform high-level declarative test definitions into immutable execution contracts. This phase decoupling ensures that the orchestration of complex test suites never interferes with the determinism of the execution itself.
+
+### The Transformation Workflow
+* **Expansion:** Include references are resolved and fused into a single, flat step sequence.
+* **Unrolling:** Data Variance matrices are evaluated to create independent, parallelizable "testlets".
+* **Deterministic Binding:** Abstract logical targets from the CTR are extracted into physical CSS or XPath selectors.
+* **Boundary Mapping:** Declarative assertions (expectations) are compiled into actionable engine steps like `assertUrl` or `assertText`.
+
+
+
+By shifting these responsibilities to the Compile Phase, the **TestExecutor** remains a strictly "dumb" runner. It does not perform runtime branching or lookup decisions; it simply executes the hardcoded plan it was assigned.
+
+---
+
 ## Design principles
 
 Testergizer Open Core is built around the following principles:
@@ -78,6 +94,19 @@ Defines the business goal of the session.
 Dictates the strictness of the structural governance during the run.
 * `strict`: Enforces absolute schema compliance and CTR rules.
 * `debug`: Relaxed validation intended strictly for local authoring and troubleshooting.
+
+---
+
+## Quality Intelligence: Precompiled Divergent Topology
+
+The engine supports deterministic structural branching via a dedicated **Compile Phase**. This allows a single Base Test to unroll into multiple divergent execution plans based on a data matrix, without requiring imperative logic (if/else) in the JSON source.
+
+### Base + Extension Pattern
+1.  **Base Test:** Defines the mandatory common "Foundation" steps (e.g., a standard login protocol).
+2.  **Variance Entry:** Defines optional "Extension" steps specific to that specific data set (e.g., 2FA challenges or audit log verifications).
+3.  **Compile Phase:** The Orchestrator fuses the base and variant steps into a linear, immutable execution contract before it ever reaches the workers.
+
+This architectural pattern ensures **100% Determinism**. The physical steps executed in the browser are an exact match to the hardcoded sequence recorded in the `run.json` artifact. There are no "hidden" runtime decisions; the Physical Topology is locked during compilation.
 
 ---
 

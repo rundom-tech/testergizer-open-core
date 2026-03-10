@@ -6,16 +6,13 @@ import type {
 
 import { ContextNotAllowedError } from "./errors";
 
-export async function resolveLocator(
+export function resolveLocator(
   elementKey: string,
   def: LocatorDefinition,
-  context: string,
-  executor: {
-    tryResolve(selector: ClrSelector): Promise<unknown | null>;
-  }
-): Promise<LocatorResolutionResult> {
+  context?: string
+): LocatorResolutionResult {
   // Context guard (optional)
-  if (def.contexts && !def.contexts.includes(context)) {
+  if (context && context !== "global" && def.contexts && !def.contexts.includes(context)) {
     throw new ContextNotAllowedError(
       context,
       elementKey,
@@ -23,39 +20,21 @@ export async function resolveLocator(
     );
   }
 
-  const attempts: Array<{
-    using: ClrSelector["using"];
-    value: string;
-    result: "success" | "not_found";
-  }> = [];
-
-  for (const s of def.selectors) {
-    const handle = await executor.tryResolve(s);
-
-    if (handle) {
-      attempts.push({
-        using: s.using,
-        value: s.value,
-        result: "success"
-      });
-
-      return {
-        resolved: true,
-        resolvedBy: s,
-        handle,
-        attempts
-      };
-    }
-
-    attempts.push({
-      using: s.using,
-      value: s.value,
-      result: "not_found"
-    });
+  if (!def.selectors || def.selectors.length === 0) {
+    return { resolved: false, attempts: [] };
   }
 
+  // STRICT BOUNDARY: Do not probe the DOM. 
+  // Extract the primary selector and trust Playwright's auto-wait.
+  const primary = def.selectors[0];
+
   return {
-    resolved: false,
-    attempts
+    resolved: true,
+    resolvedBy: primary,
+    attempts: [{
+      using: primary.using,
+      value: primary.value,
+      result: "success"
+    }]
   };
 }

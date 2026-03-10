@@ -2,7 +2,25 @@
 
 All notable changes to this project will be documented in this file.## [Unreleased] - SPRINT 6: Full Stack Intelligence Matrix
 
-## [Unreleased] - SPRINT 6: Full Stack Intelligence Matrix
+## [SPRINT 7] - Data Variance and Precompiled Branching - 2026-03-10
+
+### Added
+- **Data Matrix Resolver**: Core logic for unrolling data variance matrices into independent testlets.
+- **Precompiled Branching**: Support for additive structural variance where matrix entries can append custom steps to a base flow.
+- **Playwright assertUrl**: Native support for declarative URL boundary assertions using Playwright polling.
+- **Concurrency Tracking**: Explicit logging and reporting of worker counts in `run.json` and `report.html`.
+
+### Changed
+- **Strict Boundary Resolution**: Transformed locator resolution into a pure synchronous data extractor.
+- **Neutered Probes**: Removed zero-latency DOM probing to eliminate React hydration race conditions.
+- **Flexible Target Parsing**: Updated `target.ts` to support both 2-part global and 3-part contextual keys.
+- **Silent API Boot**: Patched `ApiRepository` to silence readiness logs when zero endpoints are loaded.
+
+### Fixed
+- Fixed race conditions where Playwright auto-wait was defeated by framework-level DOM queries.
+- Fixed missing `matrix-expect` step reporting in HTML artifacts.
+
+## [SPRINT 6] - Full Stack Intelligence Matrix - 2026-03-10
 
 ### Added
 * Introduced the 31-Bit Domain Flag system (`TestDomainFlag` in `enums.ts`) to route execution across UI, API, FS, DB, and EMAIL layers in a single thread.

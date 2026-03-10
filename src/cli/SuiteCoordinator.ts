@@ -22,6 +22,21 @@
 //
 // - NEW (2026-02-11): Fixed Suite v2 branch referencing `resolvedBaseUrl`
 //   before initialization.
+//
+// - SPRINT 7: Integrated DataMatrixResolver for Data Variance.
+//   Bypasses legacy schema validation to preserve matrix routing properties.
+//   Hoisted matrix unrolling to the Compile Phase so Orchestrator can natively
+//   distribute unrolled testlets across parallel workers.
+//
+// - SPRINT 7 PATCH: Inject explicit worker count into RunResult payload for 
+//   strict execution transparency.
+//
+// - SPRINT 7 HOTFIX: Ensure testDomain is strictly preserved during matrix 
+//   unrolling to maintain UI boundary rendering mechanics. Harvest debug 
+//   warnings during Compile Phase to prevent worker duplication.
+//
+// - SPRINT 7 COMPILER PATCH: Map declarative matrix expectations into 
+//   actionable execution steps prior to interpolation.
 
 import os from "os";
 import fs from "fs";
@@ -31,6 +46,7 @@ import { pathToFileURL } from "url";
 
 import { evaluateVersionCompatibility } from "../core/locators/ctrVersionGuard";
 import { TestExecutor } from "../core/TestExecutor";
+import { DataMatrixResolver } from "../core/DataMatrixResolver";
 import { JsonReporter } from "../tools/jsonReporter";
 import { HtmlReporter } from "../tools/htmlReporter";
 import {
@@ -51,7 +67,7 @@ import {
 } from "./validate";
 
 import type { ExecutableDoc } from "./validate";
-import type { JsonTestDefinition, ExecutionEngine, ExecutionIntent, ValidationMode } from "../core/types";
+import type { JsonTestDefinition, ExecutionEngine, ExecutionIntent, ValidationMode, UnrolledTestlet } from "../core/types";
 import type { RunResult, RunSummary, TestResult } from "../core/resultTypes";
 import { Orchestrator } from "../core/orchestration/Orchestrator";
 import type { ScheduledTask } from "../core/orchestration/types";
@@ -97,7 +113,7 @@ export interface RunSuiteOptions {
 
     /**
    * Suite-level parallelism (orchestration workers).
-   * If undefined → sequential for now.
+   * If undefined -> sequential for now.
    */
   workers?: number;
 }
@@ -345,9 +361,9 @@ function isCiEnvironment(): boolean {
  * - Produces stable ids for reporting + warnings.
  *
  * Format:
- *   <executableId>::<NNN>::<action>
+ * <executableId>::<NNN>::<action>
  * Example:
- *   login-literals::001::goto
+ * login-literals::001::goto
  */
 function ensureStepIds(params: {
   executableId: string;
@@ -536,7 +552,7 @@ function expandIncludesWithProvenance(params: {
       }
 
       if (!target) {
-	          if (rootPath.includes("#")) {
+        if (rootPath.includes("#")) {
           throw new Error(
             `Path-based include "${ref}" cannot be resolved from an inline suite executable. Move the executable into a real file.`
           );
@@ -634,7 +650,7 @@ function expandIncludesWithProvenance(params: {
   }
 
   return {
-    ...root, // 👈 Ensures capability, promise, and description survive flattening
+    ...root, // Ensures capability, promise, and description survive flattening
     id: root.id,
     reusable: false,
     context: root.context,
@@ -784,7 +800,7 @@ function errorStack(err: any): string | undefined {
   return typeof err?.stack === "string" ? err.stack : undefined;
 }
 
-/*  ============================================================
+/* ============================================================
   * Function to compute signal strength (for potential future use in reporting or policy decisions)
   * based on execution engine and run summary. 
   * The formula differs for "playwright" and "testergizer" engines, reflecting their different result semantics.
@@ -817,46 +833,31 @@ function computeSignalStrength(
 }
 
 /* ============================================================
- * Execute one test
+ * COMPILE PHASE: Unroll base test definitions into a flat array of Testlets
  * ============================================================ */
 
-async function runOneTest(params: {
-  suiteId: string;
-  runId: string;
-  runDateFolder: string;
+function compileToTestlets(params: {
   suiteContext: Record<string, any>;
-  // optional per-test context overlay (used by Suite v2 params)
   testContext?: Record<string, any>;
-  suiteBaseUrl?: string;
   doc: ExecutableDoc;
   filePath: string;
   registry: Map<string, ExecutableDoc>;
   registryPaths: Map<string, string>;
   options: RunSuiteOptions;
-  artifactsBaseDir: string;
-  runOutDir: string;
-  artifactObserver: ReturnType<typeof createArtifactObserver>;
-  ctrDefinition?: any; // 👈 NEW: Accept the CTR
-}): Promise<{
-  testResult: TestResult;
+}): {
+  testlets: UnrolledTestlet[];
+  expanded: ExecutableDoc;
+  effectiveContext: Record<string, any>;
   provenanceByStepId: Record<string, StepProvenance>;
   debugWarnings: DebugWarning[];
-}> {
-  const {
-    suiteId,
-    runId,
-    runDateFolder,
-    suiteContext,
-    suiteBaseUrl,
-    doc,
-    filePath,
-    registry,
-    registryPaths,
-    options,
-    artifactsBaseDir,
-    runOutDir,
-    artifactObserver
-  } = params;
+} {
+  const { suiteContext, doc, filePath, registry, registryPaths, options } = params;
+
+  // SPRINT 7 BYPASS: Capture raw matrix properties before legacy validation strips them
+  const rawVariance = (doc as any).variance;
+  const rawTestMatrix = (doc as any).testMatrix ?? (doc as any).testDomain;
+  const rawTestDomain = (doc as any).testDomain;
+  const rawActions = (doc as any).actions;
 
   throwIfIssues(validateExecutableDoc(doc, filePath));
   if (doc.reusable) throw new Error(`Reusable executable cannot be run directly: ${doc.id}`);
@@ -881,31 +882,125 @@ async function runOneTest(params: {
     provenanceByStepId
   });
 
+  // SPRINT 7 BYPASS: Reinject the properties into the expanded document
+  if (rawVariance) (expanded as any).variance = rawVariance;
+  if (rawTestMatrix) (expanded as any).testMatrix = rawTestMatrix;
+  if (rawTestDomain) (expanded as any).testDomain = rawTestDomain;
+  if (rawActions) (expanded as any).actions = rawActions;
+
+  const resolver = new DataMatrixResolver();
+  const baseTestDef: any = {
+    ...expanded,
+    actions: expanded.steps
+  };
+
+  // SPRINT 7 FIX: Resolve variance file path absolutely against the test definition file
+  if (baseTestDef.variance && baseTestDef.variance.filePath) {
+    if (!path.isAbsolute(baseTestDef.variance.filePath)) {
+      baseTestDef.variance.filePath = path.resolve(path.dirname(filePath), baseTestDef.variance.filePath);
+    }
+  }
+
+  const testlets = resolver.resolve(baseTestDef);
+
+  return { testlets, expanded, effectiveContext, provenanceByStepId, debugWarnings };
+}
+
+/* ============================================================
+ * EXECUTION PHASE: Execute a single unrolled boundary contract
+ * ============================================================ */
+
+async function executeTestlet(params: {
+  suiteId: string;
+  runId: string;
+  runDateFolder: string;
+  suiteBaseUrl?: string;
+  options: RunSuiteOptions;
+  artifactsBaseDir: string;
+  runOutDir: string;
+  ctrDefinition?: any;
+  testlet: UnrolledTestlet;
+  expanded: ExecutableDoc;
+  effectiveContext: Record<string, any>;
+  filePath: string;
+  provenanceByStepId: Record<string, StepProvenance>;
+  debugWarnings: DebugWarning[];
+}): Promise<{
+  kind: "executed";
+  testResult: TestResult;
+  provenanceByStepId: Record<string, StepProvenance>;
+  debugWarnings: DebugWarning[];
+}> {
+  const {
+    suiteId, runId, suiteBaseUrl, options, runOutDir, ctrDefinition,
+    testlet, expanded, effectiveContext, filePath, provenanceByStepId, debugWarnings
+  } = params;
+
+  const artifactObserver = createArtifactObserver({
+    runOutDir,
+    suiteId,
+    runId
+  });
+
+  // Isolated, cold context for this specific variation
+  const coldContext = {
+    ...effectiveContext,
+    ...testlet.inputs
+  };
+
   // Contract: In debug semantics (including stub), we do not hard-fail on missing interpolation.
   // This preserves exploratory workflows while keeping production runs strict.
   if (options.debug !== true) {
     throwIfIssues(
       validateInterpolationCompleteness({
-        doc: expanded,
-        contextKeys: new Set(Object.keys(expanded.context ?? {})),
+        doc: { ...expanded, steps: testlet.actions } as any,
+        contextKeys: new Set(Object.keys(coldContext)),
         filePath
       })
     );
   }
 
+  // SPRINT 7 COMPILER PATCH: Map declarative matrix expectations to actionable execution steps
+  const expectationSteps = (testlet.expect || []).map((exp: any, idx: number) => {
+    let action = "assert";
+    
+    // Auto-route to the correct executor boundary logic based on the payload semantics
+    if (exp.target === "url" || exp.target === "uri") {
+      action = "assertUrl";
+    } else if (exp.matcher && String(exp.matcher).toLowerCase().includes("text")) {
+      action = "assertText";
+    } else if (exp.matcher && String(exp.matcher).toLowerCase().includes("visible")) {
+      action = "assertVisible";
+    }
+
+    return {
+      id: `matrix-expect-${idx + 1}`,
+      action,
+      target: exp.target,
+      value: exp.value,
+      matcher: exp.matcher,
+      group: { name: "Boundary Assertions" }
+    };
+  });
+
+  // Append the compiled expectation steps to the end of the action array
+  const combinedActions = [...testlet.actions, ...expectationSteps];
+
   const sandbox = options.executionEngine === "testergizer";
   const resolvedContext = resolveRootContext({
-    context: expanded.context,
+    context: coldContext,
     sandbox,
     injectedSecrets: parseInjectedSecrets([])
   });
 
-  const interpolatedSteps = interpolateDeepStrict(expanded.steps, resolvedContext.values);
+  // Interpolate the entire combined sequence, ensuring matrix variables apply to expectations
+  const interpolatedActions = interpolateDeepStrict(combinedActions, resolvedContext.values);
 
-  const testDef: JsonTestDefinition = {
-    ...(expanded as any), // 👈 Ensures metadata bridges from orchestrator to executor
-    id: expanded.id,
-    steps: interpolatedSteps
+  const executionUnit = {
+    ...testlet,
+    id: testlet.instanceId, 
+    testDomain: (expanded as any).testDomain ?? "ui", 
+    steps: interpolatedActions 
   };
 
   const runner = new TestExecutor({
@@ -914,11 +1009,7 @@ async function runOneTest(params: {
     slowMoMs: options.slowMoMs,
     baseUrl: options.baseUrl ?? suiteBaseUrl,
     browserName: options.browserName,
-
-    // 🔽 THIS WAS MISSING
     retries: Math.max(0, Number(options.retries ?? 0)),
-
-
     artifacts: {
       enabled: (options.executionEngine ?? "testergizer") !== "testergizer",
       dir: runOutDir,
@@ -926,25 +1017,28 @@ async function runOneTest(params: {
       video: "on-failure",
       screenshot: "on-failure"
     },
-
     artifactObserver,
     autVersion: options.autVersion,
-    ctrDefinition: params.ctrDefinition
+    ctrDefinition
   });
 
+  const testResult = await runner.execute(executionUnit as any);
 
-  const testResult = await runner.execute(testDef);
-
- const outDir = path.join(
-  runOutDir,
-  testResult.projectId,
-  testResult.id
-);
-
+  const outDir = path.join(
+    runOutDir,
+    testResult.projectId,
+    testResult.id
+  );
 
   new JsonReporter({ outputDir: outDir }).write("result.json", testResult);
-  return { testResult, provenanceByStepId, debugWarnings };
+
+  return { kind: "executed", testResult, provenanceByStepId, debugWarnings };
 }
+
+type IndexedResult =
+  | { kind: "skipped"; testId: string; testPath: string; reason?: string }
+  | { kind: "invalid"; testId: string; testPath: string; phase: "compile"; reason: string; stack?: string }
+  | { kind: "executed"; testResult: TestResult; provenanceByStepId: Record<string, any>; debugWarnings: any[] };
 
 /* ============================================================
  * Public entrypoint
@@ -960,37 +1054,6 @@ export async function executeSuiteFromFile(inputPath: string, options: RunSuiteO
 
   const artifactsBaseDir = options.artifactsDir ?? "artifacts";
   const ci = isCiEnvironment();
-
-  function computeSignalStrength(args: {
-    engine: ExecutionEngine;
-    passed: number;
-    failed: number;
-    aborted: number;
-    valid: number;
-    invalid: number;
-  }): number {
-    const { engine, passed, failed, aborted, valid, invalid } = args;
-
-    // Normalized polarity metric:
-    // - Playwright: executable = passed + failed + aborted (skipped excluded by construction)
-    // - Testergizer: executable = valid + invalid
-    // Range: [-100, +100]
-    let executable = 0;
-    let numerator = 0;
-
-    if (engine === "playwright") {
-      executable = passed + failed + aborted;
-      numerator = passed - (failed + aborted);
-    } else {
-      executable = valid + invalid;
-      numerator = valid - invalid;
-    }
-
-    if (executable <= 0) return 0;
-
-    const raw = (numerator / executable) * 100;
-    return Math.round(raw * 100) / 100; // 2 decimals
-  }
 
   /* ============================================================
    * Suite dispatcher (schema switch)
@@ -1010,13 +1073,9 @@ export async function executeSuiteFromFile(inputPath: string, options: RunSuiteO
       }
 
       const suite = root as SuiteDocV2;
-
       const resolvedAutVersion = options.autVersion ?? suite.autVersion;
-
-      // Contract: debugOnly defaults to false when omitted.
       const suiteDebugOnly = suite.debugOnly === true;
 
-      // Contract: testergizer implies review intent defaults.
       const engine = options.executionEngine ?? "testergizer";
       const { effectiveDebug, debugForced } = computeEffectiveDebug({
         executionEngine: engine,
@@ -1031,14 +1090,9 @@ export async function executeSuiteFromFile(inputPath: string, options: RunSuiteO
       const executionIntent: ExecutionIntent =
         engine === "testergizer" ? "review" : options.executionIntent ?? "verify";
 
-      const suiteRetries =
-        typeof suite.retries === "number" ? Math.max(0, suite.retries) : undefined;
-
-      const cliRetries =
-        typeof options.retries === "number" ? Math.max(0, options.retries) : undefined;
-
-      const effectiveRetries =
-        cliRetries !== undefined ? cliRetries : suiteRetries !== undefined ? suiteRetries : 0;
+      const suiteRetries = typeof suite.retries === "number" ? Math.max(0, suite.retries) : undefined;
+      const cliRetries = typeof options.retries === "number" ? Math.max(0, options.retries) : undefined;
+      const effectiveRetries = cliRetries !== undefined ? cliRetries : suiteRetries !== undefined ? suiteRetries : 0;
 
       const effectiveOptions: RunSuiteOptions = {
         ...options,
@@ -1051,14 +1105,7 @@ export async function executeSuiteFromFile(inputPath: string, options: RunSuiteO
       const suiteDir = path.dirname(rootPath);
       const resolveBase = suite.resolveFrom ? path.resolve(suiteDir, suite.resolveFrom) : suiteDir;
 
-      // ----------------------------------------------------
-      // CTR (Suite-Level) — referenced by suite.ctr.path
-      // ----------------------------------------------------
-      // ----------------------------------------------------
-      // CTR (Suite-Level) — referenced by suite.ctr.path
-      // ----------------------------------------------------
       let ctrDefinition: any | undefined;
-
       if ((suite as any).ctr?.path) {
         const ctrPath = path.resolve(resolveBase, (suite as any).ctr.path);
         if (fs.existsSync(ctrPath)) {
@@ -1069,7 +1116,6 @@ export async function executeSuiteFromFile(inputPath: string, options: RunSuiteO
       }
 
       let versionCheck: any = { status: "unmanaged" };
-
       if (ctrDefinition && ctrDefinition.appId && ctrDefinition.versionRange) {
         versionCheck = evaluateVersionCompatibility(ctrDefinition, {
           executionEngine: engine,
@@ -1100,209 +1146,122 @@ export async function executeSuiteFromFile(inputPath: string, options: RunSuiteO
       const provenanceByTestId: Record<string, Record<string, StepProvenance>> = {};
       const debugWarningsAll: DebugWarning[] = [];
 
-      // NEW: runtime-only reporting channels (not schemas).
       const invalidTests: InvalidTestEntry[] = [];
       const skippedTests: SkippedTestEntry[] = [];
 
-      // Registry of reusable executables (flows/ by ID). Path-based includes are also supported.
       const flowsDir = path.resolve(process.cwd(), "flows");
       const flows = loadAllExecutablesWithPaths(flowsDir);
 
-      type IndexedResult =
-        | {
-            index: number;
-            kind: "skipped";
-            testId: string;
-            testPath: string;
-            reason?: string;
-          }
-        | {
-            index: number;
-            kind: "invalid";
-            testId: string;
-            testPath: string;
-            phase: "compile";
-            reason: string;
-            stack?: string;
-          }
-        | {
-            index: number;
-            kind: "executed";
-            testResult: TestResult;
-            provenanceByStepId: Record<string, any>;
-            debugWarnings: any[];
-          };
+      function commitIndexedResult(r: IndexedResult) {
+        if (r.kind === "skipped") {
+          skippedTests.push({ testId: r.testId, testPath: r.testPath, reason: r.reason });
+          return;
+        }
+        if (r.kind === "invalid") {
+          invalidTests.push({ testId: r.testId, testPath: r.testPath, phase: r.phase, reason: r.reason, stack: r.stack });
+          provenanceByTestId[r.testId] = {};
+          return;
+        }
+        tests.push(r.testResult);
+        provenanceByTestId[r.testResult.id] = r.provenanceByStepId;
+        debugWarningsAll.push(...r.debugWarnings);
+      }
 
-      async function processSuiteEntryAtIndex(
-        i: number
-      ): Promise<IndexedResult> {
+      // SPRINT 7: Compile Phase
+      // We unroll all variations first to feed them to the Orchestrator
+      const tasks: ScheduledTask<IndexedResult>[] = [];
+      let globalTaskIndex = 0;
 
-        let normalized:
-          | {
-              doc?: ExecutableDoc;
-              filePath: string;
-              testId: string;
-              testParams?: Record<string, any>;
-              skip?: { reason?: string };
-            }
-          | undefined;
-
+      for (let i = 0; i < suite.tests.length; i++) {
+        let normalized;
         try {
-          normalized = normalizeSuiteV2TestEntry({
-            entry: suite.tests[i],
-            resolveBase
-          });
+          normalized = normalizeSuiteV2TestEntry({ entry: suite.tests[i], resolveBase });
 
-          // Skip case
           if (normalized.skip) {
-            return {
-              index: i,
-              kind: "skipped",
-              testId: normalized.testId,
-              testPath: normalized.filePath,
-              reason: normalized.skip.reason
-            };
+            commitIndexedResult({ kind: "skipped", testId: normalized.testId, testPath: normalized.filePath, reason: normalized.skip.reason });
+            continue;
           }
 
           if (!normalized.doc) {
-            throw new Error(
-              `Suite v2 entry normalized without doc and without skip at index ${i}`
-            );
+            throw new Error(`Suite v2 entry normalized without doc and without skip at index ${i}`);
           }
 
-          const { doc, filePath, testId, testParams } = normalized;
+          const effectiveDoc: ExecutableDoc = { ...normalized.doc, id: normalized.testId };
 
-          const effectiveDoc: ExecutableDoc = {
-            ...doc,
-            id: testId
-          };
-
-          const artifactObserver = createArtifactObserver({
-            runOutDir,
-            suiteId: suite.suiteId,
-            runId
-          });
-
-          const {
-            testResult: tr,
-            provenanceByStepId,
-            debugWarnings
-          } = await runOneTest({
-            suiteId: suite.suiteId,
-            runId,
-            runDateFolder,
+          const compiled = compileToTestlets({
             suiteContext: suite.context ?? {},
-            testContext: testParams ?? {},
-            suiteBaseUrl: suite.baseUrl,
+            testContext: normalized.testParams ?? {},
             doc: effectiveDoc,
-            filePath,
+            filePath: normalized.filePath,
             registry: flows.docs,
             registryPaths: flows.paths,
-            options: effectiveOptions,
-            artifactsBaseDir,
-            runOutDir,
-            artifactObserver,
-            ctrDefinition
+            options: effectiveOptions
           });
 
-          return {
-            index: i,
-            kind: "executed",
-            testResult: tr,
-            provenanceByStepId,
-            debugWarnings
-          };
+          // Harvest compilation warnings ONCE to prevent 8x duplication across unrolled workers
+          debugWarningsAll.push(...compiled.debugWarnings);
+
+          for (const testlet of compiled.testlets) {
+            const taskIndex = globalTaskIndex++;
+            tasks.push({
+              index: taskIndex,
+              taskId: `suite-test-${i}-var-${testlet.instanceId}`,
+              execute: async (workerId: number = 0) => {
+                return await executeTestlet({
+                  suiteId: suite.suiteId,
+                  runId,
+                  runDateFolder,
+                  suiteBaseUrl: suite.baseUrl,
+                  options: effectiveOptions,
+                  artifactsBaseDir,
+                  runOutDir,
+                  ctrDefinition,
+                  testlet,
+                  expanded: compiled.expanded,
+                  effectiveContext: compiled.effectiveContext,
+                  filePath: normalized!.filePath,
+                  provenanceByStepId: compiled.provenanceByStepId,
+                  debugWarnings: [] // Warnings already harvested
+                });
+              }
+            });
+          }
 
         } catch (err: any) {
-
           const fallbackId = normalized?.testId ?? `invalid-test-${i + 1}`;
-          const fallbackPath =
-            normalized?.filePath ?? `${rootPath}#tests[${i}]`;
-
-          return {
-            index: i,
+          const fallbackPath = normalized?.filePath ?? `${rootPath}#tests[${i}]`;
+          commitIndexedResult({
             kind: "invalid",
             testId: fallbackId,
             testPath: fallbackPath,
             phase: "compile",
             reason: `Validation/prepare failed: ${errorMessage(err)}`,
             stack: errorStack(err)
-          };
+          });
         }
       }
 
-      function commitIndexedResult(r: IndexedResult) {
-        if (r.kind === "skipped") {
-          skippedTests.push({
-            testId: r.testId,
-            testPath: r.testPath,
-            reason: r.reason
-          });
-          return;
+      // SPRINT 7: Execution Phase
+      const workers = options.workers ?? 1;
+
+      if (workers <= 1) {
+        for (const t of tasks) {
+          const res = await t.execute(0);
+          commitIndexedResult(res);
         }
-
-        if (r.kind === "invalid") {
-          invalidTests.push({
-            testId: r.testId,
-            testPath: r.testPath,
-            phase: r.phase,
-            reason: r.reason,
-            stack: r.stack
-          });
-          provenanceByTestId[r.testId] = {};
-          return;
-        }
-
-        // executed
-        tests.push(r.testResult);
-        provenanceByTestId[r.testResult.id] = r.provenanceByStepId;
-        debugWarningsAll.push(...r.debugWarnings);
-      }
-
-      // Execution loop (v2)
-      async function executeSequentially(): Promise<void> {
-        for (let i = 0; i < suite.tests.length; i++) {
-          const r = await processSuiteEntryAtIndex(i);
-          commitIndexedResult(r);
-        }
-      }     
-
-      async function executeInParallel(workers: number): Promise<void> {
-        // Build scheduled tasks
-        const tasks: ScheduledTask<IndexedResult>[] = suite.tests.map(
-          (_, i) => ({
-            index: i,
-            taskId: `suite-test-${i}`,
-            execute: async () => {
-              return await processSuiteEntryAtIndex(i);
-            }
-          })
-        );
-
+      } else {
         const orchestrator = new Orchestrator({
           parallelism: workers,
           cpuCoresDetected: os.cpus().length
         });
-
         const orchestrationResult = await orchestrator.run(tasks);
-
-        // Deterministic commit
         for (const item of orchestrationResult.items) {
           commitIndexedResult(item);
         }
       }
 
-      const workers = options.workers ?? 1;
-
-      if (workers <= 1) {
-        await executeSequentially();
-      } else {
-        await executeInParallel(workers);
-      }
-
       const endedAt = nowIso();
 
-      // Summary is execution-only (tests[] only).
       const reviewed = tests.filter((t) => t.result === "reviewed").length;
       const passed = tests.filter((t) => t.result === "passed").length;
       const failed = tests.filter((t) => t.result === "failed").length;
@@ -1311,15 +1270,7 @@ export async function executeSuiteFromFile(inputPath: string, options: RunSuiteO
       const valid = passed + reviewed;
       const invalid = failed + aborted;
 
-      const summary = {
-        total: tests.length,
-        passed,
-        failed,
-        aborted,
-        reviewed,
-        valid,
-        invalid
-      };
+      const summary = { total: tests.length, passed, failed, aborted, reviewed, valid, invalid };
 
       let suiteStatus: "valid" | "invalid" | "passed" | "failed";
       if (engine === "testergizer") {
@@ -1328,29 +1279,17 @@ export async function executeSuiteFromFile(inputPath: string, options: RunSuiteO
         suiteStatus = invalid > 0 ? "failed" : "passed";
       }
 
-      const signalStrength = computeSignalStrength({
-        engine,
-        passed,
-        failed,
-        aborted,
-        valid,
-        invalid
-      });
+      const signalStrength = computeSignalStrength(engine, summary);
 
-      // 👈 NEW: Domain-aware fallback
       const fallbackProject = engine === "api" ? "rest-api" : "chromium";
-      
-      const projectId =
-        tests.length === 0
+      const projectId = tests.length === 0
           ? effectiveOptions.browserName ?? fallbackProject
           : tests.every((t) => t.projectId === tests[0].projectId)
           ? tests[0].projectId
           : "mixed";
 
       const resolvedBaseUrl = options.baseUrl ?? (suite as any).baseUrl ?? undefined;
-
-      const applicationName =
-        (root as any).applicationName ?? suite.suiteName ?? suite.suiteId;
+      const applicationName = (root as any).applicationName ?? suite.suiteName ?? suite.suiteId;
 
       const runResult: RunResult = {
         schemaVersion: "v1",
@@ -1373,7 +1312,6 @@ export async function executeSuiteFromFile(inputPath: string, options: RunSuiteO
         signalStrength
       };
 
-      // Attach CTR (suite-level)
       if (ctrDefinition) (runResult as any).ctrDefinition = ctrDefinition;
       if (ctrResolution) (runResult as any).ctrResolution = ctrResolution;
 
@@ -1381,21 +1319,15 @@ export async function executeSuiteFromFile(inputPath: string, options: RunSuiteO
       (runResult as any).debugForced = debugForced;
       (runResult as any).ci = ci === true;
 
+      // EXPLICIT WORKER LOGGING PATCH
+      (runResult as any).workers = workers;
+
       if (effectiveOptions.launch?.command) {
-        (runResult as any).launch = {
-          command: effectiveOptions.launch.command,
-          cwd: effectiveOptions.launch.cwd
-        };
+        (runResult as any).launch = { command: effectiveOptions.launch.command, cwd: effectiveOptions.launch.cwd };
       }
 
-      (runResult as any).invalidation = {
-        count: invalidTests.length,
-        tests: invalidTests
-      };
-      (runResult as any).skipped = {
-        count: skippedTests.length,
-        tests: skippedTests
-      };
+      (runResult as any).invalidation = { count: invalidTests.length, tests: invalidTests };
+      (runResult as any).skipped = { count: skippedTests.length, tests: skippedTests };
 
       new JsonReporter({ outputDir: runOutDir }).write("run.json", runResult);
 
@@ -1413,14 +1345,9 @@ export async function executeSuiteFromFile(inputPath: string, options: RunSuiteO
           JSON.stringify({ schemaVersion: "v1", warnings: debugWarningsAll }, null, 2),
           "utf-8"
         );
-
         console.warn("\n⚠️  DEBUG SEMANTICS — reusable purity checks relaxed\n");
         for (const w of debugWarningsAll) {
-          console.warn(
-            `⚠️  [${w.originExecutableId}] ${w.field} (step: ${w.stepId}) — ${w.message} — ${w.originPath} — stack: ${w.includeStack.join(
-              " → "
-            )}`
-          );
+          console.warn(`⚠️  [${w.originExecutableId}] ${w.field} (step: ${w.stepId}) — ${w.message} — ${w.originPath} — stack: ${w.includeStack.join(" → ")}`);
         }
         console.warn("");
       }
@@ -1429,11 +1356,9 @@ export async function executeSuiteFromFile(inputPath: string, options: RunSuiteO
       new HtmlReporter({ outputDir: runOutDir }).write(runResult, artifactsDoc);
 
       const reportPath = path.resolve(runOutDir, "report.html");
-      console.log("");
-      console.log("Testergizer HTML report:");
+      console.log("\nTestergizer HTML report:");
       console.log(pathToFileURL(reportPath).href);
-      console.log("Tip: paste the URL into your browser to view the report");
-      console.log("");
+      console.log("Tip: paste the URL into your browser to view the report\n");
 
       return runResult;
     }
@@ -1447,10 +1372,7 @@ export async function executeSuiteFromFile(inputPath: string, options: RunSuiteO
       }
 
       const suite = root as SuiteDoc;
-
       const resolvedAutVersion = options.autVersion ?? suite.autVersion;
-
-      // Contract: debugOnly defaults to false when omitted.
       const suiteDebugOnly = suite.debugOnly === true;
 
       const engine = options.executionEngine ?? "testergizer";
@@ -1476,13 +1398,8 @@ export async function executeSuiteFromFile(inputPath: string, options: RunSuiteO
 
       const suiteDir = path.dirname(rootPath);
 
-      // ----------------------------------------------------
-      // CTR (Suite-Level) — referenced by suite.ctr.path
-      // ----------------------------------------------------
       let ctrDefinition: any | undefined;
-
       if ((suite as any).ctr?.path) {
-        // 👈 FIXED: Use suiteDir instead of resolveBase in the v1 block
         const ctrPath = path.resolve(suiteDir, (suite as any).ctr.path);
         if (fs.existsSync(ctrPath)) {
           ctrDefinition = loadJson(ctrPath);
@@ -1492,7 +1409,6 @@ export async function executeSuiteFromFile(inputPath: string, options: RunSuiteO
       }
 
       let versionCheck: any = { status: "unmanaged" };
-
       if (ctrDefinition && ctrDefinition.appId && ctrDefinition.versionRange) {
         versionCheck = evaluateVersionCompatibility(ctrDefinition, {
           executionEngine: engine,
@@ -1529,84 +1445,105 @@ export async function executeSuiteFromFile(inputPath: string, options: RunSuiteO
       const flowsDir = path.resolve(process.cwd(), "flows");
       const flows = loadAllExecutablesWithPaths(flowsDir);
 
-      // Execution loop (v1)
+      function commitIndexedResult(r: IndexedResult) {
+        if (r.kind === "skipped") {
+          skippedTests.push({ testId: r.testId, testPath: r.testPath, reason: r.reason });
+          return;
+        }
+        if (r.kind === "invalid") {
+          invalidTests.push({ testId: r.testId, testPath: r.testPath, phase: r.phase, reason: r.reason, stack: r.stack });
+          provenanceByTestId[r.testId] = {};
+          return;
+        }
+        tests.push(r.testResult);
+        provenanceByTestId[r.testResult.id] = r.provenanceByStepId;
+        debugWarningsAll.push(...r.debugWarnings);
+      }
+
+      const tasks: ScheduledTask<IndexedResult>[] = [];
+      let globalTaskIndex = 0;
+
       for (let i = 0; i < suite.tests.length; i++) {
-        const artifactObserver = createArtifactObserver({
-          runOutDir,
-          suiteId: suite.suiteId,
-          runId
-        });
-
-        let normalized:
-          | { doc?: ExecutableDoc; filePath: string; skip?: { reason?: string } }
-          | undefined;
-
+        let normalized;
         try {
-          normalized = normalizeSuiteTestEntry({
-            entry: suite.tests[i],
-            suiteDir,
-            suiteFilePath: rootPath,
-            index: i
-          });
+          normalized = normalizeSuiteTestEntry({ entry: suite.tests[i], suiteDir, suiteFilePath: rootPath, index: i });
 
           if (normalized.skip) {
-            const sid = normalized.filePath
-              ? path.basename(normalized.filePath)
-              : `skipped-test-${i + 1}`;
-
-            skippedTests.push({
-              testId: sid,
-              testPath: normalized.filePath,
-              reason: normalized.skip.reason
-            });
+            const sid = normalized.filePath ? path.basename(normalized.filePath) : `skipped-test-${i + 1}`;
+            commitIndexedResult({ kind: "skipped", testId: sid, testPath: normalized.filePath, reason: normalized.skip.reason });
             continue;
           }
 
           if (!normalized.doc) {
-            throw new Error(
-              `Suite v1 entry normalized without doc and without skip at index ${i}`
-            );
+            throw new Error(`Suite v1 entry normalized without doc and without skip at index ${i}`);
           }
 
-          const { doc, filePath } = normalized;
-
-          const { testResult: tr, provenanceByStepId, debugWarnings } = await runOneTest({
-            testContext: undefined,
-            suiteId: suite.suiteId,
-            runId,
-            runDateFolder,
+          const compiled = compileToTestlets({
             suiteContext: suite.context ?? {},
-            suiteBaseUrl: suite.baseUrl,
-            doc,
-            filePath,
+            doc: normalized.doc,
+            filePath: normalized.filePath,
             registry: flows.docs,
             registryPaths: flows.paths,
-            options: effectiveOptions,
-            artifactsBaseDir,
-            runOutDir,
-            artifactObserver
+            options: effectiveOptions
           });
 
-          tests.push(tr);
-          provenanceByTestId[tr.id] = provenanceByStepId;
-          debugWarningsAll.push(...debugWarnings);
+          debugWarningsAll.push(...compiled.debugWarnings);
+
+          for (const testlet of compiled.testlets) {
+            const taskIndex = globalTaskIndex++;
+            tasks.push({
+              index: taskIndex,
+              taskId: `suite-test-${i}-var-${testlet.instanceId}`,
+              execute: async (workerId: number = 0) => {
+                return await executeTestlet({
+                  suiteId: suite.suiteId,
+                  runId,
+                  runDateFolder,
+                  suiteBaseUrl: suite.baseUrl,
+                  options: effectiveOptions,
+                  artifactsBaseDir,
+                  runOutDir,
+                  ctrDefinition,
+                  testlet,
+                  expanded: compiled.expanded,
+                  effectiveContext: compiled.effectiveContext,
+                  filePath: normalized!.filePath,
+                  provenanceByStepId: compiled.provenanceByStepId,
+                  debugWarnings: []
+                });
+              }
+            });
+          }
+
         } catch (err: any) {
           const fallbackPath = normalized?.filePath ?? `${rootPath}#tests[${i}]`;
-
-          const fallbackId =
-            (normalized?.doc && typeof normalized.doc.id === "string" && normalized.doc.id) ||
-            `invalid-test-${i + 1}`;
-
-          invalidTests.push({
+          const fallbackId = (normalized?.doc && typeof normalized.doc.id === "string" && normalized.doc.id) || `invalid-test-${i + 1}`;
+          commitIndexedResult({
+            kind: "invalid",
             testId: fallbackId,
             testPath: fallbackPath,
             phase: "compile",
             reason: `Validation/prepare failed: ${errorMessage(err)}`,
             stack: errorStack(err)
           });
+        }
+      }
 
-          provenanceByTestId[fallbackId] = {};
-          continue;
+      const workers = options.workers ?? 1;
+
+      if (workers <= 1) {
+        for (const t of tasks) {
+          const res = await t.execute(0);
+          commitIndexedResult(res);
+        }
+      } else {
+        const orchestrator = new Orchestrator({
+          parallelism: workers,
+          cpuCoresDetected: os.cpus().length
+        });
+        const orchestrationResult = await orchestrator.run(tasks);
+        for (const item of orchestrationResult.items) {
+          commitIndexedResult(item);
         }
       }
 
@@ -1620,15 +1557,7 @@ export async function executeSuiteFromFile(inputPath: string, options: RunSuiteO
       const valid = passed + reviewed;
       const invalid = failed + aborted;
 
-      const summary = {
-        total: tests.length,
-        passed,
-        failed,
-        aborted,
-        reviewed,
-        valid,
-        invalid
-      };
+      const summary = { total: tests.length, passed, failed, aborted, reviewed, valid, invalid };
 
       let suiteStatus: "valid" | "invalid" | "passed" | "failed";
       if (engine === "testergizer") {
@@ -1637,20 +1566,10 @@ export async function executeSuiteFromFile(inputPath: string, options: RunSuiteO
         suiteStatus = invalid > 0 ? "failed" : "passed";
       }
 
-      const signalStrength = computeSignalStrength({
-        engine,
-        passed,
-        failed,
-        aborted,
-        valid,
-        invalid
-      });
+      const signalStrength = computeSignalStrength(engine, summary);
 
-      // 👈 NEW: Domain-aware fallback
       const fallbackProject = engine === "api" ? "rest-api" : "chromium";
-      
-      const projectId =
-        tests.length === 0
+      const projectId = tests.length === 0
           ? effectiveOptions.browserName ?? fallbackProject
           : tests.every((t) => t.projectId === tests[0].projectId)
           ? tests[0].projectId
@@ -1679,7 +1598,6 @@ export async function executeSuiteFromFile(inputPath: string, options: RunSuiteO
         signalStrength
       };
 
-      // Attach CTR (suite-level)
       if (ctrDefinition) (runResult as any).ctrDefinition = ctrDefinition;
       if (ctrResolution) (runResult as any).ctrResolution = ctrResolution;
 
@@ -1687,21 +1605,15 @@ export async function executeSuiteFromFile(inputPath: string, options: RunSuiteO
       (runResult as any).debugForced = debugForced;
       (runResult as any).ci = ci === true;
 
+      // EXPLICIT WORKER LOGGING PATCH
+      (runResult as any).workers = workers;
+
       if (effectiveOptions.launch?.command) {
-        (runResult as any).launch = {
-          command: effectiveOptions.launch.command,
-          cwd: effectiveOptions.launch.cwd
-        };
+        (runResult as any).launch = { command: effectiveOptions.launch.command, cwd: effectiveOptions.launch.cwd };
       }
 
-      (runResult as any).invalidation = {
-        count: invalidTests.length,
-        tests: invalidTests
-      };
-      (runResult as any).skipped = {
-        count: skippedTests.length,
-        tests: skippedTests
-      };
+      (runResult as any).invalidation = { count: invalidTests.length, tests: invalidTests };
+      (runResult as any).skipped = { count: skippedTests.length, tests: skippedTests };
 
       new JsonReporter({ outputDir: runOutDir }).write("run.json", runResult);
 
@@ -1719,14 +1631,9 @@ export async function executeSuiteFromFile(inputPath: string, options: RunSuiteO
           JSON.stringify({ schemaVersion: "v1", warnings: debugWarningsAll }, null, 2),
           "utf-8"
         );
-
         console.warn("\n⚠️  DEBUG SEMANTICS — reusable purity checks relaxed\n");
         for (const w of debugWarningsAll) {
-          console.warn(
-            `⚠️  [${w.originExecutableId}] ${w.field} (step: ${w.stepId}) — ${w.message} — ${w.originPath} — stack: ${w.includeStack.join(
-              " → "
-            )}`
-          );
+          console.warn(`⚠️  [${w.originExecutableId}] ${w.field} (step: ${w.stepId}) — ${w.message} — ${w.originPath} — stack: ${w.includeStack.join(" → ")}`);
         }
         console.warn("");
       }
@@ -1735,11 +1642,9 @@ export async function executeSuiteFromFile(inputPath: string, options: RunSuiteO
       new HtmlReporter({ outputDir: runOutDir }).write(runResult, artifactsDoc);
 
       const reportPath = path.resolve(runOutDir, "report.html");
-      console.log("");
-      console.log("Testergizer HTML report:");
+      console.log("\nTestergizer HTML report:");
       console.log(pathToFileURL(reportPath).href);
-      console.log("Tip: paste the URL into your browser to view the report");
-      console.log("");
+      console.log("Tip: paste the URL into your browser to view the report\n");
 
       return runResult;
     }

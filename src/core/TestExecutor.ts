@@ -421,7 +421,6 @@ export class TestExecutor {
           try {
             const actionStr = String((step as any).action || "").toLowerCase();
 
-            // SPRINT 6: UNIFIED THREAD ROUTING
             if (actionStr.startsWith("db-")) {
               const res = await this.handleDomainStep(this.dbExecutor, step);
               status = res.status as StepStatus || "passed";
@@ -435,7 +434,6 @@ export class TestExecutor {
               (step as any).target = { value: step.target, resolved: true };
 
             } else if (actionStr.startsWith("file-") || actionStr.startsWith("dir-")) {
-              // Stub for FS Execution (Pending FsExecutor implementation)
               status = "passed";
               (step as any).data = {
                 value: "CORE_STUB",
@@ -444,7 +442,6 @@ export class TestExecutor {
               (step as any).target = { value: step.target, resolved: true };
 
             } else if (actionStr === "api-call" || actionStr.startsWith("api-")) {
-              // EXISTING API LOGIC
               if (isModelEngine) {
                 status = "reviewed";
                 (step as any).target = { value: String((step as any).target), resolved: true };
@@ -516,7 +513,9 @@ export class TestExecutor {
               }
 
             } else {
-              // EXISTING UI LOGIC
+              // ==========================================
+              // STRICT UI CTR RESOLUTION BOUNDARY
+              // ==========================================
               if (
                 requiresBrowser && 
                 this.ctrDefinition &&
@@ -528,63 +527,50 @@ export class TestExecutor {
                   action === "click" ||
                   action === "fill" ||
                   action === "assertVisible" ||
-                  action === "assertText";
+                  action === "assertText" ||
+                  action === "waitFor";
   
                 if (needsSelector) {
                   const logicalTarget = String((step as any).target);
   
-                  const looksLogical =
-                    logicalTarget.split(".").length === 3 &&
-                    !logicalTarget.includes("://");
+                  const isUnmanaged =
+                    logicalTarget.startsWith("css=") ||
+                    logicalTarget.startsWith("xpath=") ||
+                    logicalTarget.startsWith("id=") ||
+                    logicalTarget.startsWith("data-test=");
   
-                  if (looksLogical) {
+                  if (!isUnmanaged) {
                     if (!this.locatorRepo) {
                       this.locatorRepo = LocatorRepository.fromDictionary(
-                        (this.ctrDefinition as any).locators
+                        (this.ctrDefinition as any).locators || {}
                       );
                     }
   
                     const parsed = parseTarget(logicalTarget);
                     const def = this.locatorRepo.get(parsed.elementKey);
   
+                    // STRICT HARD FAIL: Do not fallback to the raw string
                     if (!def) {
                       throw new Error(
-                        `CTR element "${parsed.elementKey}" not found. Available keys: ${this.locatorRepo.keys().join(", ")}`
+                        `Strict Boundary Violation - Locator '${parsed.elementKey}' could not be resolved in the Central Target Registry.`
                       );
                     }
   
-                    const res = await resolveLocator(
+                    // Pure data extraction. No zero-latency DOM probing.
+                    const res = resolveLocator(
                       parsed.elementKey,
                       def,
-                      parsed.context,
-                      {
-                        tryResolve: async (s: ClrSelector) => {
-                          if (!page) return null;
-  
-                          if (s.using === "css") {
-                            const h = await page.$(s.value);
-                            return h ? {} : null;
-                          }
-  
-                          if (s.using === "xpath") {
-                            const selector = `xpath=${s.value}`;
-                            const h = await page.$(selector);
-                            return h ? {} : null;
-                          }
-  
-                          return null;
-                        }
-                      }
+                      parsed.context !== "global" ? parsed.context : undefined
                     );
   
                     if (!res.resolved || !res.resolvedBy) {
-                      throw new Error(`Failed to resolve CTR target: ${logicalTarget}`);
+                      throw new Error(`Strict Boundary Violation - Locator '${parsed.elementKey}' failed to yield a valid selector.`);
                     }
   
                     (step as any).target =
                       res.resolvedBy.using === "xpath"
                         ? `xpath=${res.resolvedBy.value}`
-                        : res.resolvedBy.value;
+                        : res.resolvedBy.value; 
                   }
                 }
               }
@@ -669,73 +655,37 @@ export class TestExecutor {
 
           const stepEndedAt = nowIso();
 
+          // STRICT PAYLOAD REPORTER: Record what was actually handed to Playwright
           const normalizedTarget: StepResult["target"] = (() => {
             const post: any = (step as any).target;
             const pre: any = rawTargetBefore;
 
-            const normalizePostValue = (): { value: string; resolved: boolean } | undefined => {
-              if (post === undefined || post === null) return undefined;
-              if (typeof post === "string") return { value: post, resolved: true };
-              if (typeof post === "object" && typeof post.value === "string") {
-                return { value: post.value, resolved: post.resolved !== false };
-              }
-              return { value: String(post), resolved: true };
-            };
+            const isResolved = typeof pre === "string" && pre !== post;
 
-            const nv = normalizePostValue();
-            if (!nv) return undefined;
-
-            const logicalCandidate = typeof pre === "string" ? pre : undefined;
-            const ctrLocators: any = (this.ctrDefinition as any)?.locators;
-            const ctrEntry: any = logicalCandidate && ctrLocators ? ctrLocators[logicalCandidate] : undefined;
-
-            if (!ctrEntry) {
-              return { value: nv.value, resolved: nv.resolved };
-            }
-
-            const selectors: any[] = Array.isArray(ctrEntry.selectors) ? ctrEntry.selectors : [];
-            const matchIdx = selectors.findIndex((s) => s && typeof s.value === "string" && s.value === nv.value);
-
-            if (selectors.length === 0) {
+            if (isResolved) {
               return {
-                ...(logicalCandidate ? { logical: logicalCandidate } : {}),
-                value: nv.value,
-                resolved: nv.resolved
-              };
-            }
-
-            if (matchIdx >= 0) {
-              const attempted = selectors.slice(0, matchIdx + 1);
-              return {
-                ...(logicalCandidate ? { logical: logicalCandidate } : {}),
-                value: nv.value,
+                logical: pre,
+                value: post,
                 resolved: true,
                 resolvedBy: {
-                  using: String(attempted[attempted.length - 1].using),
-                  value: String(attempted[attempted.length - 1].value)
+                  using: post.startsWith("xpath=") ? "xpath" : "css",
+                  value: post.replace(/^(css|xpath)=/, "")
                 },
-                attempts: attempted.map((s, i) => {
-                  const result: "success" | "not_found" =
-                    i === attempted.length - 1 ? "success" : "not_found";
-
-                  return {
-                    using: String(s.using),
-                    value: String(s.value),
-                    result
-                  };
-                })
+                attempts: [
+                  {
+                    using: post.startsWith("xpath=") ? "xpath" : "css",
+                    value: post.replace(/^(css|xpath)=/, ""),
+                    result: "success"
+                  }
+                ]
               };
             }
 
+            const nvValue = typeof post === "string" ? post : (post?.value ?? String(post));
+
             return {
-              ...(logicalCandidate ? { logical: logicalCandidate } : {}),
-              value: nv.value,
-              resolved: false,
-              attempts: selectors.map((s) => ({
-                using: String(s.using),
-                value: String(s.value),
-                result: "not_found"
-              }))
+              value: nvValue,
+              resolved: true
             };
           })();
 

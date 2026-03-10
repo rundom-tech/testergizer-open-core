@@ -1094,6 +1094,7 @@ export class HtmlReporter {
             <div><span class="k">Execution engine:</span> <span class="mono">${esc(run.executionEngine)}</span></div>
             <div><span class="k">Execution intent:</span> <span class="mono">${esc(run.executionIntent)}</span></div>
             <div><span class="k">Validation mode:</span> <span class="mono">${esc(run.validationMode)}</span></div>
+            ${(run as any).workers ? `<div><span class="k">Workers:</span> <span class="mono">${esc((run as any).workers)}</span></div>` : ""}
             ${(run as any).launch?.command ? `<div><span class="k">Launch:</span> <span class="mono">${esc((run as any).launch.command)}</span></div>` : ""}
             ${(run as any).launch?.cwd ? `<div><span class="k">Launch cwd:</span> <span class="mono">${esc((run as any).launch.cwd)}</span></div>` : ""}
             <div><span class="k">Started at:</span> <span class="mono">${esc(run.startedAt)}</span></div>

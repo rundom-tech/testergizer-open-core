@@ -1,9 +1,11 @@
 // src/core/types.ts
+import { TestMatrix } from './enums';
+
 // Core types and interfaces for test definitions, execution options, and artifact observation.
 export type ExecutionEngine =
   | "testergizer"
   | "playwright"
-  | "api"; // ← NEW: API testing engine
+  | "api"; // ← API testing engine
 
 export type ExecutionIntent =
   | "review"
@@ -14,7 +16,36 @@ export type ValidationMode =
   | "strict"
   | "debug";
 
-export type TestDomain = "ui" | "api" | "system";
+/**
+ * Defines a deterministic assertion boundary.
+ */
+export interface Assertion {
+  target: string;
+  matcher: string;
+  value: any;
+}
+
+/**
+ * Defines the reference to an external Data Matrix source.
+ */
+export interface VarianceReference {
+  sourceType: 'JSON' | 'CSV';
+  filePath: string;
+}
+
+/**
+ * Represents a single row from a variance matrix.
+ * Supports compile-time flow injection to ensure linear runtime execution.
+ */
+export interface VarianceDataRow {
+  variationId: string;
+  description?: string;
+  inputs: Record<string, any>;
+  expect?: Assertion[];
+  actions?: JsonStep[]; // Quality Intelligence: overrides base flow at compile time
+}
+
+export type TestDomain = "ui" | "api" | "system" | string;
 
 export type StepAction =
   | "goto"
@@ -22,7 +53,8 @@ export type StepAction =
   | "fill"
   | "assertVisible"
   | "assertText"
-  | "waitFor";
+  | "waitFor"
+  | string;
 
 // Add this new interface to define the Sprint 4 extraction rules
 export interface ExtractInstruction {
@@ -46,7 +78,7 @@ export interface ExtractInstruction {
 export interface JsonStep {
   id: string;
   action: string;
-  target?: string | { value: string; resolved?: boolean };
+  target?: string | { value: string; resolved?: boolean } | any;
   
   // Data inputs
   data?: any;
@@ -59,36 +91,70 @@ export interface JsonStep {
   assertions?: any[];
   
   // Execution Control
-  timeoutMs?: number; // <== Add this back
+  timeoutMs?: number; 
   
   // SPRINT 4: State Capture
   extract?: ExtractInstruction[];
   
-  group?: string;
+  group?: { name: string } | string | any;
+
+  // Flexible catch-all for custom executor properties
+  [key: string]: any;
 }
 
+/**
+ * The base JSON Test Definition before matrix unrolling is applied.
+ * Unified to support both legacy domain/steps and modern matrix/actions.
+ */
 export interface JsonTestDefinition {
   id: string;
-  /** Optional descriptive name */
+  /** Optional descriptive name/title */
   name?: string;
-  /** Descriptive only; does not affect execution in Open Core */
-  testDomain?: TestDomain;
-  steps: JsonStep[];
+  title?: string;
+  
+  /** Descriptive only; for backward compatibility */
+  testDomain?: TestDomain | TestDomain[];
+  
+  /** Quality Intelligence: Bitwise execution routing matrix */
+  testMatrix?: TestMatrix | number;
+  
+  /** Execution instructions (supports both legacy 'steps' and modern 'actions') */
+  steps?: JsonStep[];
+  actions?: JsonStep[];
+  
+  /** Quality Intelligence: Data Variance injection */
+  variance?: VarianceReference; 
+  expect?: Assertion[];
+
   apiDefinition?: {
     baseUrl: string;
     endpoints: Record<string, string>;
   };
 }
 
+/**
+ * The Testlet: The atomic, immutable unit of execution passed to the TestExecutor.
+ * Represents the conceptual contract built by fusing the flow, inputs, and assertions.
+ */
+export interface UnrolledTestlet {
+  instanceId: string; 
+  parentTestId: string;
+  testDomain?: TestDomain | TestDomain[];
+  testMatrix?: TestMatrix | number;
+  actions: JsonStep[];
+  inputs: Record<string, any>;
+  expect: Assertion[];
+}
+
 export interface JsonSuite {
-  schemaVersion: "v1";
+  schemaVersion: "v1" | "v2" | string;
   suiteId: string;
   suiteName: string;
   /** Optional: resolved by CLI/runSuiteFromFile */
   suitePath?: string;
   /** Optional: target system URL (may be used by baseUrl) */
   baseUrl?: string;
-  tests: JsonTestDefinition[];
+  tests: any[];
 }
 
 /** Minimal observer contract for append-only runtime evidence. */
@@ -104,7 +170,7 @@ export interface TestExecutorOptions {
   executionIntent?: ExecutionIntent;
   validationMode?: ValidationMode;
   retries?: number;
-  autVersion?: string; // ← NEW
+  autVersion?: string;
 
   /** Playwright browser family (maps to Playwright project semantics) */
   browserName?: "chromium" | "firefox" | "webkit";
@@ -130,6 +196,5 @@ export interface TestExecutorOptions {
 
   /** Optional append-only observer for artifacts (writes are performed by the CLI layer). */
   artifactObserver?: ArtifactObserver;
-  ctrDefinition?: any; // 👈 NEW: Accept the CTR definition for API testing
+  ctrDefinition?: any; // Accept the CTR definition for API testing
 }
-

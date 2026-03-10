@@ -1,0 +1,20 @@
+{
+  "appId": "saucedemo-web",
+  "versionRange": ">=1.0.0",
+  "domFingerprint": "mock-fingerprint-123",
+  "endpoints": {},
+  "locators": {
+    "input.username": {
+      "selectors": [{ "using": "css", "value": "[data-test='username']" }]
+    },
+    "input.password": {
+      "selectors": [{ "using": "css", "value": "[data-test='password']" }]
+    },
+    "button.submit": {
+      "selectors": [{ "using": "css", "value": "[data-test='login-button']" }]
+    },
+    "label.error": {
+      "selectors": [{ "using": "css", "value": "[data-test='error']" }]
+    }
+  }
+}
