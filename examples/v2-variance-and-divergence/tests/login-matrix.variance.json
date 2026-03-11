@@ -1,0 +1,26 @@
+[
+  {
+    "id": "standard_login_only",
+    "inputs": {
+      "USERNAME": "standard_user",
+      "PASSWORD": "secret_sauce"
+    },
+    "expect": [
+      { "target": "url", "matcher": "endsWith", "value": "/inventory.html" }
+    ]
+  },
+  {
+    "id": "login_and_add_to_cart",
+    "inputs": {
+      "USERNAME": "standard_user",
+      "PASSWORD": "secret_sauce"
+    },
+    "steps": [
+      { "type": "include", "ref": "../reusables/add-to-cart-extension.json" }
+    ],
+    "expect": [
+      { "target": "url", "matcher": "endsWith", "value": "/inventory.html" },
+      { "target": "span.shopping_cart_badge", "matcher": "assertText", "value": "1" }
+    ]
+  }
+]

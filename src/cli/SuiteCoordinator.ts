@@ -12,9 +12,6 @@
 //   Engine now defines execution mechanics; intent defines purpose;
 //   validationMode defines semantic strictness.
 //
-// - Persist executionEngine, executionIntent, and validationMode
-//   consistently into run.json (schema-aligned).
-//
 // - NEW (2026-02-11): Deterministic runtime-only auto step IDs:
 //   - Any step missing `id` is assigned a stable deterministic id.
 //   - No schema change.
@@ -37,6 +34,10 @@
 //
 // - SPRINT 7 COMPILER PATCH: Map declarative matrix expectations into 
 //   actionable execution steps prior to interpolation.
+//
+// - SPRINT 7 FINAL: Precompiled Divergent Topology (Base + Extension)
+//   Orchestrator now fuses base foundation steps with variant-specific 
+//   extension steps into a single, deterministic linear execution contract.
 
 import os from "os";
 import fs from "fs";
@@ -98,7 +99,7 @@ export interface RunSuiteOptions {
   retries?: number;
 
   /**
-   * NEW: AUT version for CTR governance.
+   * AUT version for CTR governance.
    * If not provided, may fall back to suite JSON.
    */
   autVersion?: string;
@@ -111,7 +112,7 @@ export interface RunSuiteOptions {
     cwd: string;
   };
 
-    /**
+  /**
    * Suite-level parallelism (orchestration workers).
    * If undefined -> sequential for now.
    */
@@ -137,7 +138,7 @@ type DebugWarning = {
 };
 
 /**
- * NEW: Runtime-only reporting channels (no schema changes).
+ * Runtime-only reporting channels (no schema changes).
  *
  * Contract:
  * - INVALIDATION is an authoring/compile concern, not a test result.
@@ -164,8 +165,6 @@ type SkippedTestEntry = {
  */
 type SuiteSkipDecl = true | { reason?: string };
 
-// CHANGE: v1 suite tests may now declare skip at orchestration level.
-// Skip is intentional non-execution; it must NOT be modeled as TestResult.
 type SuiteTestRef =
   | string
   | { ref: string }
@@ -177,26 +176,17 @@ type SuiteTestEntry = ExecutableDoc | SuiteTestRef;
 interface SuiteDoc {
   schemaVersion: "v1";
   suiteId: string;
-  // applicationName is a reporting label, not a structural suite discriminator.
-  // It is resolved at report time and may be omitted in the suite document.
   applicationName?: string; // 🔒 AUT – reporting label only
   autVersion?: string;
   suiteName?: string;
   baseUrl?: string;
 
-  // suite-level semantic contract.
-  // Defaults to false when omitted.
-  // When true, suite may rely on debug semantics (literals, relaxed checks).
   debugOnly?: boolean;
-
   context?: Record<string, any>;
   tests: SuiteTestEntry[];
 }
 
 // Suite schema v2 (orchestration-only)
-// - No execution mechanics fields.
-// - Tests are references (testRef) with optional per-test params.
-// - resolveFrom defines the base directory for resolving testRef paths (defaults to suite dir).
 interface SuiteDocV2 {
   schemaVersion: "v2";
   suiteId: string;
@@ -204,25 +194,13 @@ interface SuiteDocV2 {
   baseUrl?: string;
   resolveFrom?: string;
   autVersion?: string;
-
-
-  // suite-level semantic contract.
-  // Defaults to false when omitted.
   debugOnly?: boolean;
-
-  /*
-  * Number of additional attempts after the first.
-  * Example: retries=1 means up to 2 attempts.
-  */
   retries?: number;
-
   context?: Record<string, any>;
   tests: Array<{
     id: string;
     testRef: string;
     params?: Record<string, any>;
-
-    // NEW: orchestration-level skip (intentional non-execution)
     skip?: SuiteSkipDecl;
   }>;
 }
@@ -246,12 +224,10 @@ function isSuiteDoc(v: any): v is SuiteDoc {
     isObject(v) &&
     v.schemaVersion === "v1" &&
     typeof v.suiteId === "string" &&
-    // removed applicationName from structural recognition.
     Array.isArray(v.tests)
   );
 }
 
-// structural recognition for Suite v2
 function isSuiteDocV2(v: any): v is SuiteDocV2 {
   return (
     isObject(v) &&
@@ -327,7 +303,6 @@ function containsInterpolation(s: string): boolean {
 }
 
 function isLikelyPathRef(ref: string): boolean {
-  // If it looks like a file path, treat it as such. Otherwise fall back to registry ID.
   return (
     ref.includes("/") ||
     ref.includes("\\") ||
@@ -337,34 +312,14 @@ function isLikelyPathRef(ref: string): boolean {
 }
 
 function isAbsoluteHttpUrl(s: string): boolean {
-  // We only treat absolute http(s) URLs as "environment-coupled literals".
-  // Relative paths like "/" or "/inventory.html" are allowed in reusables.
   return /^https?:\/\//i.test(s);
 }
 
-/**
- * CI detection: keep it simple and deterministic.
- * - CI systems commonly set process.env.CI="true".
- * - We intentionally DO NOT try to infer "interactive" via TTY heuristics here.
- */
 function isCiEnvironment(): boolean {
   const v = process.env.CI;
   return typeof v === "string" && v.toLowerCase() === "true";
 }
 
-/**
- * Deterministic runtime-only auto step ids.
- *
- * Contract:
- * - Does NOT change schemas.
- * - Does NOT require authors to add ids.
- * - Produces stable ids for reporting + warnings.
- *
- * Format:
- * <executableId>::<NNN>::<action>
- * Example:
- * login-literals::001::goto
- */
 function ensureStepIds(params: {
   executableId: string;
   steps: any[];
@@ -387,14 +342,6 @@ function ensureStepIds(params: {
   }
 }
 
-/**
- * Determine the effective debug semantics for this run.
- *
- * Contract:
- * 1) suite.debugOnly defaults to false when omitted.
- * 2) stub execution implies debug semantics (stub is debugOnly by default).
- * 3) suite.debugOnly=true requires debug semantics. In CI, debug must be explicit.
- */
 function computeEffectiveDebug(params: {
   executionEngine: ExecutionEngine;
   suiteDebugOnly: boolean;
@@ -410,17 +357,14 @@ function computeEffectiveDebug(params: {
     suiteId
   } = params;
 
-  // 1️⃣ Model engine defaults to debug semantics.
   if (executionEngine === "testergizer") {
     return { effectiveDebug: true, debugForced: false };
   }
 
-  // 2️⃣ Explicit user override.
   if (userDebugFlag) {
     return { effectiveDebug: true, debugForced: false };
   }
 
-  // 3️⃣ Suite-enforced debug.
   if (suiteDebugOnly) {
     if (ci) {
       throw new Error(
@@ -438,7 +382,6 @@ function computeEffectiveDebug(params: {
     return { effectiveDebug: true, debugForced: true };
   }
 
-  // 4️⃣ Default for live engine.
   return { effectiveDebug: false, debugForced: false };
 }
 
@@ -451,13 +394,8 @@ function validateReusablePurity(params: {
 }) {
   const { reusableDoc, reusablePath, debug, includeStack, warnings } = params;
 
-  // Ensure warning stepIds are never "(missing-id)".
   ensureStepIds({ executableId: reusableDoc.id, steps: (reusableDoc.steps ?? []) as any[] });
 
-  // Purity rule is intentionally narrow:
-  // - For goto.target: absolute URLs are disallowed (unless debug semantics are enabled).
-  //   Relative navigation ("/", "/path") is allowed because it is environment-agnostic and relies on runner baseUrl.
-  // - For fill.value: literal inputs are disallowed (unless debug semantics are enabled) because they are data-coupled.
   for (const step of reusableDoc.steps ?? []) {
     const stepId = typeof step?.id === "string" ? step.id : "(missing-id)";
 
@@ -530,7 +468,6 @@ function expandIncludesWithProvenance(params: {
     provenanceByStepId
   } = params;
 
-  // Ensure root steps have deterministic ids
   ensureStepIds({
     executableId: root.id,
     steps: (root.steps ?? []) as any[]
@@ -581,7 +518,6 @@ function expandIncludesWithProvenance(params: {
         );
       }
 
-      // Ensure reusable steps have deterministic ids BEFORE provenance binding
       ensureStepIds({
         executableId: target.id,
         steps: (target.steps ?? []) as any[]
@@ -609,7 +545,6 @@ function expandIncludesWithProvenance(params: {
       for (let index = 0; index < target.steps.length; index++) {
         const s = target.steps[index];
 
-        // Absolute guarantee: id must exist
         if (!s.id || typeof s.id !== "string") {
           s.id = `${target.id}::${index}`;
         }
@@ -628,10 +563,7 @@ function expandIncludesWithProvenance(params: {
         };
       }
     } else {
-      // Root-level step
-
       if (!step.id || typeof step.id !== "string") {
-        // Deterministic fallback (should not happen after ensureStepIds, but defensive)
         const idx = root.steps.indexOf(step);
         step.id = `${root.id}::${idx}`;
       }
@@ -650,7 +582,7 @@ function expandIncludesWithProvenance(params: {
   }
 
   return {
-    ...root, // Ensures capability, promise, and description survive flattening
+    ...root,
     id: root.id,
     reusable: false,
     context: root.context,
@@ -658,7 +590,6 @@ function expandIncludesWithProvenance(params: {
   };
 }
 
-  
 function parseSkipDecl(v: any): { skip: boolean; reason?: string } {
   if (v === true) return { skip: true };
   if (isObject(v)) {
@@ -668,13 +599,6 @@ function parseSkipDecl(v: any): { skip: boolean; reason?: string } {
   return { skip: false };
 }
 
-/**
- * Normalize Suite v1 test entries.
- *
- * Contract:
- * - If an entry declares skip, it must resolve to a path (ref or path) so we can report testPath.
- * - Skipped tests are NOT loaded, validated, or executed.
- */
 function normalizeSuiteTestEntry(params: {
   entry: SuiteTestEntry;
   suiteDir: string;
@@ -683,7 +607,6 @@ function normalizeSuiteTestEntry(params: {
 }): { doc?: ExecutableDoc; filePath: string; skip?: { reason?: string } } {
   const { entry, suiteDir, suiteFilePath, index } = params;
 
-  // Inline executables cannot be skipped by ref/path; if you want skip, use a referenced entry.
   if (isExecutableLike(entry)) {
     return { doc: entry, filePath: `${suiteFilePath}#tests[${index}]` };
   }
@@ -693,12 +616,10 @@ function normalizeSuiteTestEntry(params: {
     return { doc: loadJson(testPath) as ExecutableDoc, filePath: testPath };
   }
 
-  // Object forms
   if (isObject(entry)) {
     const maybeSkip = parseSkipDecl((entry as any).skip);
     const hasSkip = maybeSkip.skip;
 
-    // Determine resolved file path (required for skip reporting too)
     const hasPath = typeof (entry as any).path === "string";
     const hasRef = typeof (entry as any).ref === "string";
 
@@ -718,7 +639,6 @@ function normalizeSuiteTestEntry(params: {
       return { doc: undefined, filePath, skip: { reason: maybeSkip.reason } };
     }
 
-    // Non-skip normal forms
     if (hasPath) {
       const testPath = path.resolve(suiteDir, (entry as any).path);
       return { doc: loadJson(testPath) as ExecutableDoc, filePath: testPath };
@@ -735,11 +655,6 @@ function normalizeSuiteTestEntry(params: {
   );
 }
 
-// Normalize Suite v2 entry (path resolution + validation)
-//
-// Contract:
-// - Skipped tests are NOT loaded, validated, or executed.
-// - We still resolve testPath for reporting.
 function normalizeSuiteV2TestEntry(params: {
   entry: SuiteDocV2["tests"][number];
   resolveBase: string;
@@ -800,11 +715,6 @@ function errorStack(err: any): string | undefined {
   return typeof err?.stack === "string" ? err.stack : undefined;
 }
 
-/* ============================================================
-  * Function to compute signal strength (for potential future use in reporting or policy decisions)
-  * based on execution engine and run summary. 
-  * The formula differs for "playwright" and "testergizer" engines, reflecting their different result semantics.
-  * ============================================================ */
 function computeSignalStrength(
   engine: ExecutionEngine,
   summary: RunSummary
@@ -818,10 +728,9 @@ function computeSignalStrength(
     if (E === 0) return 0;
 
     const raw = ((P - (F + A)) / E) * 100;
-    return Math.round(raw * 100) / 100; // 2 decimal precision
+    return Math.round(raw * 100) / 100; 
   }
 
-  // testergizer engine
   const V = summary.valid;
   const I = summary.invalid;
   const E = V + I;
@@ -853,57 +762,72 @@ function compileToTestlets(params: {
 } {
   const { suiteContext, doc, filePath, registry, registryPaths, options } = params;
 
-  // SPRINT 7 BYPASS: Capture raw matrix properties before legacy validation strips them
-  const rawVariance = (doc as any).variance;
-  const rawTestMatrix = (doc as any).testMatrix ?? (doc as any).testDomain;
   const rawTestDomain = (doc as any).testDomain;
-  const rawActions = (doc as any).actions;
 
   throwIfIssues(validateExecutableDoc(doc, filePath));
   if (doc.reusable) throw new Error(`Reusable executable cannot be run directly: ${doc.id}`);
 
-  // Merge optional per-test context (Suite v2 params) without altering v1 behavior.
   const effectiveContext: Record<string, any> = {
     ...(suiteContext ?? {}),
     ...(params.testContext ?? {}),
     ...(doc.context ?? {})
   };
 
-  const debugWarnings: DebugWarning[] = [];
-  const provenanceByStepId: Record<string, StepProvenance> = {};
-
-  const expanded = expandIncludesWithProvenance({
-    root: { ...doc, reusable: false, context: effectiveContext },
-    rootPath: filePath,
-    registry,
-    registryPaths,
-    debug: options.debug === true,
-    warnings: debugWarnings,
-    provenanceByStepId
-  });
-
-  // SPRINT 7 BYPASS: Reinject the properties into the expanded document
-  if (rawVariance) (expanded as any).variance = rawVariance;
-  if (rawTestMatrix) (expanded as any).testMatrix = rawTestMatrix;
-  if (rawTestDomain) (expanded as any).testDomain = rawTestDomain;
-  if (rawActions) (expanded as any).actions = rawActions;
-
-  const resolver = new DataMatrixResolver();
   const baseTestDef: any = {
-    ...expanded,
-    actions: expanded.steps
+    ...doc,
+    actions: doc.steps
   };
 
-  // SPRINT 7 FIX: Resolve variance file path absolutely against the test definition file
   if (baseTestDef.variance && baseTestDef.variance.filePath) {
     if (!path.isAbsolute(baseTestDef.variance.filePath)) {
       baseTestDef.variance.filePath = path.resolve(path.dirname(filePath), baseTestDef.variance.filePath);
     }
   }
 
-  const testlets = resolver.resolve(baseTestDef);
+  // 1. Unroll the raw matrix first so we can access variant-specific steps
+  const resolver = new DataMatrixResolver();
+  const rawTestlets = resolver.resolve(baseTestDef);
 
-  return { testlets, expanded, effectiveContext, provenanceByStepId, debugWarnings };
+  const finalTestlets: UnrolledTestlet[] = [];
+  const globalProvenance: Record<string, StepProvenance> = {};
+  const allWarnings: DebugWarning[] = [];
+
+  for (const testlet of rawTestlets) {
+    // QUALITY INTELLIGENCE FUSE: Base Foundation + Variant Extension
+    const variantSteps = Array.isArray((testlet as any).steps) ? (testlet as any).steps : [];
+    const combinedTopology = [...(doc.steps || []), ...variantSteps];
+
+    const testletContext = { ...effectiveContext, ...testlet.inputs };
+
+    const expanded = expandIncludesWithProvenance({
+      root: { ...doc, steps: combinedTopology, reusable: false, context: testletContext },
+      rootPath: filePath,
+      registry,
+      registryPaths,
+      debug: options.debug === true,
+      warnings: allWarnings,
+      provenanceByStepId: globalProvenance
+    });
+
+    finalTestlets.push({
+      ...testlet,
+      actions: expanded.steps,
+      testDomain: rawTestDomain ?? "ui"
+    });
+  }
+
+  // Deduplicate warnings to prevent N-worker spam for base steps
+  const uniqueWarnings = Array.from(
+    new Map(allWarnings.map(w => [`${w.stepId}-${w.field}`, w])).values()
+  );
+
+  return { 
+    testlets: finalTestlets, 
+    expanded: { ...doc, steps: [] }, // executeTestlet consumes testlet.actions directly now
+    effectiveContext, 
+    provenanceByStepId: globalProvenance, 
+    debugWarnings: uniqueWarnings 
+  };
 }
 
 /* ============================================================
@@ -942,14 +866,11 @@ async function executeTestlet(params: {
     runId
   });
 
-  // Isolated, cold context for this specific variation
   const coldContext = {
     ...effectiveContext,
     ...testlet.inputs
   };
 
-  // Contract: In debug semantics (including stub), we do not hard-fail on missing interpolation.
-  // This preserves exploratory workflows while keeping production runs strict.
   if (options.debug !== true) {
     throwIfIssues(
       validateInterpolationCompleteness({
@@ -960,11 +881,9 @@ async function executeTestlet(params: {
     );
   }
 
-  // SPRINT 7 COMPILER PATCH: Map declarative matrix expectations to actionable execution steps
   const expectationSteps = (testlet.expect || []).map((exp: any, idx: number) => {
     let action = "assert";
     
-    // Auto-route to the correct executor boundary logic based on the payload semantics
     if (exp.target === "url" || exp.target === "uri") {
       action = "assertUrl";
     } else if (exp.matcher && String(exp.matcher).toLowerCase().includes("text")) {
@@ -983,7 +902,6 @@ async function executeTestlet(params: {
     };
   });
 
-  // Append the compiled expectation steps to the end of the action array
   const combinedActions = [...testlet.actions, ...expectationSteps];
 
   const sandbox = options.executionEngine === "testergizer";
@@ -993,7 +911,6 @@ async function executeTestlet(params: {
     injectedSecrets: parseInjectedSecrets([])
   });
 
-  // Interpolate the entire combined sequence, ensuring matrix variables apply to expectations
   const interpolatedActions = interpolateDeepStrict(combinedActions, resolvedContext.values);
 
   const executionUnit = {
@@ -1054,10 +971,6 @@ export async function executeSuiteFromFile(inputPath: string, options: RunSuiteO
 
   const artifactsBaseDir = options.artifactsDir ?? "artifacts";
   const ci = isCiEnvironment();
-
-  /* ============================================================
-   * Suite dispatcher (schema switch)
-   * ============================================================ */
 
   if (!isObject(root) || typeof (root as any).schemaVersion !== "string") {
     throw new Error("Single executable runs must be wrapped in a suite");
@@ -1167,8 +1080,6 @@ export async function executeSuiteFromFile(inputPath: string, options: RunSuiteO
         debugWarningsAll.push(...r.debugWarnings);
       }
 
-      // SPRINT 7: Compile Phase
-      // We unroll all variations first to feed them to the Orchestrator
       const tasks: ScheduledTask<IndexedResult>[] = [];
       let globalTaskIndex = 0;
 
@@ -1198,7 +1109,6 @@ export async function executeSuiteFromFile(inputPath: string, options: RunSuiteO
             options: effectiveOptions
           });
 
-          // Harvest compilation warnings ONCE to prevent 8x duplication across unrolled workers
           debugWarningsAll.push(...compiled.debugWarnings);
 
           for (const testlet of compiled.testlets) {
@@ -1221,7 +1131,7 @@ export async function executeSuiteFromFile(inputPath: string, options: RunSuiteO
                   effectiveContext: compiled.effectiveContext,
                   filePath: normalized!.filePath,
                   provenanceByStepId: compiled.provenanceByStepId,
-                  debugWarnings: [] // Warnings already harvested
+                  debugWarnings: []
                 });
               }
             });
@@ -1241,7 +1151,6 @@ export async function executeSuiteFromFile(inputPath: string, options: RunSuiteO
         }
       }
 
-      // SPRINT 7: Execution Phase
       const workers = options.workers ?? 1;
 
       if (workers <= 1) {
@@ -1319,7 +1228,6 @@ export async function executeSuiteFromFile(inputPath: string, options: RunSuiteO
       (runResult as any).debugForced = debugForced;
       (runResult as any).ci = ci === true;
 
-      // EXPLICIT WORKER LOGGING PATCH
       (runResult as any).workers = workers;
 
       if (effectiveOptions.launch?.command) {
@@ -1605,7 +1513,6 @@ export async function executeSuiteFromFile(inputPath: string, options: RunSuiteO
       (runResult as any).debugForced = debugForced;
       (runResult as any).ci = ci === true;
 
-      // EXPLICIT WORKER LOGGING PATCH
       (runResult as any).workers = workers;
 
       if (effectiveOptions.launch?.command) {

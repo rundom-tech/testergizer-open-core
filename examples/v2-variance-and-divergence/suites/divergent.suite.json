@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "v2",
+  "suiteId": "divergent-topology-suite",
+  "suiteName": "Quality Intelligence Divergent Topology Proof",
+  "baseUrl": "https://www.saucedemo.com",
+  "autVersion": "1.0.0",
+  "ctr": {
+    "path": "../ctr/saucedemo.ctr.json"
+  },
+  "tests": [
+    {
+      "id": "matrix-topology-exec",
+      "testRef": "../tests/login-matrix.test.json"
+    }
+  ]
+}

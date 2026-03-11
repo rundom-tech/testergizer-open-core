@@ -15,7 +15,13 @@ export class DataMatrixResolver {
       return [this.createBaseTestlet(testDef)];
     }
 
-    const dataRows = this.fetchDataRows(testDef.variance.sourceType, testDef.variance.filePath);
+    // Quality Intelligence Auto-Detect: Infer sourceType from file extension if missing
+    let sourceType = testDef.variance.sourceType;
+    if (!sourceType && testDef.variance.filePath) {
+      sourceType = testDef.variance.filePath.toLowerCase().endsWith('.csv') ? 'CSV' : 'JSON';
+    }
+
+    const dataRows = this.fetchDataRows(sourceType, testDef.variance.filePath);
     
     return dataRows.map(row => this.hydrateTestlet(testDef, row));
   }
@@ -34,39 +40,42 @@ export class DataMatrixResolver {
       parentTestId: testDef.id,
       testMatrix: testDef.testMatrix,
       actions: baseActions,
+      steps: [], 
       inputs: {},
       expect: testDef.expect || []
-    };
+    } as UnrolledTestlet;
   }
 
   /**
    * Fuses the base test definition with a specific matrix row to create an immutable Testlet.
-   * Resolves flow branching entirely at compile time.
+   * Passes Divergent Topologies safely down to the SuiteCoordinator for compilation.
    */
-  private hydrateTestlet(testDef: JsonTestDefinition, row: VarianceDataRow): UnrolledTestlet {
-    const baseActions = testDef.actions && testDef.actions.length > 0 
-      ? testDef.actions 
-      : testDef.steps || [];
+  private hydrateTestlet(testDef: JsonTestDefinition, row: any): UnrolledTestlet {
+    // Extract the variant's specific structural additions
+    const variantSteps = row.steps || row.actions || [];
 
-    const resolvedActions = row.actions && row.actions.length > 0 
-      ? row.actions 
-      : baseActions;
+    // Resolve the proper variation ID, treating id and variationId as semantic equivalents
+    const variationId = row.id || row.variationId || 'unnamed';
 
     return {
-      instanceId: `${testDef.id}_${row.variationId}`,
+      instanceId: `${testDef.id}_${variationId}`,
       parentTestId: testDef.id,
       testMatrix: testDef.testMatrix,
-      actions: resolvedActions,
-      inputs: row.inputs,
-      // Quality Intelligence: enforce the strict boundary array via cascading fallbacks
+      
+      // Explicitly pass the variant's steps so SuiteCoordinator can fuse them
+      steps: variantSteps,
+      actions: variantSteps, 
+      
+      inputs: row.inputs || {},
+      // Enforce the strict boundary array via cascading fallbacks
       expect: row.expect || testDef.expect || [] 
-    };
+    } as UnrolledTestlet;
   }
 
   /**
    * Retrieves and normalizes the variance data from the specified matrix source.
    */
-  private fetchDataRows(sourceType: 'JSON' | 'CSV', filePath: string): VarianceDataRow[] {
+  private fetchDataRows(sourceType: string, filePath: string): any[] {
     if (!fs.existsSync(filePath)) {
       throw new Error(`Quality Intelligence Violation: Data Matrix source not found at ${filePath}`);
     }
@@ -74,7 +83,7 @@ export class DataMatrixResolver {
     const rawContent = fs.readFileSync(filePath, 'utf-8');
 
     if (sourceType === 'JSON') {
-      return JSON.parse(rawContent) as VarianceDataRow[];
+      return JSON.parse(rawContent);
     }
 
     if (sourceType === 'CSV') {
@@ -85,16 +94,16 @@ export class DataMatrixResolver {
   }
 
   /**
-   * Normalizes CSV matrix data into the strict VarianceDataRow schema.
+   * Normalizes CSV matrix data into the strict schema.
    */
-  private parseCsv(content: string): VarianceDataRow[] {
+  private parseCsv(content: string): any[] {
     const lines = content.split('\n').map(line => line.trim()).filter(line => line.length > 0);
     if (lines.length < 2) {
       return [];
     }
 
     const headers = lines[0].split(',');
-    const rows: VarianceDataRow[] = [];
+    const rows: any[] = [];
 
     for (let i = 1; i < lines.length; i++) {
       const values = lines[i].split(',');
@@ -119,26 +128,26 @@ export class DataMatrixResolver {
               expect.push(...parsedExpect);
             }
           } catch (e) {
-            console.warn(`Could not parse expectations for CSV row ${rowData.variationId}`);
+            console.warn(`Could not parse expectations for CSV row ${rowData.variationId || rowData.id}`);
           }
-        } else if (key === 'actions') {
+        } else if (key === 'actions' || key === 'steps') {
           try {
             const parsedActions = JSON.parse(rowData[key]);
             if (Array.isArray(parsedActions)) {
               actions = parsedActions;
             }
           } catch (e) {
-            console.warn(`Could not parse actions for CSV row ${rowData.variationId}`);
+            console.warn(`Could not parse steps for CSV row ${rowData.variationId || rowData.id}`);
           }
         }
       });
 
       rows.push({
-        variationId: rowData.variationId || `row_${i}`,
+        id: rowData.id || rowData.variationId || `row_${i}`,
         description: rowData.description,
         inputs,
         expect,
-        actions
+        steps: actions
       });
     }
 
