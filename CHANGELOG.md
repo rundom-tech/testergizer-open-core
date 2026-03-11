@@ -1,6 +1,19 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.## [Unreleased] - SPRINT 6: Full Stack Intelligence Matrix
+All notable changes to this project will be documented in this file.
+
+## [SPRINT 7] - Precompiled Divergent Topology - 2026-03-11
+
+### Added
+- **Precompiled Divergent Topology**: Finalized the Base and Extension pattern within the orchestration layer to support strict deterministic branching.
+- **Divergence Proof Suite**: Added a complete `v2-variance-and-divergence` example directory demonstrating the injection of structural step extensions directly from a data matrix.
+
+### Changed
+- **Data Matrix Resolution**: Upgraded `DataMatrixResolver` to natively support the extraction of custom `steps` arrays from matrix rows, enabling structural divergence without imperative logic.
+- **Identifier Normalization**: Standardized matrix row identification to seamlessly accept both `id` and `variationId` for deterministic testlet naming.
+- **Source Type Inference**: The compiler now automatically infers the data matrix source type (JSON or CSV) based on the file extension.
+- **Suite Orchestration**: Refactored `SuiteCoordinator` to securely fuse base test steps with variant extension steps prior to test execution.
+
 
 ## [SPRINT 7] - Data Variance and Precompiled Branching - 2026-03-10
 
@@ -19,6 +32,7 @@ All notable changes to this project will be documented in this file.## [Unreleas
 ### Fixed
 - Fixed race conditions where Playwright auto-wait was defeated by framework-level DOM queries.
 - Fixed missing `matrix-expect` step reporting in HTML artifacts.
+
 
 ## [SPRINT 6] - Full Stack Intelligence Matrix - 2026-03-10
 
@@ -39,14 +53,14 @@ All notable changes to this project will be documented in this file.## [Unreleas
 * Removed legacy flat flow structures (`flows/auth/login.json` and `logout.json`) to enforce the new reusable component architecture.
 
 
-
-## [API STATE EXTRACTION - SPRINT 4] - 2026-03-06 (State Capture & Chaining Output to Input)
+## [API STATE EXTRACTION - SPRINT 4 & 5] - State Capture & Chaining Output to Input - 2026-03-06
 
 ### Added
 - **API State Extraction:** Introduced a zero-dependency JSONPath resolver (`ApiExecutor.ts`) capable of extracting scalar values (strings, numbers, booleans) from deeply nested API response payloads.
 - **Output-to-Input Chaining:** Integrated the `VarianceResolver` into the API execution loop. The engine can now capture a value in Step A and dynamically inject it into the URLs, headers, payloads, and expected assertions of Step B.
 - **Wildcard Array Validation:** Upgraded `GovernanceValidator` to support recursive `[*]` array mapping. The engine can now automatically validate every item within a returned JSON array against a dynamically captured state variable.
 - **Report Visibility:** Enhanced `htmlReporter.ts` to automatically detect and render extracted context variables into a dedicated "🔗 captured state" UI table within the HTML run report.
+
 
 ## [API & UI DATA VARIANCE SPRINT 4] - 2026-03-05 (State Capture & Chaining Output to Input)
 
@@ -61,6 +75,7 @@ All notable changes to this project will be documented in this file.## [Unreleas
 ### Fixed
 - **Type Coercion in Resolver:** `VarianceResolver` now preserves original data types (boolean, number) when a payload uses an exact match variable (e.g., `{{isActive}}`), rather than coercing everything to a string.
 
+
 ## [API SPRINT 3] - 2026-03-04 (Data Variance)
 
 ### Added
@@ -71,6 +86,7 @@ All notable changes to this project will be documented in this file.## [Unreleas
 ### Fixed
 - **Pre-processor Routing**: Updated `TestExecutor` to resolve logical targets (e.g., `{{userId}}`) before repository lookups, fixing UI resolution failures.
 - **Deep Resolution**: Enabled recursive placeholder swapping in nested JSON payloads and API headers.
+
 
 ## [API Sprint 2] - 2026-03-04
 
@@ -104,7 +120,7 @@ Artifact Isolation: Confirmed all REST domain results route strictly to the rest
 ### Fixed
 - **Phantom Browser Launches**: Fixed an issue where the native-fetch API engine was unintentionally booting up a headless Playwright instance and provisioning empty UI artifact directories.
 
-## [2026-03-02] - API Sprint 1: Live Execution & Domain Isolation
+## [2026-03-02] - API SPRINT 1: Live Execution & Domain Isolation
 ### Added
 API Execution Engine: Formally introduced the api engine as a first-class execution axis alongside testergizer and playwright.
 
