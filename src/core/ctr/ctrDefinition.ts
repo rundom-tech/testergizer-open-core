@@ -1,6 +1,6 @@
 // src/core/locators/ctrDefinition.ts
 
-import type { LocatorDictionary } from "./types";
+import type { LocatorDictionary } from "./ctrTypes";
 
 export interface CTRDefinition {
   appId: string;

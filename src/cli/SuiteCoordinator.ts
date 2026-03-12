@@ -45,7 +45,7 @@ import path from "path";
 import { randomUUID } from "crypto";
 import { pathToFileURL } from "url";
 
-import { evaluateVersionCompatibility } from "../core/locators/ctrVersionGuard";
+import { evaluateVersionCompatibility } from "../core/ctr/ctrVersionGuard";
 import { TestExecutor } from "../core/TestExecutor";
 import { DataMatrixResolver } from "../core/DataMatrixResolver";
 import { JsonReporter } from "../tools/jsonReporter";
@@ -68,7 +68,7 @@ import {
 } from "./validate";
 
 import type { ExecutableDoc } from "./validate";
-import type { JsonTestDefinition, ExecutionEngine, ExecutionIntent, ValidationMode, UnrolledTestlet } from "../core/types";
+import type { ExecutionEngine, ExecutionIntent, ValidationMode, UnrolledTestlet } from "../core/types";
 import type { RunResult, RunSummary, TestResult } from "../core/resultTypes";
 import { Orchestrator } from "../core/orchestration/Orchestrator";
 import type { ScheduledTask } from "../core/orchestration/types";

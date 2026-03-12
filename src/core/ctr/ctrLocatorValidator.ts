@@ -1,4 +1,4 @@
-import type { LocatorDefinition, ClrSelector } from "./types";
+import type { LocatorDefinition, ClrSelector } from "./ctrTypes";
 
 export function validateLocatorDefinition(
   raw: unknown,

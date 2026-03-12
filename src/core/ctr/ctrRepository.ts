@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
-import type { LocatorDictionary, LocatorDefinition } from './types';
-import { validateLocatorDictionary } from './validate';
+import type { LocatorDictionary, LocatorDefinition } from './ctrTypes';
+import { validateLocatorDictionary } from './ctrLocatorValidator';
 
 export class LocatorRepository {
   private readonly dict: LocatorDictionary;

@@ -1,5 +1,5 @@
-import { InvalidTargetError } from './errors';
-import type { ParsedTarget } from './types';
+import { InvalidTargetError } from './ctrErrors';
+import type { ParsedTarget } from './ctrTypes';
 
 export function parseTarget(target: string): ParsedTarget {
   const parts = target.split('.');

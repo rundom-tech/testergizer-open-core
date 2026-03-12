@@ -2,9 +2,9 @@ import type {
   LocatorDefinition,
   ClrSelector,
   LocatorResolutionResult
-} from "./types";
+} from "./ctrTypes";
 
-import { ContextNotAllowedError } from "./errors";
+import { ContextNotAllowedError } from "./ctrErrors";
 
 export function resolveLocator(
   elementKey: string,

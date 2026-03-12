@@ -1,8 +1,8 @@
 // src/core/TestExecutor.ts
 import { ExecutionContext } from "./context/ExecutionContext";
 import { VarianceResolver } from "./context/VarianceResolver";
-import { evaluateVersionCompatibility } from "./locators/ctrVersionGuard";
-import { evaluateDomFingerprint } from "./locators/ctrDomGuard";
+import { evaluateVersionCompatibility } from "./ctr/ctrVersionGuard";
+import { evaluateDomFingerprint } from "./ctr/ctrDomGuard";
 
 import fs from "fs";
 import path from "path";
@@ -44,17 +44,14 @@ import type {
   RunSummary
 } from "./resultTypes";
 
-import { loadCTRFromFile } from "./locators/ctrLoader";
-import { CTRDefinition } from "./locators/ctrDefinition";
+import { CTRDefinition } from "./ctr/ctrDefinition";
 
-import { LocatorRepository } from "./locators/repository";
-import { resolveLocator } from "./locators/resolver";
-import { parseTarget } from "./locators/target";
-import { ClrSelector } from "./locators/types";
+import { LocatorRepository } from "./ctr/ctrRepository";
+import { resolveLocator } from "./ctr/ctrResolver";
+import { parseTarget } from "./ctr/ctrTargetParser";
 
-// Replace the old CentralTargetRegistry import with this:
 import { ApiTargetRegistry } from "./api/ApiRepository";
-import { ApiExecutable, ApiTargetDefinition } from "./api/types";
+import { ApiExecutable } from "./api/types";
 import { ApiExecutor } from "./executors/ApiExecutor";
 
 // SPRINT 6: New Core Stubs for DB and Email
