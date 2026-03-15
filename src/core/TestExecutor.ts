@@ -57,6 +57,8 @@ import { ApiExecutor } from "./executors/ApiExecutor";
 // SPRINT 6: New Core Stubs for DB and Email
 import { DbExecutor } from "./executors/DbExecutor";
 import { EmailExecutor } from "./executors/EmailExecutor";
+// SPRINT 8: Quality Intelligence File System Capabilities
+import { FSExecutor } from "./executors/FSExecutor";
 
 // SPRINT 6: Bitwise Domain Flags (31-Bit Power of Two)
 export enum TestDomainFlag {
@@ -205,6 +207,8 @@ export class TestExecutor {
   // SPRINT 6: Open Core Executors
   private dbExecutor = new DbExecutor();
   private emailExecutor = new EmailExecutor();
+  // SPRINT 8: File System Executor
+  private fsExecutor = new FSExecutor();
 
   constructor(options: TestExecutorOptions = {}) {
     this.options = options;
@@ -324,10 +328,10 @@ export class TestExecutor {
     const projectId = this.engine === "api" ? "rest-api" : baseProjectId;
 
     const attempts: TestAttemptResult[] = [];
-
     const maxAttempts = 1 + this.retries;
 
     let finalResult: TestResultValue = "passed";
+    let lastTestDomainValue = 0;
 
     for (let attemptNumber = 1; attemptNumber <= maxAttempts; attemptNumber++) {
       let browser: Browser | null = null;
@@ -343,6 +347,8 @@ export class TestExecutor {
       const isModelEngine = this.engine === "testergizer";
       
       const testDomainValue = resolveTestDomain(test.testDomain, this.engine);
+      lastTestDomainValue = testDomainValue; 
+      
       const requiresBrowser = 
         this.engine === "playwright" || 
         (testDomainValue & TestDomainFlag.UI) === TestDomainFlag.UI; 
@@ -363,25 +369,42 @@ export class TestExecutor {
       const attemptStartedAt = nowIso();
 
       try {
+        let resolvedDownloadPath: string | undefined = undefined;
+        let pendingDownloads: Promise<void>[] = [];
+
         if (requiresBrowser) {
+          if (this.ctrDefinition && (this.ctrDefinition as any).paths && (this.ctrDefinition as any).paths["maestro-downloads-dir"]) {
+            const rawPath = (this.ctrDefinition as any).paths["maestro-downloads-dir"].value;
+            resolvedDownloadPath = varianceResolver.resolveString(rawPath);
+          }
+
+          if (resolvedDownloadPath && !fs.existsSync(resolvedDownloadPath)) {
+            await fs.promises.mkdir(resolvedDownloadPath, { recursive: true });
+          }
+
           browser = await browserType.launch({
             headless: this.options.headless ?? true,
             slowMo: this.options.slowMoMs
           });
 
-          if (attemptDir) {
-            await fs.promises.mkdir(attemptDir, { recursive: true });
-          }
-
           context = await browser.newContext({
             baseURL: this.options.baseUrl,
-            recordVideo:
-              artifactsEnabled &&
-              this.options.artifacts?.video === "on-failure" &&
-              attemptDir
-                ? { dir: attemptDir }
-                : undefined
+            acceptDownloads: true,
           });
+
+          // QUALITY INTELLIGENCE: Non-blocking stream tracking
+          // Pushes the serialization promise into a queue to be awaited at the end of the step
+          if (resolvedDownloadPath) {
+            (context as any).on('download', (download: any) => {
+              const savePath = path.join(resolvedDownloadPath!, download.suggestedFilename());
+              const savePromise = download.saveAs(savePath).then(() => {
+                console.log(`[Playwright] Download completed and serialized: ${savePath}`);
+              }).catch((err: any) => {
+                console.error(`[Playwright] Failed to save download: ${err}`);
+              });
+              pendingDownloads.push(savePromise);
+            });
+          }
 
           if (
             artifactsEnabled &&
@@ -436,6 +459,18 @@ export class TestExecutor {
                 value: "CORE_STUB",
                 audit: [{ check: step.action, path: step.target, passed: true, detail: "[Open Core] FS action recognized." }]
               };
+              (step as any).target = { value: step.target, resolved: true };
+
+            } else if (actionStr.startsWith("fs.")) {
+              const rawTarget = String((step as any).target);
+              
+              if (this.ctrDefinition && (this.ctrDefinition as any).paths && (this.ctrDefinition as any).paths[rawTarget]) {
+                const ctrPathObj = (this.ctrDefinition as any).paths[rawTarget];
+                (step as any).target = varianceResolver.resolveString(ctrPathObj.value);
+              }
+              
+              await this.fsExecutor.execute(step as JsonStep, page, executionContext);
+              status = "passed";
               (step as any).target = { value: step.target, resolved: true };
 
             } else if (actionStr === "api-call" || actionStr.startsWith("api-")) {
@@ -510,9 +545,6 @@ export class TestExecutor {
               }
 
             } else {
-              // ==========================================
-              // STRICT UI CTR RESOLUTION BOUNDARY
-              // ==========================================
               if (
                 requiresBrowser && 
                 this.ctrDefinition &&
@@ -546,14 +578,12 @@ export class TestExecutor {
                     const parsed = parseTarget(logicalTarget);
                     const def = this.locatorRepo.get(parsed.elementKey);
   
-                    // STRICT HARD FAIL: Do not fallback to the raw string
                     if (!def) {
                       throw new Error(
                         `Strict Boundary Violation - Locator '${parsed.elementKey}' could not be resolved in the Central Target Registry.`
                       );
                     }
   
-                    // Pure data extraction. No zero-latency DOM probing.
                     const res = resolveLocator(
                       parsed.elementKey,
                       def,
@@ -573,6 +603,12 @@ export class TestExecutor {
               }
 
               await this.executor.execute(step as JsonStep, page);
+
+              // QUALITY INTELLIGENCE: Drain and await the queue to ensure serialization before the FS step
+              if (pendingDownloads.length > 0) {
+                await Promise.all(pendingDownloads);
+                pendingDownloads = []; 
+              }
 
               if (page && (step as any).extract && Array.isArray((step as any).extract) && status === "passed") {
                 const targetSelector = typeof (step as any).target === 'string' ? (step as any).target : undefined;
@@ -652,7 +688,6 @@ export class TestExecutor {
 
           const stepEndedAt = nowIso();
 
-          // STRICT PAYLOAD REPORTER: Record what was actually handed to Playwright
           const normalizedTarget: StepResult["target"] = (() => {
             const post: any = (step as any).target;
             const pre: any = rawTargetBefore;
@@ -660,6 +695,13 @@ export class TestExecutor {
             const isResolved = typeof pre === "string" && pre !== post;
 
             if (isResolved) {
+              if (typeof post === "object") {
+                return {
+                  logical: pre,
+                  ...post
+                } as any;
+              }
+
               return {
                 logical: pre,
                 value: post,
@@ -675,7 +717,7 @@ export class TestExecutor {
                     result: "success"
                   }
                 ]
-              };
+              } as any;
             }
 
             const nvValue = typeof post === "string" ? post : (post?.value ?? String(post));
@@ -683,7 +725,7 @@ export class TestExecutor {
             return {
               value: nvValue,
               resolved: true
-            };
+            } as any;
           })();
 
           const normalizedData = (() => {
@@ -863,11 +905,21 @@ export class TestExecutor {
 
     const testEndedAt = nowIso();
 
+    let reportingDomain: "ui" | "api" | "system" = "system";
+    
+    if (lastTestDomainValue === TestDomainFlag.UI) {
+      reportingDomain = "ui";
+    } else if (lastTestDomainValue === TestDomainFlag.API) {
+      reportingDomain = "api";
+    } else {
+      reportingDomain = "system";
+    }
+
     return {
       ...(test as any),
       id: test.id,
       name: test.name,
-      testDomain: test.testDomain ?? "system",
+      testDomain: reportingDomain, 
       projectId,
       result: finalResult,
       startedAt: testStartedAt,

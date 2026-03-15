@@ -1,0 +1,11 @@
+{
+  "id": "tc-fs-static-check",
+  "reusable": false,
+  "testDomain": ["FS"],
+  "steps": [
+    {
+      "action": "fs.assertFolderExists",
+      "target": "C:/Users/Lenovo/Downloads"
+    }
+  ]
+}

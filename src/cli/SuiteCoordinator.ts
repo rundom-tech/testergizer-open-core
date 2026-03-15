@@ -476,110 +476,108 @@ function expandIncludesWithProvenance(params: {
   const expandedSteps: any[] = [];
   const rootIncludeStack = [root.id];
 
-  for (const step of root.steps) {
-    if (isIncludeStep(step)) {
-      const ref = step.ref;
+  // Recursive flattener to cleanly unwrap any inline groups, wrappers, or includes
+  function flattenSteps(
+    stepsToProcess: any[],
+    currentStack: string[],
+    sourcePath: string,
+    sourceId: string,
+    isReusableOrigin: boolean,
+    inheritedGroup?: string
+  ) {
+    for (let index = 0; index < stepsToProcess.length; index++) {
+      const step = stepsToProcess[index];
 
-      let target: ExecutableDoc | undefined;
-      let targetPath: string | undefined;
+      if (isIncludeStep(step)) {
+        const ref = step.ref;
+        let target: ExecutableDoc | undefined;
+        let targetPath: string | undefined;
 
-      if (!isLikelyPathRef(ref)) {
-        target = registry.get(ref);
-        targetPath = registryPaths.get(ref);
-      }
-
-      if (!target) {
-        if (rootPath.includes("#")) {
-          throw new Error(
-            `Path-based include "${ref}" cannot be resolved from an inline suite executable. Move the executable into a real file.`
-          );
+        if (!isLikelyPathRef(ref)) {
+          target = registry.get(ref);
+          targetPath = registryPaths.get(ref);
         }
 
-        const incAbs = path.resolve(path.dirname(rootPath), ref);
-        if (!fs.existsSync(incAbs)) {
-          throw new Error(
-            `Include reference not found: ${ref} (resolved: ${incAbs})`
-          );
+        if (!target) {
+          if (sourcePath.includes("#")) {
+            throw new Error(`Path-based include "${ref}" cannot be resolved from an inline suite executable. Move the executable into a real file.`);
+          }
+          const incAbs = path.resolve(path.dirname(sourcePath), ref);
+          if (!fs.existsSync(incAbs)) {
+            throw new Error(`Include reference not found: ${ref} (resolved: ${incAbs})`);
+          }
+          target = loadJson(incAbs) as ExecutableDoc;
+          targetPath = incAbs;
         }
 
-        target = loadJson(incAbs) as ExecutableDoc;
-        targetPath = incAbs;
-      }
+        if (!targetPath) targetPath = `registry:${ref}`;
 
-      if (!targetPath) targetPath = `registry:${ref}`;
+        if (!target.reusable) {
+          throw new Error(`Include target is not reusable: ${ref}`);
+        }
 
-      if (!target.reusable) {
-        throw new Error(`Include target is not reusable: ${ref}`);
-      }
+        if (target.steps.some((s) => isIncludeStep(s))) {
+          throw new Error(`Reusable "${target.id}" must not contain include steps`);
+        }
 
-      if (target.steps.some((s) => isIncludeStep(s))) {
-        throw new Error(
-          `Reusable "${target.id}" must not contain include steps`
-        );
-      }
+        ensureStepIds({
+          executableId: target.id,
+          steps: (target.steps ?? []) as any[]
+        });
 
-      ensureStepIds({
-        executableId: target.id,
-        steps: (target.steps ?? []) as any[]
-      });
+        const newStack = [...currentStack, target.id];
+        validateReusablePurity({
+          reusableDoc: target,
+          reusablePath: targetPath,
+          debug,
+          includeStack: newStack,
+          warnings
+        });
 
-      const includeStack = [...rootIncludeStack, target.id];
-
-      validateReusablePurity({
-        reusableDoc: target,
-        reusablePath: targetPath,
-        debug,
-        includeStack,
-        warnings
-      });
-
-      const groupName =
-        ref
+        const groupName = ref
           .split(/[\\/]/)
           .pop()
           ?.replace(/\.json$/i, "")
           ?.replace(/[-_]/g, " ")
-          ?.replace(/\b\w/g, (c) => c.toUpperCase())
-        ?? ref;
+          ?.replace(/\b\w/g, (c) => c.toUpperCase()) ?? ref;
 
-      for (let index = 0; index < target.steps.length; index++) {
-        const s = target.steps[index];
+        // Recurse into the included file's steps
+        flattenSteps(target.steps, newStack, targetPath, target.id, true, groupName);
 
-        if (!s.id || typeof s.id !== "string") {
-          s.id = `${target.id}::${index}`;
+      } else if (step && typeof step === "object" && Array.isArray(step.steps)) {
+        // INTERCEPT WRAPPER: Unpack nested inline blocks instead of passing to executor
+        const groupName = step.group?.name || step.id || inheritedGroup || "Inline Group";
+        
+        // Generate IDs for the child steps before unpacking
+        ensureStepIds({ executableId: step.id || sourceId, steps: step.steps });
+        
+        // Recurse into the wrapper's child steps
+        flattenSteps(step.steps, currentStack, sourcePath, sourceId, isReusableOrigin, groupName);
+
+      } else {
+        // LEAF STEP: Dispatch to the linear execution pipeline
+        if (!step.id || typeof step.id !== "string") {
+          step.id = `${sourceId}::${index}`;
         }
 
-        const sid = s.id;
+        if (inheritedGroup) {
+          (step as any).group = { name: inheritedGroup };
+        }
 
-        (s as any).group = { name: groupName };
+        expandedSteps.push(step);
 
-        expandedSteps.push(s);
-
-        provenanceByStepId[sid] = {
-          originExecutableId: target.id,
-          originPath: targetPath,
-          reusable: true,
-          includeStack
+        provenanceByStepId[step.id] = {
+          originExecutableId: sourceId,
+          originPath: sourcePath,
+          reusable: isReusableOrigin,
+          includeStack: currentStack
         };
       }
-    } else {
-      if (!step.id || typeof step.id !== "string") {
-        const idx = root.steps.indexOf(step);
-        step.id = `${root.id}::${idx}`;
-      }
-
-      const sid = step.id;
-
-      expandedSteps.push(step);
-
-      provenanceByStepId[sid] = {
-        originExecutableId: root.id,
-        originPath: rootPath,
-        reusable: false,
-        includeStack: rootIncludeStack
-      };
     }
   }
+
+  // Bootstrap the recursive unrolling
+  flattenSteps(root.steps, rootIncludeStack, rootPath, root.id, false);
 
   return {
     ...root,

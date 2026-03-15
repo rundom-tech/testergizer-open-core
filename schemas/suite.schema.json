@@ -133,11 +133,25 @@
         "suiteName": {
           "type": "string"
         },
+        "autVersion": {
+          "type": "string"
+        },
         "baseUrl": {
           "type": "string"
         },
         "resolveFrom": {
           "type": "string"
+        },
+        "ctr": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": ["path"],
+          "additionalProperties": false
         },
         "debugOnly": {
           "type": "boolean",

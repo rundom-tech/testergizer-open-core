@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://testergizer.dev/schemas/clr.schema.json",
   "title": "Common Language Resources (CLR) - Target Registry",
-  "description": "Schema for reusable, context-scoped targets (UI Locators, API Endpoints)",
+  "description": "Schema for reusable, context-scoped targets (UI Locators, API Endpoints, and System Paths)",
 
   "type": "object",
   "required": ["id"],
@@ -13,7 +13,7 @@
     "description": { "type": "string" },
     "domain": {
       "type": "string",
-      "enum": ["WEB", "REST"],
+      "enum": ["WEB", "REST", "FS", "DB", "EMAIL"],
       "default": "WEB"
     },
 
@@ -31,12 +31,21 @@
       "additionalProperties": {
         "$ref": "#/definitions/endpoint"
       }
+    },
+
+    "paths": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "$ref": "#/definitions/systemPath"
+      }
     }
   },
 
   "anyOf": [
     { "required": ["locators"] },
-    { "required": ["endpoints"] }
+    { "required": ["endpoints"] },
+    { "required": ["paths"] }
   ],
 
   "definitions": {
@@ -93,6 +102,22 @@
         "headers": {
           "type": "object",
           "additionalProperties": { "type": "string" }
+        }
+      }
+    },
+
+    "systemPath": {
+      "type": "object",
+      "required": ["value"],
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "type": "string",
+          "description": "The file or directory path, supporting {{variable}} injection"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["file", "directory", "symlink"]
         }
       }
     }

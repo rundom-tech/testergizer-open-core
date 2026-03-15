@@ -1,16 +1,14 @@
 // src/tools/htmlReporter.ts
+// CHANGELOG (2026-03-15)
+// - SPRINT 8: Quality Intelligence Observability
+// - Propagated deterministic status icons (✓/✕) to Test and Attempt card headers.
+// - Added aggregate status badges to step group (reusable) headers.
+// - Fixed duplicate resolved path rendering when using dynamic context variables.
 // CHANGELOG (2026-03-07)
 // - SPRINT 6: Hybrid Semantic Support
 // - Migrated from run-level `isApi` checks to step-level action checks.
 // - Fixed "locator" mislabeling for api-call and goto actions.
 // - Restored semantic status code badges for API steps in hybrid suites.
-// CHANGELOG (2026-02-11)
-// - Improved debug warning rendering semantics.
-// - Explicitly clarifies reusable purity relaxation.
-// - No structural or execution logic changes.
-// - No layout refactors.
-// - No CSS changes.
-// - No noise.
 
 import fs from "fs";
 import path from "path";
@@ -347,7 +345,10 @@ export class HtmlReporter {
       const value = typeof t.value === "string" ? t.value : undefined;
       const logical = typeof t.logical === "string" ? t.logical : undefined;
 
-      const secondary = logical && value && logical !== value
+      // Quality Intelligence: Suppress redundant fallback rendering when a variable is the primary target
+      const isVar = logical && /^\{\{.+\}\}$/.test(logical);
+
+      const secondary = logical && value && logical !== value && !isVar
         ? `<div class="ctr-secondary muted"><code>${esc(value)}</code></div>`
         : "";
 
@@ -381,7 +382,6 @@ export class HtmlReporter {
     };
 
     const renderStepRow = (step: any, testId: string, attempt: number) => {
-      // SPRINT 6: Semantic Action Context
       const actionStr = String(step?.action ?? "").toLowerCase();
       const isApiStep = actionStr === "api-call";
       const isGotoStep = actionStr === "goto";
@@ -421,7 +421,6 @@ export class HtmlReporter {
           const logical = opts.logical ? String(opts.logical) : undefined;
           const rawSelector = opts.rawSelector ? String(opts.rawSelector) : undefined;
 
-          // SPRINT 6: Dynamic semantic labels based on Step Action
           let label = "locator";
           let subLabel = "selector";
           if (isApiStep || isGotoStep) {
@@ -460,17 +459,31 @@ export class HtmlReporter {
           `;
         };
 
+        const formatPrimary = (primaryStr: string, resolvedVal?: string) => {
+          const m = primaryStr.match(/^\{\{(.+)\}\}$/);
+          if (m) {
+            let html = `<span class="badge badge-muted" style="text-transform:none; font-family:var(--font-mono, monospace); letter-spacing:0; padding:2px 6px;">var: ${esc(m[1])}</span>`;
+            if (resolvedVal && resolvedVal !== primaryStr) {
+               html += ` <span class="muted" style="margin: 0 4px;">=</span> <code>${esc(resolvedVal)}</code>`;
+            }
+            return { html, isVar: true };
+          }
+          return { html: `<code>${esc(primaryStr)}</code>`, isVar: false };
+        };
+
         if (typeof t === "string") {
           const raw = t.trim();
           if (!raw) return `<span class="action-target unresolved">(no target)</span>`;
 
           const inferred = pickClrKeyForSelector(raw);
           const primary = inferred ?? raw;
+          
+          const fmt = formatPrimary(primary, raw);
 
           return `
             <span class="action-arrow">→</span>
-            <span class="action-target"><code>${esc(primary)}</code></span>
-            ${inferred ? renderDetails({ logical: inferred, rawSelector: raw }) : ""}
+            <span class="action-target">${fmt.html}</span>
+            ${inferred && !fmt.isVar ? renderDetails({ logical: inferred, rawSelector: raw }) : ""}
           `;
         }
 
@@ -490,14 +503,15 @@ export class HtmlReporter {
         }
 
         const detailsLogical = logical ?? inferred;
+        const fmt = formatPrimary(primary, value);
 
         return `
           <span class="action-arrow">→</span>
           <span class="action-target ${unresolved ? "unresolved" : ""}">
-            <code>${esc(primary)}</code>
+            ${fmt.html}
             ${unresolved ? " (not found)" : ""}
           </span>
-          ${detailsLogical || value ? renderDetails({ logical: detailsLogical, rawSelector: value }) : ""}
+          ${(detailsLogical || value) && !fmt.isVar ? renderDetails({ logical: detailsLogical, rawSelector: value }) : ""}
         `;
       })();
 
@@ -510,7 +524,6 @@ export class HtmlReporter {
           const masked = (dObj as any).masked === true || forceMasked;
           let shown = masked ? "••••••" : String(raw);
 
-          // SPRINT 6: Highlight status codes specifically for `api-call` steps
           if (!masked && isApiStep && typeof raw === "number") {
              const status = raw;
              let colorClass = "badge-muted";
@@ -549,7 +562,6 @@ export class HtmlReporter {
         `;
       })();
 
-      // SPRINT 6: Only render payloads for `api-call` actions
       const payloadHtml = (() => {
         if (!isApiStep) return "";
         const dObj = (step as any).data;
@@ -724,6 +736,10 @@ export class HtmlReporter {
       const attErrors = Array.isArray((a as any).errors) ? (a as any).errors : [];
       const headerBits: string[] = [];
 
+      const attStatus = normalizeResult((a as any).result);
+      const attIcon = stepRailIcon(attStatus);
+
+      headerBits.push(`<span class="badge badge-${esc(attStatus)}" style="padding: 2px 6px; font-size: 0.9em;">${esc(attIcon)}</span>`);
       headerBits.push(
         `<span class="k">Attempt</span> <span class="mono">${esc(attemptIndex)} of ${esc(totalAttempts)}</span>`
       );
@@ -759,7 +775,7 @@ export class HtmlReporter {
       return `
         <details class="card attempt-card" ${(a as any).result !== "passed" ? "open" : ""}>
           <summary>
-            <div class="card-title">
+            <div class="card-title" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
               ${headerBits.join(" ")}
             </div>
           </summary>
@@ -780,11 +796,25 @@ export class HtmlReporter {
 
                   const flushGroup = () => {
                     if (!currentGroup) return;
+                    
+                    let groupStatus = "passed";
+                    const statuses = currentGroup.steps.map(s => normalizeResult(s.status ?? s.result));
+                    
+                    if (statuses.includes("failed")) groupStatus = "failed";
+                    else if (statuses.includes("aborted")) groupStatus = "aborted";
+                    else if (statuses.includes("unknown")) groupStatus = "unknown";
+                    else if (statuses.includes("skipped")) groupStatus = "skipped";
+
+                    const icon = stepRailIcon(groupStatus);
+                    
                     rows.push(`
                       <tr class="step-group">
                         <td>
                           <details>
-                            <summary class="step-group-title">${esc(currentGroup.name)}</summary>
+                            <summary class="step-group-title" style="display: flex; align-items: center; gap: 8px;">
+                              <span class="badge badge-${esc(groupStatus)}" style="padding: 2px 6px; font-size: 0.9em;">${esc(icon)}</span>
+                              <span>${esc(currentGroup.name)}</span>
+                            </summary>
                             <table class="table nested">
                               <tbody>
                                 ${currentGroup.steps.map((s) => renderStepRow(s, testId, (a as any).attempt)).join("")}
@@ -828,10 +858,14 @@ export class HtmlReporter {
       const engineLabel = isApi ? "engine: node" : `project: ${esc((t as any).projectId)}`;
       const domainLabel = isApi ? "domain: REST API" : "";
 
+      const testStatus = normalizeResult((t as any).result);
+      const tIcon = stepRailIcon(testStatus);
+
       return `
         <details class="card" ${idx === 0 ? "open" : ""}>
           <summary>
-            <div class="card-title">
+            <div class="card-title" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+              <span class="badge badge-${esc(testStatus)}" style="padding: 2px 6px; font-size: 0.9em;">${esc(tIcon)}</span>
               <span class="title">${(t as any).capability ? esc((t as any).capability) : esc(t.id)}</span>
               ${(t as any).capability ? `<span class="muted mono" style="margin-left: 10px; font-size: 0.85em;">${esc(t.id)}</span>` : ""}
               ${badge((t as any).result)}
@@ -1074,7 +1108,7 @@ export class HtmlReporter {
 
     const footer = `
       <div class="footer">
-        Powered by Testergizer | Copyright 2025 © RunDOM Technologies
+        Powered by Testergizer | Copyright 2026 © RunDOM Technologies
       </div>
     `;
 
