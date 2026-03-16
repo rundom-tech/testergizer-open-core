@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.0-beta] - 2026-03-16
+
+### Added
+- **Testergizer Maestro Core**: Initial Beta release of the schema-first generic execution engine.
+- **CTR (Central Target Registry)**: Implementation of decoupled target mapping for UI, API, and File System domains.
+- **FS Executor (00100)**: Initial implementation for File System auditing and validation.
+- **API Executor (00010)**: Support for REST protocol interactions, extraction chaining, and status code verification.
+- **UI Executor (00001)**: Playwright-powered browser automation utilizing the CTR to replace the Page Object Model.
+- **Examples**: 
+  - `v2-api-variance`: Decoupled API boundary testing using JSON data matrices.
+  - `v2-demosauce`: Matrix-driven UI authentication validation without imperative logic.
+
+### Changed
+- **Suite Orchestration**: Transitioned to the "Compile Phase" architecture to ensure immutable execution contracts.
+
+### Known Beta Limitations
+- **Type Strictness**: API status code assertions currently require exact type matching; integer vs. string comparison results in reported failures even if values match.
+- **Standalone Assertions**: The `assert` action is currently only registered for UI domains; using root-level `expect` blocks in API suites will trigger an `Unknown step action` error.
+- **CLI Flag Overrides**: Certain execution engine flags (e.g., `--engine`, `--intent`) are currently locked to the values defined in the JSON suite during the Beta phase to preserve contract determinism.
+
 ## [SPRINT 7] - Precompiled Divergent Topology - 2026-03-11
 
 ### Added

@@ -1,0 +1,20 @@
+{
+  "id": "run-get-user-success",
+  "name": "Verify API User Profile Success",
+  "testDomain": "api",
+  "variance": {
+    "sourceType": "JSON",
+    "filePath": "get-user-success.variance.json"
+  },
+  "steps": [
+    {
+      "id": "get-profile-success",
+      "action": "api-call",
+      "target": "{{TARGET_ID}}",
+      "method": "GET",
+      "assertions": [
+        { "check": "status_code", "expected": 200 }
+      ]
+    }
+  ]
+}

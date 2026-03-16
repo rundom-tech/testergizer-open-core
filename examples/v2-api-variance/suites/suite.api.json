@@ -1,0 +1,28 @@
+{
+  "schemaVersion": "v2",
+  "suiteId": "api-sprint1-variance",
+  "suiteName": "API Sprint 1 (Data Matrix)",
+  "resolveFrom": "..",
+  "baseUrl": "https://jsonplaceholder.typicode.com",
+  "ctr": {
+    "path": "ctr/endpoints.json"
+  },
+  "tests": [
+    {
+      "id": "run-get-user-success",
+      "testRef": "tests/get-user-success.test.json"
+    },
+    {
+      "id": "run-get-user-failures",
+      "testRef": "tests/get-user-failures.test.json"
+    },
+    {
+      "id": "run-get-user-albums",
+      "testRef": "tests/get-user-albums.json"
+    },
+    {
+      "id": "run-get-user-data-extraction",
+      "testRef": "tests/get-user-data-extraction.json"
+    }
+  ]
+}

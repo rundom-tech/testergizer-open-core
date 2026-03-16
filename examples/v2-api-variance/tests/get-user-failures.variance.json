@@ -1,0 +1,10 @@
+[
+  {
+    "variationId": "non_existent_user_boundary",
+    "inputs": { "TARGET_ID": "T-USER-NOT-FOUND" }
+  },
+  {
+    "variationId": "invalid_parameter_type",
+    "inputs": { "TARGET_ID": "T-USER-INVALID-TYPE" }
+  }
+]

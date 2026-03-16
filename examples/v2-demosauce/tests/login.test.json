@@ -1,0 +1,15 @@
+{
+  "id": "saucedemo-login-matrix",
+  "title": "SauceDemo Conditional Boundary",
+  "testDomain": "ui",
+  "variance": {
+    "sourceType": "JSON",
+    "filePath": "login-matrix.variance.json"
+  },
+  "steps": [
+    {
+      "type": "include",
+      "ref": "../reusables/login-foundation.json"
+    }
+  ]
+}

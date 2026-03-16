@@ -1,0 +1,20 @@
+{
+  "id": "run-get-user-failures",
+  "name": "Verify API User Profile Failures",
+  "testDomain": "api",
+  "variance": {
+    "sourceType": "JSON",
+    "filePath": "get-user-failures.variance.json"
+  },
+  "steps": [
+    {
+      "id": "get-profile-failures",
+      "action": "api-call",
+      "target": "{{TARGET_ID}}",
+      "method": "GET",
+      "assertions": [
+        { "check": "status_code", "expected": 404 }
+      ]
+    }
+  ]
+}

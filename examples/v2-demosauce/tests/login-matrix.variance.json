@@ -1,0 +1,105 @@
+[
+  {
+    "id": "standard_login_only",
+    "description": "Validates the primary success path for a standard user.",
+    "inputs": {
+      "USERNAME": "standard_user",
+      "PASSWORD": "secret_sauce"
+    },
+    "expect": [
+      { "target": "url", "matcher": "endsWith", "value": "/inventory.html" }
+    ]
+  },
+  {
+    "id": "login_and_add_to_cart",
+    "description": "Divergent topology: Validates adding an item to the cart immediately after login.",
+    "inputs": {
+      "USERNAME": "standard_user",
+      "PASSWORD": "secret_sauce"
+    },
+    "steps": [
+      { "type": "include", "ref": "../reusables/add-to-cart-extension.json" }
+    ],
+    "expect": [
+      { "target": "url", "matcher": "endsWith", "value": "/inventory.html" },
+      { "target": "inventory.cart.badge", "matcher": "assertText", "value": "1" }
+    ]
+  },
+  {
+    "id": "locked_out_user_rejection",
+    "description": "Validates the system correctly halts and notifies a locked account.",
+    "inputs": {
+      "USERNAME": "locked_out_user",
+      "PASSWORD": "secret_sauce"
+    },
+    "expect": [
+      { "target": "login.error.banner", "matcher": "containsText", "value": "Epic sadface: Sorry, this user has been locked out." }
+    ]
+  },
+  {
+    "id": "invalid_password_rejection",
+    "description": "Validates the boundary for incorrect credentials.",
+    "inputs": {
+      "USERNAME": "standard_user",
+      "PASSWORD": "wrong_password_123"
+    },
+    "expect": [
+      { "target": "login.error.banner", "matcher": "containsText", "value": "Epic sadface: Username and password do not match any user in this service" }
+    ]
+  },
+  {
+    "id": "invalid_username_rejection",
+    "description": "Validates the boundary for an unregistered username.",
+    "inputs": {
+      "USERNAME": "unknown_user_404",
+      "PASSWORD": "secret_sauce"
+    },
+    "expect": [
+      { "target": "login.error.banner", "matcher": "containsText", "value": "Epic sadface: Username and password do not match any user in this service" }
+    ]
+  },
+  {
+    "id": "missing_password_validation",
+    "description": "Validates client side or server side validation for missing password fields.",
+    "inputs": {
+      "USERNAME": "standard_user",
+      "PASSWORD": ""
+    },
+    "expect": [
+      { "target": "login.error.banner", "matcher": "containsText", "value": "Epic sadface: Password is required" }
+    ]
+  },
+  {
+    "id": "missing_username_validation",
+    "description": "Validates validation triggers when the username is omitted.",
+    "inputs": {
+      "USERNAME": "",
+      "PASSWORD": "secret_sauce"
+    },
+    "expect": [
+      { "target": "login.error.banner", "matcher": "containsText", "value": "Epic sadface: Username is required" }
+    ]
+  },
+  {
+    "id": "missing_credentials_validation",
+    "description": "Validates validation triggers when both fields are omitted entirely.",
+    "inputs": {
+      "USERNAME": "",
+      "PASSWORD": ""
+    },
+    "expect": [
+      { "target": "login.error.banner", "matcher": "containsText", "value": "Epic sadface: Username is required" }
+    ]
+  },
+  {
+    "id": "performance_glitch_user_resilience",
+    "description": "Validates the runner's timeout resilience against a known slow loading profile.",
+    "inputs": {
+      "USERNAME": "performance_glitch_user",
+      "PASSWORD": "secret_sauce"
+    },
+    "expect": [
+      { "target": "url", "matcher": "endsWith", "value": "/inventory.html" }
+    ]
+  }
+]

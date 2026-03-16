@@ -1,8 +1,0 @@
-{
-  "id": "logout",
-  "reusable": true,
-  "steps": [
-    { "action": "click", "target": "#react-burger-menu-btn" },
-    { "action": "click", "target": "#logout_sidebar_link" }
-  ]
-}
