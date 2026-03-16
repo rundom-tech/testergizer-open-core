@@ -1,0 +1,24 @@
+{
+  "id": "run-get-user-variance",
+  "name": "Verify API User Profile Boundaries",
+  "testDomain": "api",
+  "variance": {
+    "sourceType": "JSON",
+    "filePath": "get-user.variance.json"
+  },
+  "steps": [
+    {
+      "id": "get-profile-matrix",
+      "action": "api-call",
+      "target": "{{TARGET_ID}}",
+      "method": "GET"
+    }
+  ],
+  "expect": [
+    {
+      "stepId": "get-profile-matrix",
+      "check": "status_code",
+      "expected": "{{EXPECTED_STATUS}}"
+    }
+  ]
+}

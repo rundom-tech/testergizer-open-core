@@ -1,0 +1,6 @@
+{
+  "id": "high-contrast",
+  "name": "High Contrast",
+  "author": "RunDOM",
+  "supports": ["accessibility"]
+}

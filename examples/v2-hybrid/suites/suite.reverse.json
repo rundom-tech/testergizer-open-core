@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "v2",
+  "suiteId": "reverse-hybrid",
+  "suiteName": "Sprint 5 (Reverse Hybrid Proof)",
+  "resolveFrom": "../tests",
+  "autVersion": "1.0.0",
+  "baseUrl": "https://the-internet.herokuapp.com",
+  "ctr": {
+    "path": "../ctr/ctr-hybrid.json"
+  },
+  "tests": [
+    {
+      "id": "run-reverse-chaining-proof",
+      "testRef": "reverse-chaining-proof.json"
+    }
+  ]
+}

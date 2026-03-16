@@ -1,0 +1,34 @@
+{
+  "id": "CTR-JSON-PLACEHOLDER",
+  "description": "API Targets for the JSONPlaceholder mock service",
+  "domain": "REST",
+  "appId": "jsonplaceholder-api", 
+  "versionRange": ">= 1.0.0 < 2.0.0", 
+  "endpoints": {
+    "T-USER-PROFILE": {
+      "url": "https://jsonplaceholder.typicode.com/users/1",
+      "defaultMethod": "GET",
+      "headers": { "Accept": "application/json" }
+    },
+    "T-USER-NOT-FOUND": {
+      "url": "https://jsonplaceholder.typicode.com/users/9999",
+      "defaultMethod": "GET",
+      "headers": { "Accept": "application/json" }
+    },
+    "T-USER-INVALID-TYPE": {
+      "url": "https://jsonplaceholder.typicode.com/users/invalid_string",
+      "defaultMethod": "GET",
+      "headers": { "Accept": "application/json" }
+    },
+    "T-USER-POSTS": {
+      "url": "https://jsonplaceholder.typicode.com/posts",
+      "defaultMethod": "POST",
+      "headers": { "Content-Type": "application/json; charset=UTF-8" }
+    },
+    "T-USER-ALBUMS": {
+      "url": "https://jsonplaceholder.typicode.com/users/1/albums",
+      "defaultMethod": "GET",
+      "headers": { "Accept": "application/json" }
+    }
+  }
+}

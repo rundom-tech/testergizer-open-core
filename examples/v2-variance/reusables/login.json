@@ -1,0 +1,29 @@
+{
+  "id": "submit-login-flow",
+  "reusable": true,
+  "steps": [
+    {
+      "id": "goto-root",
+      "action": "goto",
+      "target": "/",
+      "waitUntil": "networkidle"
+    },
+    {
+      "id": "fill-user",
+      "action": "fill",
+      "target": "input.username",
+      "value": "{{USERNAME}}"
+    },
+    {
+      "id": "fill-pass",
+      "action": "fill",
+      "target": "input.password",
+      "value": "{{PASSWORD}}"
+    },
+    {
+      "id": "click-submit",
+      "action": "click",
+      "target": "button.submit"
+    }
+  ]
+}

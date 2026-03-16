@@ -1,0 +1,23 @@
+{
+  "schemaVersion": "v2",
+  "suiteId": "maestro-fs-quality-suite",
+  "suiteName": "Maestro Quality Intelligence FS Validations",
+  "description": "Suite for validating File System quality aspects",  
+  "domain": "UI, FS",
+  "appId": "file-examples", 
+  "versionRange": ">=1.0.0",
+  "resolveFrom": "..",
+  "baseUrl": "https://the-internet.herokuapp.com",
+  "ctr": {
+    "path": "ctr/ctr.fs.json"
+  },
+  "variables": {
+    "targetDownloadDir": "C:/Users/Lenovo/Downloads" 
+  },
+  "tests": [
+    {
+      "id": "run-dynamic-download",
+      "testRef": "tests/dynamic-download.exec.json"
+    }
+  ]
+}

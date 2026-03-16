@@ -1,0 +1,14 @@
+{
+  "id": "logout-sequence",
+  "reusable": true,
+  "steps": [
+    {
+      "action": "click",
+      "target": "inventory.burgerMenu.button"
+    },
+    {
+      "action": "click",
+      "target": "inventory.logout.link"
+    }
+  ]
+}

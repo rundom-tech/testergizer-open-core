@@ -1,0 +1,33 @@
+{
+  "id": "run-hybrid-chaining-proof",
+  "name": "Verify API to UI State Chaining via Reusable",
+  "testDomain": "system",
+  "context": {
+    "EXTRACTED_USER_ID": "{{EXTRACTED_USER_ID}}"
+  },
+  "steps": [
+    {
+      "id": "step-1-backend-extraction",
+      "action": "api-call",
+      "target": "T-USER-PROFILE",
+      "method": "GET",
+      "extract": [
+        {
+          "as": "EXTRACTED_USER_ID",
+          "path": "$.id",
+          "transform": "number"
+        }
+      ],
+      "assertions": [
+        {
+          "check": "status_code",
+          "expected": 200
+        }
+      ]
+    },
+    {
+      "type": "include",
+      "ref": "../reusables/ui-login.json"
+    }
+  ]
+}

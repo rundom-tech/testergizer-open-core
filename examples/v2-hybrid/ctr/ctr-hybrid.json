@@ -1,0 +1,16 @@
+{
+  "appId": "hybrid-demo",
+  "versionRange": ">=1.0.0",
+  "domFingerprint": "ignore",
+  "endpoints": {
+    "T-USER-PROFILE": {
+      "method": "GET",
+      "url": "https://jsonplaceholder.typicode.com/users/1"
+    },
+    "T-ECHO-POST": {
+      "method": "POST",
+      "url": "https://jsonplaceholder.typicode.com/posts"
+    }
+  },
+  "locators": {}
+}

@@ -1,0 +1,43 @@
+{
+  "id": "tc-download-unknown-pdf",
+  "reusable": false,
+  "promise": "System correctly exports and routes generated reports to the user's filesystem",
+  "testDomain": [
+    "UI",
+    "FS"
+  ],
+  "steps": [
+    {
+      "id": "qi-preflight-clean",
+      "promise": "Sterilize the execution environment",
+      "description": "Wipes the local sandbox to prevent false positives from previous executions",
+      "action": "fs.cleanDirectory",
+      "target": "maestro-downloads-dir"
+    },
+    {
+      "id": "goto-download-page",
+      "promise": "Navigate to the export portal",
+      "action": "goto",
+      "target": "/download"
+    },
+    {
+      "id": "extract-expected-filename",
+      "promise": "Identify the target artifact",
+      "description": "Reads the DOM to capture the exact filename the system intends to generate",
+      "action": "extract",
+      "target": "a[href$='.txt']",
+      "property": "attribute:href",
+      "extractAs": "expectedFilename"
+    },
+    {
+      "id": "trigger-artifact-download",
+      "promise": "Trigger the system export",
+      "action": "click",
+      "target": "downloadPage.maestro-export-report-btn.locator"
+    },
+    {
+      "type": "include",
+      "ref": "../reusables/reusable-fs-download-check.json"
+    }
+  ]
+}

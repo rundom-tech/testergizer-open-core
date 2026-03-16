@@ -1,0 +1,27 @@
+{
+  "id": "maestro-unified-targets",
+  "description": "Unified Quality Intelligence targets spanning UI and FS domains",
+  "domain": "FS, UI",
+  "appId": "file-examples", 
+  "versionRange": ">= 1.0.0 < 2.0.0",
+  "locators": {
+    "maestro-export-report-btn.locator": {
+      "strategy": "firstMatch",
+      "contexts": [
+        "downloadPage"
+      ],
+      "selectors": [
+        { 
+          "using": "css", 
+          "value": "a[href$='.txt']" 
+        }
+      ]
+    }
+  },
+  "paths": {
+    "maestro-downloads-dir": {
+      "value": "C:/Users/Lenovo/Downloads/maestro-sandbox",
+      "type": "directory"
+    }
+  }
+}

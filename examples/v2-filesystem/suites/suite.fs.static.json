@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "v2",
+  "suiteId": "maestro-fs-quality-suite",
+  "suiteName": "Maestro Quality Intelligence FS Validations",
+  "description": "Suite for validating File System quality aspects",  
+  "domain": "FS",
+  "appId": "file-examples", 
+  "versionRange": ">=1.0.0",
+  "resolveFrom": "..",
+  "tests": [
+    {
+      "id": "run-static-fs-check",
+      "testRef": "tests/static-fs-check.exec.json"
+    }
+  ]
+}

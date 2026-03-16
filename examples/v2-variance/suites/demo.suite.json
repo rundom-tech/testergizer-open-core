@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "v2",
+  "suiteId": "variance-integration-suite",
+  "suiteName": "Data Matrix End to End Proof",
+  "resolveFrom": "..",
+  "baseUrl": "https://www.saucedemo.com",
+  "ctr": {
+    "path": "ctr/ctr.json" 
+  },
+  "tests": [
+    {
+      "id": "saucedemo-matrix-exec",
+      "testRef": "tests/login.test.json"
+    }
+  ]
+}

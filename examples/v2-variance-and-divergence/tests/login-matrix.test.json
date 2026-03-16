@@ -1,0 +1,11 @@
+{
+  "id": "saucedemo-matrix-base",
+  "testDomain": "ui",
+  "variance": { 
+    "sourceType": "JSON", 
+    "filePath": "login-matrix.variance.json" 
+  },
+  "steps": [
+    { "type": "include", "ref": "../reusables/login-foundation.json" }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "id": "API-V2-001",
+  "name": "Verify JSONPlaceholder User Profile",
+  "testDomain": "api",
+  "steps": [
+    {
+      "id": "get-profile",
+      "action": "api-call",
+      "target": "T-USER-PROFILE",
+      "method": "GET",
+      "assertions": [
+        {
+          "check": "status_code",
+          "expected": 201
+        },
+        {
+          "check": "json_path",
+          "path": "$.name",
+          "expected": "Meir Bar-Tal"
+        },
+        {
+          "check": "json_path",
+          "path": "$.email",
+          "expected": "Sincere@april.biz"
+        }
+      ]
+    }
+  ]
+}

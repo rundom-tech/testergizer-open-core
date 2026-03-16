@@ -1,0 +1,20 @@
+{
+  "id": "reusable-fs-download-check",
+  "reusable": true,
+  "steps": [
+    {
+      "id": "wait-for-artifact-short",
+      "action": "fs.waitForLatestFile",
+      "target": "maestro-downloads-dir",
+      "value": ".txt",
+      "timeoutMs": 10000,
+      "extractAs": "dynamicFilePath"
+    },
+    {
+      "id": "verify-artifact-accessibility",
+      "action": "fs.checkAccessibility",
+      "target": "{{dynamicFilePath}}",
+      "value": true
+    }
+  ]
+}

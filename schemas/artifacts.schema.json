@@ -23,10 +23,10 @@
         "observedAt": { "type": "string", "format": "date-time" },
         "execution": {
           "type": "object",
-          "required": ["testId", "attempt", "browser", "mode"],
+          "required": ["testid", "attempt", "browser", "mode"],
           "additionalProperties": false,
           "properties": {
-            "testId": { "type": "string" },
+            "testid": { "type": "string" },
             "attempt": { "type": "integer", "minimum": 1 },
             "stepId": { "type": "string" },
             "browser": { "type": "string" },

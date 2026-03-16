@@ -1,0 +1,12 @@
+{
+  "appId": "saucedemo-web",
+  "versionRange": ">=1.0.0",
+  "domain": "ui",
+  "locators": {
+    "input.username": { "selectors": [{ "using": "css", "value": "[data-test='username']" }] },
+    "input.password": { "selectors": [{ "using": "css", "value": "[data-test='password']" }] },
+    "button.submit": { "selectors": [{ "using": "css", "value": "[data-test='login-button']" }] },
+    "button.add_to_cart_backpack": { "selectors": [{ "using": "css", "value": "[data-test='add-to-cart-sauce-labs-backpack']" }] },
+    "span.shopping_cart_badge": { "selectors": [{ "using": "css", "value": ".shopping_cart_badge" }] }
+  }
+}

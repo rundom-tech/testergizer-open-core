@@ -1,75 +1,210 @@
 {
-  "$id": "https://testergizer.dev/schemas/suite.schema.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Testergizer Suite Schema",
   "type": "object",
-  "required": ["schemaVersion", "suiteId", "suiteName", "tests"],
-  "additionalProperties": false,
-  "properties": {
-    "schemaVersion": { "type": "string", "const": "v1" },
-    "suiteId": { "type": "string" },
-    "suiteName": { "type": "string" },
-    "baseUrl": { "type": "string", "format": "uri" },
-    "tests": {
-      "type": "array",
-      "minItems": 1,
-      "items": { "$ref": "#/$defs/test" }
-    }
-  },
-  "$defs": {
-    "test": {
+  "oneOf": [
+    { "$ref": "#/definitions/suiteV1" },
+    { "$ref": "#/definitions/suiteV2" }
+  ],
+
+  "definitions": {
+    "suiteV1": {
       "type": "object",
-      "required": ["id", "steps"],
-      "additionalProperties": false,
+      "required": ["schemaVersion", "suiteId", "tests"],
       "properties": {
-        "id": { "type": "string" },
-        "name": { "type": "string" },
-        "testDomain": { "type": "string", "enum": ["ui", "api", "system"] },
-        "steps": {
-          "type": "array",
-          "minItems": 1,
-          "items": { "$ref": "#/$defs/step" }
-        }
-      }
-    },
-    "step": {
-      "type": "object",
-      "required": ["id", "action"],
-      "additionalProperties": false,
-      "properties": {
-        "id": { "type": "string" },
-        "action": {
-          "type": "string",
-          "enum": ["goto", "click", "fill", "assertVisible", "assertText", "waitFor"]
+        "schemaVersion": {
+          "const": "v1"
         },
-        "target": { "type": "string" },
-        "value": { "type": ["string", "number", "boolean"] },
-        "timeoutMs": { "type": "integer", "minimum": 0 }
+        "suiteId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "suiteName": {
+          "type": "string"
+        },
+        "applicationName": {
+          "type": "string",
+          "description": "Reporting label only. Not a structural discriminator."
+        },
+        "baseUrl": {
+          "type": "string"
+        },
+        "debugOnly": {
+          "type": "boolean",
+          "default": false
+        },
+        "context": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "tests": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/suiteV1TestEntry" }
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "suiteV1TestEntry": {
+      "oneOf": [
+        { "$ref": "#/definitions/inlineExecutable" },
+        { "$ref": "#/definitions/testRefEntry" }
+      ]
+    },
+
+    "testRefEntry": {
+      "type": "object",
+      "required": ["ref"],
+      "properties": {
+        "ref": {
+          "type": "string",
+          "minLength": 1
+        },
+        "skip": {
+          "type": "boolean",
+          "default": false
+        },
+        "skipReason": {
+          "type": "string",
+          "minLength": 1
+        }
       },
       "allOf": [
         {
-          "if": { "properties": { "action": { "const": "goto" } } },
-          "then": { "required": ["target"], "properties": { "target": { "type": "string","format": "uri" } } }
-        },
-        {
-          "if": { "properties": { "action": { "enum": ["click", "fill", "assertVisible", "assertText"] } } },
-          "then": { "required": ["target"] }
-        },
-        {
-          "if": { "properties": { "action": { "const": "fill" } } },
+          "if": {
+            "properties": { "skip": { "const": true } }
+          },
           "then": {
-            "properties": {
-              "value": {
-                "type": "string",
-                "minLength": 1
-              }
-            },
-            "required": ["value"]
+            "required": ["skipReason"]
           }
-        },
-        {
-          "if": { "properties": { "action": { "const": "assertText" } } },
-          "then": { "required": ["value"] }
         }
-      ]
+      ],
+      "additionalProperties": false
+    },
+
+    "inlineExecutable": {
+      "type": "object",
+      "required": ["id", "steps"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "skip": {
+          "type": "boolean",
+          "default": false
+        },
+        "skipReason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "context": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "steps": {
+          "type": "array"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "skip": { "const": true } }
+          },
+          "then": {
+            "required": ["skipReason"]
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+
+    "suiteV2": {
+      "type": "object",
+      "required": ["schemaVersion", "suiteId", "tests"],
+      "properties": {
+        "schemaVersion": {
+          "const": "v2"
+        },
+        "suiteId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "suiteName": {
+          "type": "string"
+        },
+        "autVersion": {
+          "type": "string"
+        },
+        "baseUrl": {
+          "type": "string"
+        },
+        "resolveFrom": {
+          "type": "string"
+        },
+        "ctr": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": ["path"],
+          "additionalProperties": false
+        },
+        "debugOnly": {
+          "type": "boolean",
+          "default": false
+        },
+        "context": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "tests": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/suiteV2TestEntry" }
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "suiteV2TestEntry": {
+      "type": "object",
+      "required": ["id", "testRef"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "testRef": {
+          "type": "string",
+          "minLength": 1
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "skip": {
+          "type": "boolean",
+          "default": false
+        },
+        "skipReason": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "skip": { "const": true } }
+          },
+          "then": {
+            "required": ["skipReason"]
+          }
+        }
+      ],
+      "additionalProperties": false
     }
   }
 }

@@ -1,0 +1,65 @@
+{
+  "schemaVersion": "v1",
+  "appId": "demosauce",
+  "appName": "SauceDemo",
+  "versionRange": "demo",
+  "locators": {
+    "username.edit": {
+      "contexts": ["login"],
+      "selectors": [
+        { "using": "css", "value": "[data-test=\"username\"]" },
+        { "using": "css", "value": "#user-name" }
+      ]
+    },
+    "password.edit": {
+      "contexts": ["login"],
+      "selectors": [
+        { "using": "css", "value": "[data-test=\"password\"]" },
+        { "using": "css", "value": "#password" }
+      ]
+    },
+    "submit.button": {
+      "contexts": ["login"],
+      "selectors": [
+        { "using": "css", "value": "[data-test=\"login-button\"]" },
+        { "using": "css", "value": "#login-button" }
+      ]
+    },
+    "error.banner": {
+      "contexts": ["login"],
+      "selectors": [
+        { "using": "css", "value": "[data-test=\"error\"]" }
+      ]
+    },
+    "burgerMenu.button": {
+      "contexts": ["inventory"],
+      "selectors": [
+        { "using": "css", "value": "#react-burger-menu-btn" }
+      ]
+    },
+    "logout.link": {
+      "contexts": ["inventory"],
+      "selectors": [
+        { "using": "css", "value": "#logout_sidebar_link" }
+      ]
+    },
+    "items.container": {
+      "contexts": ["inventory"],
+      "selectors": [
+        { "using": "css", "value": ".inventory_list" }
+      ]
+    },
+    "addBackpack.button": {
+      "contexts": ["inventory"],
+      "selectors": [
+        { "using": "css", "value": "[data-test=\"add-to-cart-sauce-labs-backpack\"]" }
+      ]
+    },
+    "cart.badge": {
+      "contexts": ["inventory"],
+      "selectors": [
+        { "using": "css", "value": ".shopping_cart_badge" }
+      ]
+    }
+  }
+}

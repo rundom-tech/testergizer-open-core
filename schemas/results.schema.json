@@ -5,12 +5,16 @@
     "schemaVersion",
     "runId",
     "suiteId",
-    "executionMode",
+    "executionEngine",
+    "executionIntent",
+    "validationMode",
     "startedAt",
     "endedAt",
     "durationMs",
     "tests",
-    "summary"
+    "summary",
+    "suiteStatus",
+    "signalStrength"
   ],
   "additionalProperties": false,
   "properties": {
@@ -19,12 +23,17 @@
     "suiteId": { "type": "string" },
     "suiteName": { "type": "string" },
     "suitePath": { "type": "string" },
-    "executionMode": { "type": "string", "enum": ["stub", "execute", "baseline"] },
+    "executionEngine": { "type": "string", "enum": ["testergizer", "playwright", "api"] },
+    "executionIntent": { "type": "string", "enum": ["review", "verify", "baseline"] },
+    "validationMode": { "type": "string", "enum": ["debug", "strict"] },
     "startedAt": { "type": "string", "format": "date-time" },
     "endedAt": { "type": "string", "format": "date-time" },
     "durationMs": { "type": "integer", "minimum": 0 },
     "tests": { "type": "array", "items": { "$ref": "#/$defs/testResult" } },
-    "summary": { "$ref": "#/$defs/runSummary" }
+    "summary": { "$ref": "#/$defs/runSummary" },
+    "suiteStatus": { "type": "string", "enum": ["valid", "invalid", "passed", "failed"] },
+    "signalStrength": { "type": "number", "minimum": -100, "maximum": 100 },
+    
   },
   "$defs": {
     "testResult": {
@@ -32,7 +41,6 @@
       "required": [
         "id",
         "testDomain",
-        "executionMode",
         "status",
         "startedAt",
         "endedAt",
@@ -44,7 +52,6 @@
         "id": { "type": "string" },
         "name": { "type": "string" },
         "testDomain": { "type": "string", "enum": ["ui", "api", "system"] },
-        "executionMode": { "type": "string", "enum": ["stub", "execute", "baseline"] },
         "status": { "type": "string", "enum": ["passed", "failed", "skipped"] },
         "startedAt": { "type": "string", "format": "date-time" },
         "endedAt": { "type": "string", "format": "date-time" },
@@ -80,6 +87,18 @@
               "reason": { "type": "string" },
               "message": { "type": "string" },
               "stack": { "type": "string" }
+            }
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["code", "message"],
+            "additionalProperties": false,
+            "properties": {
+              "code": { "type": "string" },
+              "message": { "type": "string" }
             }
           }
         },

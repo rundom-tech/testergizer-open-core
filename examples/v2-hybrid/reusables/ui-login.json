@@ -1,0 +1,18 @@
+{
+  "id": "ui-login",
+  "reusable": true,
+  "steps": [
+    {
+      "action": "goto",
+      "target": "/login",
+      "group": {
+        "name": "Cross Domain UI Injection"
+      }
+    },
+    {
+      "action": "fill",
+      "target": "#username",
+      "value": "TestUser-{{EXTRACTED_USER_ID}}"
+    }
+  ]
+}

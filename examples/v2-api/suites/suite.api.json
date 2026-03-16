@@ -1,0 +1,29 @@
+{
+  "schemaVersion": "v2",
+  "suiteId": "api-sprint1",
+  "suiteName": "API Sprint 1 (Isolated Target)",
+  "description": "API tests for sprint 1.",
+  "resolveFrom": "..",
+  "baseUrl": "https://jsonplaceholder.typicode.com",
+  "ctr": {
+    "path": "ctr/endpoints.json"
+  },
+  "tests": [
+    {
+      "id": "run-get-user",
+      "testRef": "tests/get-user.json"
+    },
+    {
+      "id": "run-get-user-albums",
+      "testRef": "tests/get-user-albums.json"
+    },
+    {
+      "id": "run-get-user-failed",
+      "testRef": "tests/get-user-failed.json"
+    },
+    {
+      "id": "run-get-user-data-extraction",
+      "testRef": "tests/get-user-data-extraction.json"
+    }
+  ]
+}

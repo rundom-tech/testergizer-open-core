@@ -1,4 +1,4 @@
-import { ExecutionMode, TestDomain } from "./types";
+import { ExecutionEngine, ExecutionIntent, ValidationMode, TestDomain } from "./types";
 
 /**
  * Evidence semantics (Open Core)
@@ -17,8 +17,8 @@ import { ExecutionMode, TestDomain } from "./types";
  * - No comparison, inference, or divergence labeling.
  */
 
-export type StepStatus = "passed" | "failed";
-export type TestResultValue = "passed" | "failed" | "aborted";
+export type StepStatus = "passed" | "failed" | "reviewed";
+export type TestResultValue = "passed" | "failed" | "aborted" | "reviewed";
 
 /* ============================================================
  * Errors & steps
@@ -30,15 +30,94 @@ export interface StepError {
   stack?: string;
 }
 
+/**
+ * CTR-aware target metadata (optional, backwards compatible).
+ *
+ * - logical: CTR key (semantic intent) e.g. "login.username.edit"
+ * - value: resolved selector value used at runtime e.g. "#user-name"
+ * - resolvedBy / attempts: resolution diagnostics for report foldout
+ */
+export interface StepTargetResolvedBy {
+  using: string;
+  value: string;
+}
+
+export interface StepTargetAttempt {
+  using: string;
+  value: string;
+  result: "success" | "not_found";
+}
+
 export interface StepResult {
   id: string;
+  promise?: string;
+  description?: string;
   action: string;
+  // 🔽 passthrough metadata (compiler → runner → reporter)
+  group?: {
+    name: string;
+  };
+
+  /**
+   * Target metadata.
+   *
+   * Backwards compatible:
+   * - Existing runs may only include { value, resolved? }.
+   * CTR-enhanced:
+   * - logical + resolvedBy + attempts enable report rendering as:
+   *   logical key (primary) + expandable resolution section.
+   */
+  target?: {
+    /**
+     * CTR logical key (semantic)
+     * e.g. login.username.edit
+     */
+    logical?: string;
+
+    /**
+     * Final selector used at runtime
+     */
+    value: string;
+
+    /**
+     * Whether resolution succeeded
+     */
+    resolved?: boolean;
+
+    /**
+     * The selector that resolved successfully
+     */
+    resolvedBy?: {
+      using: string;
+      value: string;
+    };
+
+    /**
+     * All resolution attempts
+     */
+    attempts?: {
+      using: string;
+      value: string;
+      result: "success" | "not_found";
+    }[];
+  };
+
+  data?: {
+    value: any;
+    masked?: boolean;
+    audit?: any[];
+  };
   status: StepStatus;
   attempts: number;
   errors: StepError[];
   startedAt: string;
   endedAt: string;
   durationMs: number;
+}
+
+export interface StepWarning {
+  code: string;
+  message: string;
 }
 
 /* ============================================================
@@ -69,7 +148,7 @@ export interface CacheState {
 
 export interface TestAttemptResult {
   attempt: number;
-  
+
   /** Playwright-aligned outcome */
   result: TestResultValue;
 
@@ -84,7 +163,6 @@ export interface TestAttemptResult {
 
   steps: StepResult[];
   cache?: CacheState;
-
 }
 
 /* ============================================================
@@ -93,11 +171,11 @@ export interface TestAttemptResult {
 
 export interface TestResult {
   id: string;
+  capability?: string;  
+  promise?: string;     
+  description?: string;
   name?: string;
   testDomain: TestDomain;
-
-  /** Execution mode for this test (headed / headless) */
-  executionMode: ExecutionMode;
 
   /** Playwright project id (for now: browserName) */
   projectId: string;
@@ -125,9 +203,15 @@ export interface TestResult {
 
 export interface RunSummary {
   total: number;
+
   passed: number;
   failed: number;
   aborted: number;
+
+  reviewed: number;
+
+  valid: number;
+  invalid: number;
 }
 
 export interface RunResult {
@@ -138,14 +222,15 @@ export interface RunResult {
   suitePath: string;
 
   applicationName: string; // ✅ AUT — canonical source
+  // ✅ ADD
+  baseUrl?: string;
 
   /** Opaque run identity (not time-derived) */
   runId: string;
 
-  /** real | stub */
-  executionType: "real" | "stub";
-
-  executionMode: ExecutionMode;
+  executionEngine: ExecutionEngine;
+  executionIntent: ExecutionIntent;
+  validationMode: ValidationMode;
 
   /** Playwright project id (for now: browserName or mixed) */
   projectId: string;
@@ -159,4 +244,14 @@ export interface RunResult {
 
   tests: TestResult[];
   summary: RunSummary;
+  suiteStatus: "valid" | "invalid" | "passed" | "failed";
+  signalStrength: number; // -100 to +100 normalized polarity metric
+}
+
+// Define the structure of an audit log entry
+export interface AuditLog {
+  check: string;
+  path: string;
+  passed: boolean;
+  detail: string;
 }

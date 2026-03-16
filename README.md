@@ -1,139 +1,84 @@
-# Testergizer Open Core
+# Testergizer Open Core (Maestro)
 
-**Testergizer Open Core** is a schema-first execution engine for producing **deterministic, auditable evidence** about system behavior.
+**Testergizer Open Core** is a schema-first execution engine for producing deterministic, auditable evidence about system behavior. It serves as the physical foundation of the **Quality Intelligence** paradigm.
 
-Tests are defined as structured JSON suites.  
+Execution contracts are defined using a modular, schema-driven architecture consisting of distinct JSON file types:
+* **Suites:** The orchestration layer defining the execution scope, target matrix, and environment.
+* **Tests:** The primary execution threads combining steps across multiple architectural boundaries.
+* **Reusables:** Composable, parameterized step sequences for standardizing common workflows.
+* **CTR:** The Central Target Registry governing physical locators, context subscriptions, and API endpoints.
+
 Execution produces immutable result artifacts that can be validated, compared, and analyzed across time.
 
-The Open Core intentionally focuses on **execution correctness, traceability, and evidence integrity**.  
-Convenience layers, visualization, and higher-level productivity tooling are intentionally out of scope.
-
 ---
 
-## Design principles
+## Quick Start (Beta v1.0.0)
 
-Testergizer Open Core is built around the following principles:
-
-- **Evidence, not interpretation**  
-  The Open Core produces factual execution records. Meaning and intent are layered on top, not embedded.
-
-- **Deterministic by default**  
-  Execution modes decouple structural validation from real system interaction.
-
-- **Schema-first contracts**  
-  Both test suites and execution results are governed by strict JSON schemas.
-
-- **Execution as a lifecycle**  
-  A run is an auditable process with timing, status, execution mode, and domain awareness.
-
-- **Mixed-domain by design**  
-  A single flow may span UI, API, filesystem, or other operational domains.
-
----
-
-## Documentation
-
-Design notes and architectural discussions are being consolidated in the GitHub Wiki:
-
-https://github.com/rundom-tech/testergizer-open-core/wiki
-
-This README documents the **core execution and evidence model**.  
-Detailed CLI flags and extended operational usage are intentionally documented in the Wiki.
-
----
-
-## Quick start (npm)
-
-### Install Testergizer Open Core globally
-
+### Install Testergizer Open Core
 ```bash
 npm install -g testergizer-open-core
 npx playwright install
 ```
 
 ### Verify the installation
-
 ```bash
+testergizer --version
 testergizer --help
 ```
 
-Check the installed version:
+## Full Stack Quality Intelligence
+Testergizer enforces true Quality Intelligence by evaluating the system exactly how it operates in reality: as a connected matrix.
+
+Using a 5-Layer Execution Matrix, the Maestro engine can seamlessly traverse and assert against distinct architectural boundaries using bitwise routing:
+
+* UI (00001): Context-aware DOM traversal and interaction via Playwright.
+
+* API (00010): Direct HTTP interactions, header resolution, and payload assertions.
+
+* FS (00100): File system auditing and validation (Beta).
+
+* DB (01000): Direct database query resolution (Upcoming).
+
+* EMAIL (10000): Asynchronous message interception (Upcoming).
+
+By defining execution contracts that combine UI workflows with API seeding and FS validation, you can decouple business intent from execution logic.
+
+## Verified Examples
+The Open Core repository includes verified v2 examples demonstrating the paradigm in action:
+
+* v2-api-variance: Demonstrates decoupled API boundary testing using JSON data matrices and extraction chaining.
+
+* v2-demosauce: Showcases the elimination of the Page Object Model (POM) via the CTR and matrix-driven UI authentication.
+
+To run the examples:
 
 ```bash
-npm view testergizer-open-core version
+testergizer run examples/v2-api-variance/suites/suite.api.json --engine playwright --workers 3 --intent verify --autVersion="1.0.0"
 ```
 
----
+## Design Principles
+Testergizer Open Core is built around the following principles:
 
-## Execution model
+* Evidence, not interpretation: The Open Core produces factual execution records.
 
-Testergizer executes test suites through an explicit **execution mode**.
+* Deterministic by default: The execution triad decouples structural validation from real system interaction.
 
-Execution mode is **part of the execution contract** and is recorded in the results artifact.
+* Schema-first contracts: Both test suites and execution results are governed by strict JSON schemas.
 
-### Supported execution modes
+* CTR-Centric: All physical locators and endpoints are abstracted into the Central Target Registry to ensure test logic remains "blind" to implementation details.
 
-| Mode | Purpose |
-|-----|--------|
-| `stub` | Deterministic structural execution. |
-| `execute` | Real execution against the target system. |
-| `baseline` | Reserved for future baseline update flows. |
-
-Execution modes in Open Core are explicit and deterministic. stub mode is provided as a developer tool for validating test structure, execution flow, and artifact integrity without interacting with real systems.
-
----
-
-## Configuration scope
-
-Execution behavior is configurable through **explicit, bounded configuration**.
-
----
-
-## License
-
-Testergizer Open Core is licensed under the Apache License, Version 2.0.
-
-## HTML Reports & Runtime Artifacts (Phase 2)
-
+## HTML Reports & Runtime Artifacts
 Testergizer Open Core produces a rich, self-contained HTML report for every run session.
 
-### What is generated
-For each run:
-- `run.json` – canonical run result
-- `artifacts.json` – append-only evidence index
-- `report.html` – derived human-readable report
+run.json: The canonical, machine-readable run result.
 
-On failure (only):
-- Playwright trace (`trace.zip`)
-- Video recording
-- Step-level screenshots
+report.html: A static, portable human-readable report derived from the execution data.
 
-### Artifact principles
-- Artifacts are optional and non-intrusive
-- No artifacts are produced on successful attempts
-- Artifacts never affect execution semantics
-- Evidence is append-only and deterministic
+Traceability: On failure, Playwright traces and video recordings are automatically indexed as evidence.
 
-### HTML report
-The HTML report:
-- Is fully static and self-contained
-- Links directly to raw evidence
-- Opens evidence in new tabs
-- Does not perform inference or aggregation
-- Is derived entirely from `run.json` + `artifacts.json`
+## Documentation
+For the full User Manual, Wiki, and in-depth architectural discussions, please visit:
+https://github.com/rundom-tech/testergizer-open-core/wiki
 
-### Accessing the report
-At the end of execution, Testergizer prints a canonical file URL:
-
-file:///absolute/path/to/report.html
-
-
-This URL is portable across platforms and can be opened in any browser.
-
-### Scope
-Phase 2 supports:
-- Single run session
-- Single project / browser
-- No cross-run comparison
-
-Trend analysis and aggregation are intentionally deferred to later phases.
+## License
+Testergizer Open Core is licensed under the Apache License, Version 2.0.

@@ -1,4 +1,4 @@
-import { CoreRunner } from "../core/CoreRunner";
+import { TestExecutor } from "../core/TestExecutor";
 import { JsonTestDefinition } from "../core/types";
 
 const test: JsonTestDefinition = {
@@ -10,8 +10,12 @@ const test: JsonTestDefinition = {
 };
 
 async function run() {
-  const runner = new CoreRunner({ executionMode: "stub" });
-  await runner.run(test);
+  const runner = new TestExecutor({
+    executionEngine: "testergizer",
+    executionIntent: "review",
+    validationMode: "strict"
+  });
+  await runner.execute(test);
   await runner.dispose();
 }
 

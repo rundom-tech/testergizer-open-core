@@ -1,0 +1,11 @@
+{
+  "id": "add-to-cart-extension",
+  "reusable": true,
+  "steps": [
+    {
+      "id": "click-add-backpack",
+      "action": "click",
+      "target": "inventory.addBackpack.button"
+    }
+  ]
+}

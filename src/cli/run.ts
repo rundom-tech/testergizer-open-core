@@ -1,34 +1,137 @@
+// src/cli/run.ts
+
 import path from "path";
-import { runSuiteFromFile } from "./runSuiteFromFile";
-import type { ExecutionMode } from "../core/types";
+import { executeSuiteFromFile } from "./SuiteCoordinator";
+import type {
+  ExecutionEngine,
+  ExecutionIntent
+} from "../core/types";
 
 export interface RunArgs {
-  file: string;
-  mode?: ExecutionMode;
-  headed?: boolean;
-  headless?: boolean;
-  slowMo?: number;
+  suitePath: string;
+  executionEngine?: ExecutionEngine;
+  executionIntent?: ExecutionIntent;
+  debug?: boolean;
+
   baseUrl?: string;
-  out?: string;
+  browserName?: "chromium" | "firefox" | "webkit";
+  headless?: boolean;
+  slowMoMs?: number;
+  retries?: number;
+
+  // NEW: orchestration scheduling
+  workers?: number;
+  
+  // 👈 NEW: Governance injection
+  autVersion?: string;
 }
 
 export async function run(args: RunArgs) {
-  const resolvedPath = path.resolve(args.file);
+  return executeSuiteFromFile(args.suitePath, args);
+}
 
-  const executionMode = args.mode ?? "stub";
+/* -----------------------------------------------------------
+ * CLI Wrapper (direct invocation support)
+ * ----------------------------------------------------------- */
 
-  const headless =
-    args.headed === true
-      ? false
-      : args.headless === true
-      ? true
-      : true;
+function getFlag(name: string): string | undefined {
+  const index = process.argv.indexOf(name);
+  if (index === -1) return undefined;
+  return process.argv[index + 1];
+}
 
-  await runSuiteFromFile(resolvedPath, {
-    executionMode,
-    artifactsDir: args.out ?? "artifacts",
-    headless,
-    slowMoMs: args.slowMo,
-    baseUrl: args.baseUrl
+function hasFlag(name: string): boolean {
+  return process.argv.includes(name);
+}
+
+// Only execute when invoked directly from CLI
+if (require.main === module) {
+  (async () => {
+    const argv = process.argv.slice(2);
+
+    if (argv.length === 0) {
+      console.error("Usage: testergizer <suitePath> [options]");
+      process.exit(1);
+    }
+
+    const suitePath = path.resolve(argv[0]);
+
+    const engineRaw = getFlag("--engine");
+    const engine: ExecutionEngine =
+      (engineRaw as ExecutionEngine) ?? "testergizer";
+
+    // 1. ADD "api" to the supported engine list
+    if (engine !== "testergizer" && engine !== "playwright" && engine !== "api") {
+      throw new Error(
+        `Unsupported engine "${engine}". Supported: testergizer | playwright | api`
+      );
+    }
+
+    const intentRaw = getFlag("--intent");
+    let intent: ExecutionIntent;
+
+    if (engine === "testergizer") {
+      intent = "review";
+      if (intentRaw) {
+        console.warn(
+          `⚠️  --intent ignored for engine "testergizer" (review is implicit).`
+        );
+      }
+    } else {
+      // Handles both "playwright" and "api" engines
+      intent = (intentRaw ?? "verify") as ExecutionIntent;
+
+      if (intent === "review") {
+        throw new Error(
+          `Intent "review" is not supported by engine "${engine}".`
+        );
+      }
+
+      if (intent !== "verify" && intent !== "baseline") {
+        throw new Error(
+          `Unsupported intent "${intent}" for engine "${engine}".`
+        );
+      }
+    }
+    
+    const headless =
+      hasFlag("--headed") ? false :
+      hasFlag("--headless") ? true :
+      undefined;
+
+    const retries = getFlag("--retries")
+      ? Number(getFlag("--retries"))
+      : undefined;
+
+    const workers = getFlag("--workers")
+      ? Number(getFlag("--workers"))
+      : undefined;
+
+    if (workers !== undefined) {
+      if (!Number.isFinite(workers) || workers < 1) {
+        throw new Error(
+          `Invalid value for --workers. Must be a positive integer.`
+        );
+      }
+    }
+
+    await run({
+      suitePath,
+      executionEngine: engine,
+      executionIntent: intent,
+      debug: hasFlag("--debug"),
+      baseUrl: getFlag("--baseUrl"),
+      browserName: getFlag("--browser") as any,
+      headless,
+      slowMoMs: getFlag("--slowMo")
+        ? Number(getFlag("--slowMo"))
+        : undefined,
+      retries,
+      workers,
+      autVersion: getFlag("--autVersion") // 👈 NEW: Map the flag to the argument payload
+    });
+  })().catch((err) => {
+    console.error(err);
+    process.exit(1);
   });
 }

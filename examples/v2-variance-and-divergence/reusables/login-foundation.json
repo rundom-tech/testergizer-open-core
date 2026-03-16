@@ -1,0 +1,28 @@
+{
+  "id": "login-foundation",
+  "reusable": true,
+  "steps": [
+    {
+      "id": "nav-root",
+      "action": "goto",
+      "target": "/"
+    },
+    {
+      "id": "fill-username",
+      "action": "fill",
+      "target": "input.username",
+      "value": "{{USERNAME}}"
+    },
+    {
+      "id": "fill-password",
+      "action": "fill",
+      "target": "input.password",
+      "value": "{{PASSWORD}}"
+    },
+    {
+      "id": "click-login",
+      "action": "click",
+      "target": "button.submit"
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+[
+  {
+    "variationId": "valid_user_profile",
+    "inputs": {
+      "TARGET_ID": "T-USER-PROFILE",
+      "EXPECTED_STATUS": 200
+    }
+  },
+  {
+    "variationId": "non_existent_user_boundary",
+    "inputs": {
+      "TARGET_ID": "T-USER-NOT-FOUND",
+      "EXPECTED_STATUS": 404
+    }
+  },
+  {
+    "variationId": "invalid_parameter_type",
+    "inputs": {
+      "TARGET_ID": "T-USER-INVALID-TYPE",
+      "EXPECTED_STATUS": 404
+    }
+  }
+]

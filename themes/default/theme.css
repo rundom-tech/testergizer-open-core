@@ -1,0 +1,146 @@
+/* =========================================================
+   Testergizer Report Theme — Light
+   Tokens only (colors, borders, accents)
+   ========================================================= */
+
+:root {
+  /* Base */
+  --bg: #ffffff;
+  --fg: #111827;          /* near-black, readable */
+  --muted: #6b7280;       /* gray-500 */
+
+  /* Surfaces */
+  --panel-bg: #ffffff;
+  --panel-border: #e5e7eb; /* gray-200 */
+
+  /* Accents */
+  --accent: #2563eb;      /* blue-600 */
+  --accent-soft: #dbeafe; /* blue-100 */
+
+  /* Status */
+  --ok: #16a34a;          /* green-600 */
+  --warn: #d97706;        /* amber-600 */
+  --fail: #dc2626;        /* red-600 */
+
+  /* Borders & separators */
+  --border: rgba(0, 0, 0, 0.12);
+  --border-strong: rgba(0, 0, 0, 0.22);
+
+  /* Code / mono */
+  --mono-bg: #f9fafb;
+}
+
+/* =========================================================
+   Global
+   ========================================================= */
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+}
+
+a {
+  color: var(--accent);
+}
+
+/* =========================================================
+   Header / Footer
+   ========================================================= */
+
+.header {
+  background: rgba(255, 255, 255, 0.92);
+  border-bottom-color: var(--border);
+}
+
+.footer {
+  border-top-color: var(--border);
+  color: var(--muted);
+}
+
+/* =========================================================
+   Text helpers
+   ========================================================= */
+
+.muted {
+  color: var(--muted);
+}
+
+.k {
+  color: var(--muted);
+}
+
+/* =========================================================
+   Cards, panels, containers
+   ========================================================= */
+
+.card,
+.attempt,
+.summary-item,
+.warning,
+.error,
+.badge,
+.pill,
+.evidence,
+.btn {
+  background: var(--panel-bg);
+  border-color: var(--border);
+}
+
+/* =========================================================
+   Tables
+   ========================================================= */
+
+.table th,
+.table td {
+  border-bottom-color: var(--border);
+}
+
+/* =========================================================
+   Status badges
+   ========================================================= */
+
+.badge-passed {
+  color: var(--ok);
+  border-color: color-mix(in srgb, var(--ok), transparent 60%);
+}
+
+.badge-failed {
+  color: var(--fail);
+  border-color: color-mix(in srgb, var(--fail), transparent 60%);
+}
+
+.badge-aborted {
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn), transparent 60%);
+}
+
+/* =========================================================
+   Debug / warnings
+   ========================================================= */
+
+.debug-banner {
+  background: #fff7ed; /* amber-50 */
+  border-color: color-mix(in srgb, var(--warn), transparent 55%);
+  color: #92400e; /* amber-800 */
+}
+
+/* =========================================================
+   Appearance panel (inherits layout styles)
+   ========================================================= */
+
+.appearance-panel {
+  background: var(--panel-bg);
+  border-color: var(--border-strong);
+}
+
+.ap-title {
+  color: var(--fg);
+}
+
+.ap-label {
+  color: var(--muted);
+}
+
+.ap-hint {
+  color: var(--muted);
+}

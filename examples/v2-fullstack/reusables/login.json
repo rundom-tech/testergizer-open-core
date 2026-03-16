@@ -1,0 +1,38 @@
+{
+  "id": "auth.flow.login",
+  "reusable": true,
+  "capability": "Authentication Routing",
+  "promise": "Securely authenticate a user via the UI using injected credentials.",
+  "steps": [
+    {
+      "id": "l1-nav",
+      "promise": "Load the login portal",
+      "description": "Navigates to the primary authentication entry point.",
+      "action": "goto",
+      "target": "/"
+    },
+    {
+      "id": "l2-fill-user",
+      "promise": "Enter the injected username",
+      "description": "Populates the input field using the {{USERNAME}} context variable.",
+      "action": "fill",
+      "target": "login.input.username",
+      "input": "{{USERNAME}}"
+    },
+    {
+      "id": "l3-fill-pass",
+      "promise": "Enter the injected password",
+      "description": "Populates the secure password field using the {{PASSWORD}} context variable.",
+      "action": "fill",
+      "target": "login.input.password",
+      "input": "{{PASSWORD}}"
+    },
+    {
+      "id": "l4-submit",
+      "promise": "Submit the authentication form",
+      "description": "Triggers the login submission.",
+      "action": "click",
+      "target": "login.button.submit"
+    }
+  ]
+}
