@@ -4,7 +4,7 @@
 // Complete file.
 //
 // Scope:
-// - Validates a single executable JSON document against schemas/executable.v1.schema.json
+// - Validates a single executable JSON document against schemas/executable.schema.json
 // - Enforces hard rules that JSON Schema alone cannot express cleanly
 // - Optionally validates include refs against a provided registry
 // - Optionally validates interpolation completeness against a provided context (typically after include expansion)
@@ -52,7 +52,7 @@ function getAjv(): Ajv {
 }
 
 function loadExecutableSchema(): any {
-  const schemaPath = path.resolve(process.cwd(), "schemas", "executable.v1.schema.json");
+  const schemaPath = path.resolve(process.cwd(), "schemas", "executable.schema.json");
   if (!fs.existsSync(schemaPath)) {
     throw new Error(`Executable schema not found at: ${schemaPath}`);
   }

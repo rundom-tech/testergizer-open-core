@@ -1,6 +1,6 @@
 {
-  "$id": "https://testergizer.dev/schemas/executable.v1.schema.json",
-  "title": "Testergizer Executable v1",
+  "$id": "https://testergizer.dev/schemas/executable.schema.json",
+  "title": "Testergizer Executable",
   "type": "object",
   "additionalProperties": true,
   "required": ["id"],
