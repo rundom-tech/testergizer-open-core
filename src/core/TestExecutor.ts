@@ -30,6 +30,7 @@ import type {
 import { PlaywrightExecutor } from "./executors/PlaywrightExecutor";
 import type { StepExecutor } from "./executors/StepExecutor";
 import { TestergizerExecutor } from "./executors/TestergizerExecutor";
+import { TargetHydrator } from "./executors/TargetHydrator";
 
 import type {
   StepError,
@@ -57,7 +58,7 @@ import { ApiExecutor } from "./executors/ApiExecutor";
 // SPRINT 6: New Core Stubs for DB and Email
 import { DbExecutor } from "./executors/DbExecutor";
 import { EmailExecutor } from "./executors/EmailExecutor";
-// SPRINT 8: Quality Intelligence File System Capabilities
+// SPRINT 8: File System Capabilities
 import { FSExecutor } from "./executors/FSExecutor";
 
 // SPRINT 6: Bitwise Domain Flags (31-Bit Power of Two)
@@ -109,7 +110,7 @@ export function resolveTestDomain(input: unknown, engine?: string): number {
   if (engine === "playwright") return TestDomainFlag.UI;
   if (engine === "api") return TestDomainFlag.API;
   
-  // 3. Absolute Fallback (for "testergizer" or explicitly undefined engines)
+  // 3. Absolute Fallback (for explicitly undefined engines)
   return 0;
 }
 
@@ -392,8 +393,6 @@ export class TestExecutor {
             acceptDownloads: true,
           });
 
-          // QUALITY INTELLIGENCE: Non-blocking stream tracking
-          // Pushes the serialization promise into a queue to be awaited at the end of the step
           if (resolvedDownloadPath) {
             (context as any).on('download', (download: any) => {
               const savePath = path.join(resolvedDownloadPath!, download.suggestedFilename());
@@ -567,6 +566,8 @@ export class TestExecutor {
                     logicalTarget.startsWith("xpath=") ||
                     logicalTarget.startsWith("id=") ||
                     logicalTarget.startsWith("data-test=");
+                  
+                  let rawTargetToHydrate = logicalTarget;
   
                   if (!isUnmanaged) {
                     if (!this.locatorRepo) {
@@ -594,17 +595,20 @@ export class TestExecutor {
                       throw new Error(`Strict Boundary Violation - Locator '${parsed.elementKey}' failed to yield a valid selector.`);
                     }
   
-                    (step as any).target =
+                    rawTargetToHydrate =
                       res.resolvedBy.using === "xpath"
                         ? `xpath=${res.resolvedBy.value}`
                         : res.resolvedBy.value; 
                   }
+                  
+                  // Hydrate the locator with test inputs + context state
+                  const stateDict = { ...executionContext.getVariables(), ...(test as any).inputs };
+                  (step as any).target = TargetHydrator.hydrateLocator(rawTargetToHydrate, stateDict);
                 }
               }
 
               await this.executor.execute(step as JsonStep, page);
 
-              // QUALITY INTELLIGENCE: Drain and await the queue to ensure serialization before the FS step
               if (pendingDownloads.length > 0) {
                 await Promise.all(pendingDownloads);
                 pendingDownloads = []; 

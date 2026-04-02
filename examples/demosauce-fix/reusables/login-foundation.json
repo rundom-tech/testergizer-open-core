@@ -1,0 +1,34 @@
+{
+  "id": "login-foundation",
+  "reusable": true,
+  "steps": [
+    {
+      "id": "step_0",
+      "action": "goto",
+      "target": "/"
+    },
+    {
+      "id": "step_1",
+      "action": "fill",
+      "target": "username.edit",
+      "value": "{{PARAM_USERNAME}}"
+    },
+    {
+      "id": "step_2",
+      "action": "fill",
+      "target": "password.edit",
+      "value": "{{PARAM_PASSWORD}}"
+    },
+    {
+      "id": "step_3",
+      "action": "click",
+      "target": "loginButton.button",
+      "assertions": [
+        {
+          "type": "EXPECT_URL",
+          "value": "https://www.saucedemo.com/inventory.html"
+        }
+      ]
+    }
+  ]
+}

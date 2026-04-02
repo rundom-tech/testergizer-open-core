@@ -1,0 +1,148 @@
+{
+  "schemaVersion": "v1.2",
+  "appId": "demosauce",
+  "appName": "SauceDemo",
+  "versionRange": "demo",
+  "locators": {
+    "username.edit": {
+      "description": "",
+      "contexts": [
+        "root"
+      ],
+      "selectors": [
+        {
+          "value": "[data-test=\"username\"]",
+          "passes": 2,
+          "failures": 0,
+          "confidenceGrade": 1
+        },
+        {
+          "value": "#user-name",
+          "passes": 0,
+          "failures": 0,
+          "confidenceGrade": 1
+        },
+        {
+          "value": "[name=\"user-name\"]",
+          "passes": 0,
+          "failures": 0,
+          "confidenceGrade": 1
+        }
+      ]
+    },
+    "password.edit": {
+      "description": "",
+      "contexts": [
+        "root"
+      ],
+      "selectors": [
+        {
+          "value": "[data-test=\"password\"]",
+          "passes": 2,
+          "failures": 0,
+          "confidenceGrade": 1
+        },
+        {
+          "value": "#password",
+          "passes": 0,
+          "failures": 0,
+          "confidenceGrade": 1
+        },
+        {
+          "value": "[name=\"password\"]",
+          "passes": 0,
+          "failures": 0,
+          "confidenceGrade": 1
+        }
+      ]
+    },
+    "loginButton.button": {
+      "description": "",
+      "contexts": [
+        "root"
+      ],
+      "selectors": [
+        {
+          "value": "[data-test=\"login-button\"]",
+          "passes": 2,
+          "failures": 0,
+          "confidenceGrade": 1
+        },
+        {
+          "value": "#login-button",
+          "passes": 0,
+          "failures": 0,
+          "confidenceGrade": 1
+        },
+        {
+          "value": "[name=\"login-button\"]",
+          "passes": 0,
+          "failures": 0,
+          "confidenceGrade": 1
+        }
+      ]
+    },
+    "inventoryGridItem.button": {
+      "description": "",
+      "contexts": [
+        "inventory"
+      ],
+      "selectors": [
+        {
+          "value": "//div[contains(normalize-space(.), '{{param_grid_anchor}}')]//button[contains(concat(' ', normalize-space(@class), ' '), ' btn ')]",
+          "passes": 0,
+          "failures": 2,
+          "confidenceGrade": -1
+        }
+      ]
+    },
+    "shoppingCartLink.link": {
+      "description": "Sniffed A target from inventory context",
+      "contexts": [
+        "inventory"
+      ],
+      "selectors": [
+        {
+          "value": "[data-test=\"shopping-cart-link\"]",
+          "passes": 0,
+          "failures": 0,
+          "confidenceGrade": 1
+        }
+      ]
+    },
+    "checkout.button": {
+      "description": "Sniffed BUTTON target from cart context",
+      "contexts": [
+        "cart"
+      ],
+      "selectors": [
+        {
+          "value": "[data-test=\"checkout\"]",
+          "passes": 0,
+          "failures": 0,
+          "confidenceGrade": 1
+        },
+        {
+          "value": "#checkout",
+          "passes": 0,
+          "failures": 0,
+          "confidenceGrade": 1
+        },
+        {
+          "value": "[name=\"checkout\"]",
+          "passes": 0,
+          "failures": 0,
+          "confidenceGrade": 1
+        }
+      ]
+    }
+  },
+  "history": [
+    {
+      "timestamp": "2026-04-01T21:44:13.316Z",
+      "targetKey": "inventoryGridItem.button",
+      "action": "REGRESSION_DELTA",
+      "details": "RDA Alert: Confidence dropped from 1.00 to -1.00 (Delta: 2.00)."
+    }
+  ]
+}

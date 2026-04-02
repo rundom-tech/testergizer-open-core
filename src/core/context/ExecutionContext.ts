@@ -54,4 +54,12 @@ export class ExecutionContext {
 
     this.state.variables[key] = finalValue;
   }
+
+  /**
+   * Safely exposes a shallow copy of the current variables dictionary.
+   * Required for Quality Intelligence hydration strategies.
+   */
+  public getVariables(): Record<string, any> {
+    return { ...this.state.variables };
+  }
 }

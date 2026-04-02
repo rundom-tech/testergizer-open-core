@@ -1,0 +1,31 @@
+{
+  "id": "demosauce-sniffed-sequence",
+  "title": "Auto-Generated E2E Session",
+  "testDomain": "ui",
+  "variance": {
+    "sourceType": "JSON",
+    "filePath": "sniffed-sequence.variance.json"
+  },
+  "steps": [
+    {
+      "type": "include",
+      "ref": "../reusables/login-foundation.json"
+    },
+    {
+      "id": "step_0",
+      "type": "click",
+      "target": "inventoryGridItem.button"
+    },
+    {
+      "id": "step_1",
+      "type": "click",
+      "target": "shoppingCartBadge.label",
+      "assertions": [
+        {
+          "type": "EXPECT_URL",
+          "value": "https://www.saucedemo.com/cart.html"
+        }
+      ]
+    }
+  ]
+}

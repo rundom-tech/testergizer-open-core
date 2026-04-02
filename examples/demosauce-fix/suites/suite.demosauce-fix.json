@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "v2",
+  "suiteId": "demosauce-fix-automated-suite",
+  "suiteName": "demosauce-fix Quality Intelligence Suite",
+  "resolveFrom": "..",
+  "baseUrl": "https://www.saucedemo.com",
+  "ctr": {
+    "path": "ctr/ctr-demosauce-fix.json"
+  },
+  "tests": [
+    {
+      "id": "demosauce-fix-sniffed-sequence-exec",
+      "testRef": "tests/sniffed-sequence.test.json"
+    }
+  ]
+}

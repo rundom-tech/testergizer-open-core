@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AweMG Dashboard | demosauce-fix</title>
+    <style>
+        :root {
+            --bg: #f8fafc; --text: #1e293b; --muted: #64748b;
+            --card-bg: #ffffff; --border: #e2e8f0; --primary: #3b82f6;
+            --success: #22c55e; --warning: #f59e0b; --danger: #ef4444;
+            --nav-bg: #f1f5f9;
+        }
+
+        body { font-family: 'Inter', -apple-system, sans-serif; background-color: var(--bg); color: var(--text); margin: 0; padding: 30px; line-height: 1.5; }
+        header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
+        
+        .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; margin-bottom: 30px; }
+        .stat-card { background: var(--card-bg); padding: 24px; border-radius: 12px; border: 1px solid var(--border); box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .stat-label { font-size: 14px; font-weight: 500; color: var(--muted); margin-bottom: 8px; }
+        .stat-value { font-size: 32px; font-weight: 700; }
+
+        .controls-bar { background: var(--card-bg); padding: 20px; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 30px; display: flex; gap: 20px; align-items: flex-end; flex-wrap: wrap; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+        .control-item { display: flex; flex-direction: column; gap: 8px; flex: 1; min-width: 200px; }
+        .control-item label { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; }
+
+        input, select { padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border); font-size: 14px; outline: none; }
+        
+        .view-toggle { display: flex; background: #f1f5f9; padding: 4px; border-radius: 8px; margin-bottom: 20px; width: fit-content; }
+        .toggle-btn { padding: 8px 16px; border: none; background: transparent; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500; color: var(--muted); }
+        .toggle-btn.active { background: #fff; color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+
+        .target-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 24px; }
+        .target-card { background: var(--card-bg); border-radius: 12px; border: 1px solid var(--border); overflow: hidden; display: flex; flex-direction: column; transition: transform 0.2s; }
+        .target-card:hover { transform: translateY(-4px); box-shadow: 0 12px 20px rgba(0,0,0,0.05); }
+        .target-card.hidden { display: none; }
+
+        .target-header { padding: 16px; background: #fcfcfd; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+        .grade-badge { padding: 4px 10px; border-radius: 20px; color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
+        .trend-up::before { content: '▲'; font-size: 10px; }
+        .trend-down::before { content: '▼'; font-size: 10px; }
+        .trend-stable::before { content: '●'; font-size: 10px; }
+
+        .target-body { padding: 16px; flex-grow: 1; }
+        .url-anchor { font-size: 11px; background: var(--nav-bg); color: var(--muted); padding: 4px 8px; border-radius: 4px; margin-bottom: 12px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 1px solid var(--border); }
+        .metadata-desc { font-size: 12px; color: var(--muted); font-style: italic; margin-bottom: 12px; border-left: 2px solid var(--primary); padding-left: 10px; }
+        .stat-row { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px; }
+        .selector-snippet { background: #f1f5f9; padding: 12px; border-radius: 8px; font-family: monospace; font-size: 11px; margin-top: 12px; border: 1px solid var(--border); word-break: break-all; color: #475569; }
+
+        .history-section { display: none; }
+        .history-section.active { display: block; }
+        .history-table { width: 100%; background: #fff; border-radius: 12px; border: 1px solid var(--border); border-collapse: collapse; }
+        .history-table th, .history-table td { padding: 14px; text-align: left; border-bottom: 1px solid var(--border); font-size: 13px; }
+        .history-table th { background: #f8fafc; font-weight: 600; color: var(--muted); }
+        .history-table tr.date-hidden { display: none; }
+
+        .badge-stable { background: var(--success); }
+        .badge-warning { background: var(--warning); }
+        .badge-danger { background: var(--danger); }
+    </style>
+</head>
+<body>
+    <header>
+        <div>
+            <div style="background:#dbeafe; color:#1e40af; padding:4px 12px; border-radius:9999px; font-size:12px; font-weight:600; display:inline-block; text-transform:uppercase;">demosauce-fix</div>
+            <h1 style="margin-top: 10px;">Quality Intelligence Dashboard</h1>
+        </div>
+        <div style="text-align: right; font-size: 13px; color: var(--muted);">
+            Last Analysis: <strong>3.4.2026, 1:18:48</strong>
+        </div>
+    </header>
+
+    <div class="summary-grid">
+        <div class="stat-card"><div class="stat-label">Total Targets</div><div class="stat-value">6</div></div>
+        <div class="stat-card"><div class="stat-label">Risk Alerts</div><div class="stat-value" style="color: var(--danger)">0</div></div>
+        <div class="stat-card">
+            <div class="stat-label">Navigation Integrity</div>
+            <div class="stat-value" style="color: var(--success)">100%</div>
+        </div>
+        <div class="stat-card"><div class="stat-label">True Healing</div><div class="stat-value" style="color: var(--success)">0</div></div>
+    </div>
+
+    <div class="view-toggle">
+        <button class="toggle-btn active" id="btnGrid" onclick="switchView('grid')">Registry Map</button>
+        <button class="toggle-btn" id="btnHist" onclick="switchView('history')">Promotion History</button>
+    </div>
+
+    <div id="registryView">
+        <div class="controls-bar">
+            <div class="control-item" style="flex: 2;">
+                <label>Structural Search</label>
+                <input type="text" id="searchInput" placeholder="Filter by target name, description, or selector...">
+            </div>
+            <div class="control-item">
+                <label>Confidence Tier</label>
+                <select id="statusFilter">
+                    <option value="all">All Targets</option>
+                    <option value="stable">Stable (>= 0.5)</option>
+                    <option value="warning">Warning (0.2 - 0.5)</option>
+                    <option value="critical">Critical (< 0.2)</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="target-grid" id="targetGrid">
+            <div class="target-card" data-key="username.edit" data-desc="" data-selector="[data-test="username"]" data-status="stable">
+                <div class="target-header">
+                    <div class="target-key">username.edit</div>
+                    <div class="grade-badge badge-stable trend-stable">1.00</div>
+                </div>
+                <div class="target-body">
+                    <span class="url-anchor" title="Global Context">
+                        🔗 URL: Universal Scope
+                    </span>
+                    <div class="metadata-desc">No intent metadata synced</div>
+                    <div class="stat-row"><span>Passes</span><strong>2</strong></div>
+                    <div class="stat-row"><span>Failures</span><strong>undefined</strong></div>
+                    <div class="stat-row"><span>Fallbacks</span><strong>2 available</strong></div>
+                    <div class="selector-snippet">[data-test="username"]</div>
+                </div>
+            </div>
+            <div class="target-card" data-key="password.edit" data-desc="" data-selector="[data-test="password"]" data-status="stable">
+                <div class="target-header">
+                    <div class="target-key">password.edit</div>
+                    <div class="grade-badge badge-stable trend-stable">1.00</div>
+                </div>
+                <div class="target-body">
+                    <span class="url-anchor" title="Global Context">
+                        🔗 URL: Universal Scope
+                    </span>
+                    <div class="metadata-desc">No intent metadata synced</div>
+                    <div class="stat-row"><span>Passes</span><strong>2</strong></div>
+                    <div class="stat-row"><span>Failures</span><strong>undefined</strong></div>
+                    <div class="stat-row"><span>Fallbacks</span><strong>2 available</strong></div>
+                    <div class="selector-snippet">[data-test="password"]</div>
+                </div>
+            </div>
+            <div class="target-card" data-key="loginbutton.button" data-desc="" data-selector="[data-test="login-button"]" data-status="stable">
+                <div class="target-header">
+                    <div class="target-key">loginButton.button</div>
+                    <div class="grade-badge badge-stable trend-stable">1.00</div>
+                </div>
+                <div class="target-body">
+                    <span class="url-anchor" title="Global Context">
+                        🔗 URL: Universal Scope
+                    </span>
+                    <div class="metadata-desc">No intent metadata synced</div>
+                    <div class="stat-row"><span>Passes</span><strong>2</strong></div>
+                    <div class="stat-row"><span>Failures</span><strong>undefined</strong></div>
+                    <div class="stat-row"><span>Fallbacks</span><strong>2 available</strong></div>
+                    <div class="selector-snippet">[data-test="login-button"]</div>
+                </div>
+            </div>
+            <div class="target-card" data-key="inventorygriditem.button" data-desc="" data-selector="//div[contains(normalize-space(.), '{{param_grid_anchor}}')]//button[contains(concat(' ', normalize-space(@class), ' '), ' btn ')]" data-status="stable">
+                <div class="target-header">
+                    <div class="target-key">inventoryGridItem.button</div>
+                    <div class="grade-badge badge-stable trend-stable">1.00</div>
+                </div>
+                <div class="target-body">
+                    <span class="url-anchor" title="Global Context">
+                        🔗 URL: Universal Scope
+                    </span>
+                    <div class="metadata-desc">No intent metadata synced</div>
+                    <div class="stat-row"><span>Passes</span><strong>2</strong></div>
+                    <div class="stat-row"><span>Failures</span><strong>undefined</strong></div>
+                    <div class="stat-row"><span>Fallbacks</span><strong>0 available</strong></div>
+                    <div class="selector-snippet">//div[contains(normalize-space(.), '{{PARAM_GRID_ANCHOR}}')]//button[contains(concat(' ', normalize-space(@class), ' '), ' btn ')]</div>
+                </div>
+            </div>
+            <div class="target-card" data-key="shoppingcartlink.link" data-desc="" data-selector="[data-test="shopping-cart-link"]" data-status="stable">
+                <div class="target-header">
+                    <div class="target-key">shoppingCartLink.link</div>
+                    <div class="grade-badge badge-stable trend-stable">1.00</div>
+                </div>
+                <div class="target-body">
+                    <span class="url-anchor" title="Global Context">
+                        🔗 URL: Universal Scope
+                    </span>
+                    <div class="metadata-desc">No intent metadata synced</div>
+                    <div class="stat-row"><span>Passes</span><strong>2</strong></div>
+                    <div class="stat-row"><span>Failures</span><strong>undefined</strong></div>
+                    <div class="stat-row"><span>Fallbacks</span><strong>0 available</strong></div>
+                    <div class="selector-snippet">[data-test="shopping-cart-link"]</div>
+                </div>
+            </div>
+            <div class="target-card" data-key="checkout.button" data-desc="" data-selector="[data-test="checkout"]" data-status="critical">
+                <div class="target-header">
+                    <div class="target-key">checkout.button</div>
+                    <div class="grade-badge badge-danger trend-stable">0.00</div>
+                </div>
+                <div class="target-body">
+                    <span class="url-anchor" title="Global Context">
+                        🔗 URL: Universal Scope
+                    </span>
+                    <div class="metadata-desc">No intent metadata synced</div>
+                    <div class="stat-row"><span>Passes</span><strong>undefined</strong></div>
+                    <div class="stat-row"><span>Failures</span><strong>undefined</strong></div>
+                    <div class="stat-row"><span>Fallbacks</span><strong>2 available</strong></div>
+                    <div class="selector-snippet">[data-test="checkout"]</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="historyView" class="history-section">
+        <div class="controls-bar">
+            <div class="control-item" style="max-width: 300px;">
+                <label>Intelligence Lookback Range</label>
+                <input type="date" id="dateFilter" min="2026-01-02" value="2026-01-02">
+            </div>
+        </div>
+        <table class="history-table" id="historyTable">
+            <thead><tr><th>Timestamp</th><th>Target</th><th>Action</th><th>Intelligence Details</th></tr></thead>
+            <tbody>
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        function switchView(v) {
+            document.getElementById('registryView').style.display = v === 'grid' ? 'block' : 'none';
+            document.getElementById('historyView').classList.toggle('active', v === 'history');
+            document.getElementById('btnGrid').classList.toggle('active', v === 'grid');
+            document.getElementById('btnHist').classList.toggle('active', v === 'history');
+        }
+
+        const search = document.getElementById('searchInput');
+        const status = document.getElementById('statusFilter');
+        const date = document.getElementById('dateFilter');
+        const cards = document.querySelectorAll('.target-card');
+        const rows = document.querySelectorAll('#historyTable tbody tr');
+
+        function filter() {
+            const q = search.value.toLowerCase();
+            const s = status.value;
+            cards.forEach(c => {
+                const match = c.dataset.key.includes(q) || c.dataset.selector.includes(q) || c.dataset.desc.includes(q);
+                const stat = s === 'all' || c.dataset.status === s;
+                c.style.display = (match && stat) ? 'flex' : 'none';
+            });
+        }
+
+        function filterHist() {
+            const minDate = new Date(date.value);
+            rows.forEach(r => {
+                const rDate = new Date(r.dataset.date);
+                r.classList.toggle('date-hidden', rDate < minDate);
+            });
+        }
+
+        search.addEventListener('input', filter);
+        status.addEventListener('change', filter);
+        date.addEventListener('change', filterHist);
+        filterHist();
+    </script>
+</body>
+</html>

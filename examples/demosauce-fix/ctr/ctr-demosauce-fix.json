@@ -1,0 +1,117 @@
+{
+  "id": "demosauce-fix",
+  "description": "Auto-generated CTR for SauceDemo",
+  "versionRange": "demo",
+  "domain": "WEB",
+  "locators": {
+    "username.edit": {
+      "contexts": [
+        "root"
+      ],
+      "selectors": [
+        {
+          "using": "css",
+          "value": "[data-test=\"username\"]",
+          "passes": 2,
+          "confidenceGrade": 1
+        },
+        {
+          "using": "css",
+          "value": "#user-name"
+        },
+        {
+          "using": "css",
+          "value": "[name=\"user-name\"]"
+        }
+      ]
+    },
+    "password.edit": {
+      "contexts": [
+        "root"
+      ],
+      "selectors": [
+        {
+          "using": "css",
+          "value": "[data-test=\"password\"]",
+          "passes": 2,
+          "confidenceGrade": 1
+        },
+        {
+          "using": "css",
+          "value": "#password"
+        },
+        {
+          "using": "css",
+          "value": "[name=\"password\"]"
+        }
+      ]
+    },
+    "loginButton.button": {
+      "contexts": [
+        "root"
+      ],
+      "selectors": [
+        {
+          "using": "css",
+          "value": "[data-test=\"login-button\"]",
+          "passes": 2,
+          "confidenceGrade": 1
+        },
+        {
+          "using": "css",
+          "value": "#login-button"
+        },
+        {
+          "using": "css",
+          "value": "[name=\"login-button\"]"
+        }
+      ]
+    },
+    "inventoryGridItem.button": {
+      "contexts": [
+        "inventory"
+      ],
+      "selectors": [
+        {
+          "using": "xpath",
+          "value": "//div[contains(normalize-space(.), '{{PARAM_GRID_ANCHOR}}')]//button[contains(concat(' ', normalize-space(@class), ' '), ' btn ')]",
+          "passes": 2,
+          "confidenceGrade": 1
+        }
+      ]
+    },
+    "shoppingCartLink.link": {
+      "contexts": [
+        "inventory"
+      ],
+      "selectors": [
+        {
+          "using": "css",
+          "value": "[data-test=\"shopping-cart-link\"]",
+          "passes": 2,
+          "confidenceGrade": 1
+        }
+      ]
+    },
+    "checkout.button": {
+      "contexts": [
+        "cart"
+      ],
+      "selectors": [
+        {
+          "using": "css",
+          "value": "[data-test=\"checkout\"]"
+        },
+        {
+          "using": "css",
+          "value": "#checkout"
+        },
+        {
+          "using": "css",
+          "value": "[name=\"checkout\"]"
+        }
+      ]
+    }
+  },
+  "history": []
+}

@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.0-beta] - 2026-04-03
+
+### Added
+- **Core:** Introduced `TargetHydrator` utility to handle string interpolation for dynamic execution targets.
+- **Context:** Added `getVariables()` method to `ExecutionContext` to expose shallow copies of the current execution state dictionary.
+- **Examples:** Added `demosauce` and `demosauce-fix` example suites to demonstrate and validate data-driven parameterized matrices.
+
+### Fixed
+- **Execution:** Resolved an issue where dynamic parameter tokens (e.g., `{{PARAM_NAME}}`) embedded within Central Target Registry (CTR) locators were not being hydrated at runtime. Target hydration has been elevated to the `TestExecutor`, ensuring the execution engine receives fully resolved locators.
+
 ## [1.0.0-beta] - 2026-03-16
 
 ### Added
