@@ -12,7 +12,7 @@
         {
           "using": "css",
           "value": "[data-test=\"username\"]",
-          "passes": 2,
+          "passes": 4,
           "confidenceGrade": 1
         },
         {
@@ -33,7 +33,7 @@
         {
           "using": "css",
           "value": "[data-test=\"password\"]",
-          "passes": 2,
+          "passes": 4,
           "confidenceGrade": 1
         },
         {
@@ -54,7 +54,7 @@
         {
           "using": "css",
           "value": "[data-test=\"login-button\"]",
-          "passes": 2,
+          "passes": 4,
           "confidenceGrade": 1
         },
         {
@@ -75,7 +75,7 @@
         {
           "using": "xpath",
           "value": "//div[contains(normalize-space(.), '{{PARAM_GRID_ANCHOR}}')]//button[contains(concat(' ', normalize-space(@class), ' '), ' btn ')]",
-          "passes": 2,
+          "passes": 4,
           "confidenceGrade": 1
         }
       ]
@@ -88,7 +88,7 @@
         {
           "using": "css",
           "value": "[data-test=\"shopping-cart-link\"]",
-          "passes": 2,
+          "passes": 4,
           "confidenceGrade": 1
         }
       ]

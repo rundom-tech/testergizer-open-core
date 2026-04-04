@@ -1,4 +1,7 @@
 // src/tools/htmlReporter.ts
+// CHANGELOG (2026-04-04)
+// - SPRINT 8: Quality Intelligence Observability
+// - Added executionMode (headed/headless) rendering to the Run Metadata and individual Test Cards.
 // CHANGELOG (2026-03-15)
 // - SPRINT 8: Quality Intelligence Observability
 // - Propagated deterministic status icons (✓/✕) to Test and Attempt card headers.
@@ -857,6 +860,7 @@ export class HtmlReporter {
       const isApi = run.executionEngine === "api";
       const engineLabel = isApi ? "engine: node" : `project: ${esc((t as any).projectId)}`;
       const domainLabel = isApi ? "domain: REST API" : "";
+      const modeLabel = (t as any).executionMode ? `<span class="sep">|</span> mode: ${esc((t as any).executionMode)}` : "";
 
       const testStatus = normalizeResult((t as any).result);
       const tIcon = stepRailIcon(testStatus);
@@ -875,6 +879,7 @@ export class HtmlReporter {
             <div class="card-meta mono">
               ${engineLabel}
               ${domainLabel ? `<span class="sep">|</span> ${domainLabel}` : ""}
+              ${modeLabel}
               <span class="sep">|</span> attempts: ${esc(attempts.length)}
             </div>
             ${(t as any).promise ? `<div style="padding-top: 8px; font-size: 0.95em; color: var(--fg-muted);"><strong>Promise:</strong> ${esc((t as any).promise)}</div>` : ""}
@@ -1112,6 +1117,8 @@ export class HtmlReporter {
       </div>
     `;
 
+    const firstTestMode = tests[0]?.executionMode;
+
     const runMetaInner = `
         <details class="card" open>
           <summary class="card-title">
@@ -1126,6 +1133,7 @@ export class HtmlReporter {
             <div><span class="k">Project:</span> <span class="mono">${esc(run.projectId)}</span></div>
             <div><span class="k">Base URL:</span> <span class="mono">${esc((run as any).baseUrl)}</span></div>
             <div><span class="k">Execution engine:</span> <span class="mono">${esc(run.executionEngine)}</span></div>
+            ${firstTestMode ? `<div><span class="k">Execution mode:</span> <span class="mono">${esc(firstTestMode)}</span></div>` : ""}
             <div><span class="k">Execution intent:</span> <span class="mono">${esc(run.executionIntent)}</span></div>
             <div><span class="k">Validation mode:</span> <span class="mono">${esc(run.validationMode)}</span></div>
             ${(run as any).workers ? `<div><span class="k">Workers:</span> <span class="mono">${esc((run as any).workers)}</span></div>` : ""}

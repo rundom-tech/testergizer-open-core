@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.0-beta] - 2026-04-04
+
+### Added
+- **Observability:** Added `executionMode` (headed/headless) to the `TestResult` payload in `TestExecutor.ts`.
+- **Reporting:** Updated `HtmlReporter.ts` to display the execution mode in the global Run Metadata and on individual Test Cards.
+
+### Changed
+- **Examples:** Cleaned up the example suites. Removed the legacy `demosauce` folder and refactored the `demosauce-fix` tests, renaming the generic `sniffed-sequence` to a more semantic `AddToCart` test and variance structure.
+
+
 ## [1.0.0-beta] - 2026-04-03
 
 ### Added

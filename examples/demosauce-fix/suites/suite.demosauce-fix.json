@@ -9,8 +9,8 @@
   },
   "tests": [
     {
-      "id": "demosauce-fix-sniffed-sequence-exec",
-      "testRef": "tests/sniffed-sequence.test.json"
+      "id": "AddToCart-exec",
+      "testRef": "tests/AddToCart.test.json"
     }
   ]
 }

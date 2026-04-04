@@ -1,10 +1,9 @@
 {
-  "id": "demosauce-sniffed-sequence",
-  "title": "Auto-Generated E2E Session",
+  "id": "AddToCart",
   "testDomain": "ui",
   "variance": {
     "sourceType": "JSON",
-    "filePath": "sniffed-sequence.variance.json"
+    "filePath": "AddToCart.variance.json"
   },
   "steps": [
     {
@@ -12,14 +11,14 @@
       "ref": "../reusables/login-foundation.json"
     },
     {
-      "id": "step_0",
-      "type": "click",
+      "id": "step_4",
+      "action": "click",
       "target": "inventoryGridItem.button"
     },
     {
-      "id": "step_1",
-      "type": "click",
-      "target": "shoppingCartBadge.label",
+      "id": "step_5",
+      "action": "click",
+      "target": "shoppingCartLink.link",
       "assertions": [
         {
           "type": "EXPECT_URL",

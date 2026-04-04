@@ -1,0 +1,33 @@
+[
+  {
+    "id": "AddToCart_variant_ra5hbx",
+    "inputs": {
+      "PARAM_USERNAME": "standard_user",
+      "PARAM_PASSWORD": "secret_sauce",
+      "PARAM_GRID_ANCHOR": "Sauce Labs Backpack"
+    },
+    "expect": []
+  },
+  {
+    "id": "AddToCart_variant_jqu9q7",
+    "inputs": {
+      "PARAM_USERNAME": "problem_user",
+      "PARAM_PASSWORD": "secret_sauce",
+      "PARAM_GRID_ANCHOR": "Sauce Labs Bike Light"
+    },
+    "expect": [],
+    "steps": [
+      {
+        "id": "step_6",
+        "action": "click",
+        "target": "checkout.button",
+        "assertions": [
+          {
+            "type": "EXPECT_URL",
+            "value": "https://www.saucedemo.com/checkout-step-one.html"
+          }
+        ]
+      }
+    ]
+  }
+]

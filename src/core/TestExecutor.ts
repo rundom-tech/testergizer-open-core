@@ -384,7 +384,7 @@ export class TestExecutor {
           }
 
           browser = await browserType.launch({
-            headless: this.options.headless ?? true,
+            headless: isHeadless(this.options),
             slowMo: this.options.slowMoMs
           });
 
@@ -925,6 +925,7 @@ export class TestExecutor {
       name: test.name,
       testDomain: reportingDomain, 
       projectId,
+      executionMode: isHeadless(this.options) ? "headless" : "headed",
       result: finalResult,
       startedAt: testStartedAt,
       endedAt: testEndedAt,
