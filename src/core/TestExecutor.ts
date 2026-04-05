@@ -3,6 +3,8 @@ import { ExecutionContext } from "./context/ExecutionContext";
 import { VarianceResolver } from "./context/VarianceResolver";
 import { evaluateVersionCompatibility } from "./ctr/ctrVersionGuard";
 import { evaluateDomFingerprint } from "./ctr/ctrDomGuard";
+import { CCTRManager } from "./ctr/CCTRManager";
+import { CTRLoader } from "./ctr/CTRLoader";
 
 import fs from "fs";
 import path from "path";
@@ -211,15 +213,21 @@ export class TestExecutor {
   // SPRINT 8: File System Executor
   private fsExecutor = new FSExecutor();
 
+  // Proactive Obstacle Clearance Infrastructure
+  private cctrManager: CCTRManager;
+  private loader: CTRLoader;
+
   constructor(options: TestExecutorOptions = {}) {
     this.options = options;
-
     this.engine = options.executionEngine ?? "testergizer";
+
+    this.cctrManager = new CCTRManager();
+    this.loader = new CTRLoader(this.cctrManager);
 
     this.executor =
       this.engine === "testergizer"
         ? new TestergizerExecutor()
-        : new PlaywrightExecutor();
+        : new PlaywrightExecutor(this.cctrManager);
 
     this.retries =
       this.engine === "testergizer"
@@ -319,6 +327,15 @@ export class TestExecutor {
 
     await this.initCTR();
     await this.initAPIRepo();
+
+    // Load Federated Registries if configuration exists in options
+    const cctrConfig = (this.options as any).cctr;
+    if (cctrConfig) {
+      await this.loader.loadFederatedRegistries({
+        sdrPath: cctrConfig.localPath,
+        globalUrl: cctrConfig.globalUrl
+      });
+    }
 
     const initialVariables = (this.options as any).variables || {};
     const executionContext = new ExecutionContext(initialVariables);

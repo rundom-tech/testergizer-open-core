@@ -1,0 +1,36 @@
+[
+  {
+    "id": "order-item_variant_w0vmun",
+    "description": "Standard user order item flow",
+    "inputs": {
+      "PARAM_USERNAME": "standard_user",
+      "PARAM_PASSWORD": "secret_sauce",
+      "PARAM_GRID_ANCHOR": "Sauce Labs Backpack"
+    },
+    "expect": []
+  },
+  {
+    "id": "order-item_variant_yh803i",
+    "description": "Problem user order item flow",
+    "inputs": {
+      "PARAM_USERNAME": "problem_user",
+      "PARAM_PASSWORD": "secret_sauce",
+      "PARAM_GRID_ANCHOR": "Sauce Labs Bike Light"
+    },
+    "expect": [],
+    "steps": [
+      {
+        "id": "step_6",
+        "action": "click",
+        "target": "checkout.button",
+        "assertions": [
+          {
+            "type": "EXPECT_URL",
+            "value": "https://www.saucedemo.com/checkout-step-one.html"
+          }
+        ],
+        "description": "Click on checkout.button."
+      }
+    ]
+  }
+]

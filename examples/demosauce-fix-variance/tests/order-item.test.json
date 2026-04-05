@@ -1,0 +1,33 @@
+{
+  "id": "order-item",
+  "description": "Goal: shoppingCartLink.link.",
+  "testDomain": "ui",
+  "variance": {
+    "sourceType": "JSON",
+    "filePath": "order-item.variance.json"
+  },
+  "steps": [
+    {
+      "type": "include",
+      "ref": "../reusables/login-foundation.json"
+    },
+    {
+      "id": "step_4",
+      "action": "click",
+      "target": "inventoryGridItem.button",
+      "description": "Click on inventoryGridItem.button."
+    },
+    {
+      "id": "step_5",
+      "action": "click",
+      "target": "shoppingCartLink.link",
+      "assertions": [
+        {
+          "type": "EXPECT_URL",
+          "value": "https://www.saucedemo.com/cart.html"
+        }
+      ],
+      "description": "Click on shoppingCartLink.link."
+    }
+  ]
+}

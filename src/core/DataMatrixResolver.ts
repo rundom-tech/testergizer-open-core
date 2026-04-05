@@ -38,6 +38,7 @@ export class DataMatrixResolver {
     return {
       instanceId: testDef.id,
       parentTestId: testDef.id,
+      description: testDef.name || testDef.title, // Preserve the base name if no matrix exists
       testMatrix: testDef.testMatrix,
       actions: baseActions,
       steps: [], 
@@ -60,6 +61,7 @@ export class DataMatrixResolver {
     return {
       instanceId: `${testDef.id}_${variationId}`,
       parentTestId: testDef.id,
+      description: row.description || testDef.name || testDef.title, // Map the semantic name!
       testMatrix: testDef.testMatrix,
       
       // Explicitly pass the variant's steps so SuiteCoordinator can fuse them
@@ -83,7 +85,16 @@ export class DataMatrixResolver {
     const rawContent = fs.readFileSync(filePath, 'utf-8');
 
     if (sourceType === 'JSON') {
-      return JSON.parse(rawContent);
+      const parsed = JSON.parse(rawContent);
+      
+      // Auto-Format: If AweMG generated a Dictionary instead of an Array, safely unroll it
+      if (!Array.isArray(parsed) && typeof parsed === 'object') {
+        return Object.entries(parsed).map(([key, value]: [string, any]) => ({
+          variationId: key,
+          ...value
+        }));
+      }
+      return parsed;
     }
 
     if (sourceType === 'CSV') {

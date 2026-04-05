@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://testergizer.dev/schemas/clr.schema.json",
+  "$id": "https://testergizer.dev/schemas/ctr.schema.json",
   "title": "Common Language Resources (CLR) - Target Registry",
   "description": "Schema for reusable, context-scoped targets (UI Locators, API Endpoints, and System Paths)",
 

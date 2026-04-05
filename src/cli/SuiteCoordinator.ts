@@ -38,6 +38,14 @@
 // - SPRINT 7 FINAL: Precompiled Divergent Topology (Base + Extension)
 //   Orchestrator now fuses base foundation steps with variant-specific 
 //   extension steps into a single, deterministic linear execution contract.
+//
+// - SPRINT 8: Unroll inline AweMG assertions during Compile Phase to maintain
+//   atomic linear execution contracts for Playwright. Preserve semantic matrix
+//   descriptions for HTML reporting. Refined aesthetic rendering of unrolled assertions.
+//
+// - SPRINT 8 PATCH: Implemented deep cloning via structuredClone in the compile 
+//   loop to prevent destructive state mutation of shared base topologies 
+//   during assertion extraction across multiple matrix variants.
 
 import os from "os";
 import fs from "fs";
@@ -85,6 +93,12 @@ export interface RunSuiteOptions {
   validationMode?: ValidationMode;
 
   artifactsDir?: string;
+
+  /** Proactive Obstacle Clearance (CCTR) Configuration */
+  cctr?: {
+    globalUrl?: string;
+    localPath?: string;
+  };
 
   // Forwarded to CoreRunner
   headless?: boolean;
@@ -541,8 +555,8 @@ function expandIncludesWithProvenance(params: {
           ?.replace(/[-_]/g, " ")
           ?.replace(/\b\w/g, (c) => c.toUpperCase()) ?? ref;
 
-        // Recurse into the included file's steps
-        flattenSteps(target.steps, newStack, targetPath, target.id, true, groupName);
+        // QUALITY INTELLIGENCE FUSE: Deep clone reusable steps to prevent cross-variant mutation
+        flattenSteps(structuredClone(target.steps), newStack, targetPath, target.id, true, groupName);
 
       } else if (step && typeof step === "object" && Array.isArray(step.steps)) {
         // INTERCEPT WRAPPER: Unpack nested inline blocks instead of passing to executor
@@ -572,6 +586,52 @@ function expandIncludesWithProvenance(params: {
           reusable: isReusableOrigin,
           includeStack: currentStack
         };
+
+        // QUALITY INTELLIGENCE FUSE: Unroll AweMG Inline Assertions
+        if (Array.isArray((step as any).assertions)) {
+          (step as any).assertions.forEach((assertion: any, aIdx: number) => {
+            let action = "assert";
+            let displayTarget = assertion.target;
+            let displayValue = assertion.value;
+            let desc = `Verify ${assertion.target || 'value'}`;
+
+            if (assertion.type === "EXPECT_URL" || assertion.type === "EXPECT_URI") {
+              action = "assertUrl";
+              // Satisfy BOTH the Reporter (aesthetics) and the Engine (execution contract)
+              displayTarget = "page URL";
+              displayValue = assertion.value;
+              desc = `Verify URL resolves to ${assertion.value}`;
+            } else if (assertion.type === "EXPECT_TEXT") {
+              action = "assertText";
+              desc = `Verify ${assertion.target} text matches "${assertion.value}"`;
+            } else if (assertion.type === "EXPECT_VISIBLE") {
+              action = "assertVisible";
+              desc = `Verify ${assertion.target} is visible`;
+            }
+
+            const assertStepId = `${step.id}::assert-${aIdx}`;
+            
+            expandedSteps.push({
+              id: assertStepId,
+              action,
+              target: displayTarget,
+              value: displayValue,
+              matcher: assertion.matcher,
+              group: (step as any).group || (inheritedGroup ? { name: inheritedGroup } : undefined),
+              description: desc
+            });
+
+            provenanceByStepId[assertStepId] = {
+              originExecutableId: sourceId,
+              originPath: sourcePath,
+              reusable: isReusableOrigin,
+              includeStack: currentStack
+            };
+          });
+
+          // Remove the raw array from the original step so the reporter doesn't double-render
+          delete (step as any).assertions;
+        }
       }
     }
   }
@@ -791,9 +851,11 @@ function compileToTestlets(params: {
   const allWarnings: DebugWarning[] = [];
 
   for (const testlet of rawTestlets) {
-    // QUALITY INTELLIGENCE FUSE: Base Foundation + Variant Extension
-    const variantSteps = Array.isArray((testlet as any).steps) ? (testlet as any).steps : [];
-    const combinedTopology = [...(doc.steps || []), ...variantSteps];
+    // QUALITY INTELLIGENCE FUSE: Deep clone to prevent destructive state mutation across matrix unrolling
+    const baseSteps = structuredClone(doc.steps || []);
+    const variantExtension = structuredClone(Array.isArray((testlet as any).steps) ? (testlet as any).steps : []);
+    
+    const combinedTopology = [...baseSteps, ...variantExtension];
 
     const testletContext = { ...effectiveContext, ...testlet.inputs };
 
@@ -914,6 +976,8 @@ async function executeTestlet(params: {
   const executionUnit = {
     ...testlet,
     id: testlet.instanceId, 
+    // Preserve semantic routing names for the HTML Reporter
+    name: (testlet as any).description || (expanded as any).name || (expanded as any).title || testlet.instanceId,
     testDomain: (expanded as any).testDomain ?? "ui", 
     steps: interpolatedActions 
   };
@@ -925,6 +989,7 @@ async function executeTestlet(params: {
     baseUrl: options.baseUrl ?? suiteBaseUrl,
     browserName: options.browserName,
     retries: Math.max(0, Number(options.retries ?? 0)),
+    cctr: options.cctr,
     artifacts: {
       enabled: (options.executionEngine ?? "testergizer") !== "testergizer",
       dir: runOutDir,
@@ -1010,7 +1075,8 @@ export async function executeSuiteFromFile(inputPath: string, options: RunSuiteO
         executionEngine: engine,
         debug: effectiveDebug,
         retries: effectiveRetries,
-        autVersion: resolvedAutVersion
+        autVersion: resolvedAutVersion,
+        cctr: options.cctr ?? (suite as any).cctr
       };
 
       const suiteDir = path.dirname(rootPath);
@@ -1299,7 +1365,8 @@ export async function executeSuiteFromFile(inputPath: string, options: RunSuiteO
         ...options,
         executionEngine: engine,
         debug: effectiveDebug,
-        autVersion: resolvedAutVersion
+        autVersion: resolvedAutVersion,
+        cctr: options.cctr ?? (suite as any).cctr
       };
 
       const suiteDir = path.dirname(rootPath);

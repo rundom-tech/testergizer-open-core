@@ -1,0 +1,33 @@
+{
+  "id": "login-foundation",
+  "reusable": true,
+  "description": "Login sequence (4 steps).",
+  "steps": [
+    {
+      "id": "step_0",
+      "action": "goto",
+      "target": "/",
+      "description": "Maps to application root."
+    },
+    {
+      "id": "step_1",
+      "action": "fill",
+      "target": "username.edit",
+      "value": "{{PARAM_USERNAME}}",
+      "description": "Enter value in username.edit."
+    },
+    {
+      "id": "step_2",
+      "action": "fill",
+      "target": "password.edit",
+      "value": "{{PARAM_PASSWORD}}",
+      "description": "Enter value in password.edit."
+    },
+    {
+      "id": "step_3",
+      "action": "click",
+      "target": "loginButton.button",
+      "description": "Click on loginButton.button."
+    }
+  ]
+}

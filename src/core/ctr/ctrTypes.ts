@@ -1,4 +1,4 @@
-export interface ClrSelector {
+export interface CtrSelector {
   using: "css" | "xpath" | "text" | "role" | "testid"| "aria" | "label" | "placeholder";
   value: string;
 }
@@ -6,7 +6,7 @@ export interface ClrSelector {
 export interface LocatorDefinition {
   strategy?: "firstMatch";
   contexts?: string[];
-  selectors: ClrSelector[];
+  selectors: CtrSelector[];
 }
 
 export type LocatorDictionary = Record<string, LocatorDefinition>;
@@ -19,7 +19,7 @@ export interface ParsedTarget {
 }
 
 export interface ResolutionAttempt {
-  using: ClrSelector["using"];
+  using: CtrSelector["using"];
   value: string;
   result: "success" | "not_found";
 }
@@ -27,10 +27,10 @@ export interface ResolutionAttempt {
 export interface LocatorResolutionResult<THandle = unknown> {
   resolved: boolean;
   handle?: THandle;
-  resolvedBy?: ClrSelector;
+  resolvedBy?: CtrSelector;
   attempts: ResolutionAttempt[];
 }
 
 export interface StrategyExecutor<THandle = unknown> {
-  tryResolve(selector: ClrSelector): Promise<THandle | null>;
+  tryResolve(selector: CtrSelector): Promise<THandle | null>;
 }

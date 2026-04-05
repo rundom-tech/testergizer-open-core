@@ -1,0 +1,94 @@
+{
+  "$schema": "https://testergizer.dev/schemas/ctr.schema.json",
+  "id": "cctr-global-tier1",
+  "domain": "WEB",
+  "description": "Global Tier 1 Registry for Common Web Obstacles",
+  "locators": {
+    "obs_cookie_onetrust": {
+      "isObstacle": true,
+      "dismissalRef": "dismiss_cookie_onetrust",
+      "description": "OneTrust GDPR / Cookie Consent Banner",
+      "selectors": [
+        { "using": "css", "value": "#onetrust-banner-sdk" },
+        { "using": "css", "value": ".ot-sdk-container" }
+      ]
+    },
+    "dismiss_cookie_onetrust": {
+      "selectors": [
+        { "using": "css", "value": "#onetrust-accept-btn-handler" },
+        { "using": "text", "value": "Accept All Cookies" }
+      ]
+    },
+    "obs_cookie_generic": {
+      "isObstacle": true,
+      "dismissalRef": "dismiss_cookie_generic",
+      "description": "Generic fallback for unbranded cookie consent overlays",
+      "selectors": [
+        { "using": "css", "value": "[id*='cookie-banner']" },
+        { "using": "css", "value": "[class*='cookie-consent']" },
+        { "using": "css", "value": ".cc-window" },
+        { "using": "css", "value": "#gdpr-banner" }
+      ]
+    },
+    "dismiss_cookie_generic": {
+      "selectors": [
+        { "using": "text", "value": "Accept" },
+        { "using": "text", "value": "Accept All" },
+        { "using": "text", "value": "Got it" },
+        { "using": "text", "value": "Allow all" },
+        { "using": "css", "value": ".cc-dismiss" },
+        { "using": "css", "value": "button.accept-cookies" }
+      ]
+    },
+    "obs_intercom_widget": {
+      "isObstacle": true,
+      "dismissalRef": "dismiss_intercom_widget",
+      "description": "Intercom chat widgets that frequently block floating action buttons (FABs)",
+      "selectors": [
+        { "using": "css", "value": ".intercom-lightweight-app" },
+        { "using": "css", "value": "#intercom-container" }
+      ]
+    },
+    "dismiss_intercom_widget": {
+      "selectors": [
+        { "using": "css", "value": ".intercom-launcher-close-icon" },
+        { "using": "aria", "value": "Close Intercom" }
+      ]
+    },
+    "obs_marketing_modal": {
+      "isObstacle": true,
+      "dismissalRef": "dismiss_marketing_modal",
+      "description": "Newsletter signups and promotional overlays",
+      "selectors": [
+        { "using": "css", "value": "[class*='newsletter-modal']" },
+        { "using": "css", "value": "[id*='promo-popup']" },
+        { "using": "css", "value": ".sp-fancybox-wrap" },
+        { "using": "css", "value": "div[data-testid='marketing-overlay']" }
+      ]
+    },
+    "dismiss_marketing_modal": {
+      "selectors": [
+        { "using": "css", "value": "[class*='close-modal']" },
+        { "using": "css", "value": ".sp-fancybox-close" },
+        { "using": "role", "value": "button[name='Close dialog']" },
+        { "using": "aria", "value": "Close" },
+        { "using": "css", "value": "button[aria-label='Close']" }
+      ]
+    },
+    "obs_app_promo": {
+      "isObstacle": true,
+      "dismissalRef": "dismiss_app_promo",
+      "description": "Mobile web 'Download our App' headers or interstitials",
+      "selectors": [
+        { "using": "css", "value": ".smartbanner" },
+        { "using": "css", "value": "[class*='app-promo-banner']" }
+      ]
+    },
+    "dismiss_app_promo": {
+      "selectors": [
+        { "using": "css", "value": ".smartbanner-close" },
+        { "using": "text", "value": "Continue to mobile site" }
+      ]
+    }
+  }
+}

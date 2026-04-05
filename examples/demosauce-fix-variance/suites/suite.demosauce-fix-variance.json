@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "v2",
+  "suiteId": "demosauce-fix-variance-automated-suite",
+  "suiteName": "demosauce-fix-variance Quality Intelligence Suite",
+  "resolveFrom": "..",
+  "baseUrl": "https://www.saucedemo.com",
+  "ctr": {
+    "path": "ctr/ctr-demosauce-fix-variance.json"
+  },
+  "tests": [
+    {
+      "id": "order-item-exec",
+      "testRef": "tests/order-item.test.json"
+    }
+  ]
+}

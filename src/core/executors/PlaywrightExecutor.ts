@@ -1,12 +1,24 @@
+// src/core/executor/PlaywrightExecutor.ts
+
 import type { Page } from "playwright";
 import type { JsonStep } from "../types";
 import type { StepExecutor } from "./StepExecutor";
 import { ExecutionContext } from "../context/ExecutionContext";
+import { CCTRManager } from "../ctr/CCTRManager";
 import * as path from "path";
 import * as fs from "fs";
 import * as os from "os";
 
+// Actions that require a clear Z-axis/line-of-sight before execution
+const INTERACTIVE_ACTIONS = ["click", "fill", "upload", "select", "hover"];
+
 export class PlaywrightExecutor implements StepExecutor {
+  private cctrManager: CCTRManager;
+
+  constructor(cctrManager: CCTRManager) {
+    this.cctrManager = cctrManager;
+  }
+
   async execute(step: JsonStep, page: Page | null, sharedContext?: ExecutionContext): Promise<void> {
     if (!page) throw new Error("PlaywrightExecutor requires a Page instance");
     
@@ -14,30 +26,31 @@ export class PlaywrightExecutor implements StepExecutor {
     const context = sharedContext || new ExecutionContext();
 
     // Attach a passive download listener once per page instance.
-    // This intercepts the stream and routes it to the defined Quality Intelligence boundary.
     if (!(page as any)._qiDownloadInterceptorBound) {
       (page as any)._qiDownloadInterceptorBound = true;
       
       page.on("download", async (download) => {
         try {
           const sandboxDir = path.join(os.homedir(), "Downloads", "maestro-sandbox");
-          
           if (!fs.existsSync(sandboxDir)) {
             fs.mkdirSync(sandboxDir, { recursive: true });
           }
-          
           const filePath = path.join(sandboxDir, download.suggestedFilename());
           await download.saveAs(filePath);
         } catch (error: any) {
-          if (error && error.message && error.message.includes("canceled")) {
-            return; // Silently absorb the cancellation caused by early test teardown
-          }
+          if (error?.message?.includes("canceled")) return;
           console.error("[PlaywrightExecutor] Download interception failed:", error);
         }
       });
     }
 
     const timeout = step.timeoutMs ?? 10000;
+
+    // --- PHASE 14: PROACTIVE OBSTACLE CLEARANCE ---
+    // Perform a pre-flight check for any action that interacts with the DOM
+    if (INTERACTIVE_ACTIONS.includes(step.action) && step.target) {
+      await this.resolveObstacles(page, String(step.target), timeout);
+    }
 
     switch (step.action) {
       case "goto": {
@@ -62,13 +75,11 @@ export class PlaywrightExecutor implements StepExecutor {
           const attrName = property.split(":")[1];
           extractedValue = (await page.getAttribute(String(step.target), attrName))?.trim() || "";
           
-          // Quality Intelligence: If extracting an href, safely parse out just the filename
           if (attrName === "href" && extractedValue.includes("/")) {
             extractedValue = extractedValue.split("/").pop() || extractedValue;
           }
         }
 
-        // Bind the concrete state to the execution context
         context.set(extractAs, extractedValue);
         (step as any).data = { extracted: { [extractAs]: extractedValue } };
         return;
@@ -78,9 +89,7 @@ export class PlaywrightExecutor implements StepExecutor {
         if (!step.target) throw new Error("upload requires target (selector)");
         if (!step.value) throw new Error("upload requires value (file path)");
         
-        const rawPath = String(step.value);
-        const resolvedPath = path.resolve(rawPath);
-        
+        const resolvedPath = path.resolve(String(step.value));
         if (!fs.existsSync(resolvedPath)) {
           throw new Error(`Cannot upload. File not found at path: ${resolvedPath}`);
         }
@@ -109,9 +118,8 @@ export class PlaywrightExecutor implements StepExecutor {
 
       case "assertText": {
         if (!step.target) throw new Error("assertText requires target (selector)");
-        if (step.value === undefined || step.value === null) {
-          throw new Error("assertText requires value");
-        }
+        if (step.value === undefined || step.value === null) throw new Error("assertText requires value");
+        
         await page.waitForSelector(String(step.target), { timeout });
         const text = await page.textContent(String(step.target));
         const expected = String(step.value);
@@ -122,9 +130,7 @@ export class PlaywrightExecutor implements StepExecutor {
       }
 
       case "assertUrl": {
-        if (step.value === undefined || step.value === null) {
-          throw new Error("assertUrl requires value");
-        }
+        if (step.value === undefined || step.value === null) throw new Error("assertUrl requires value");
         
         const expected = String(step.value);
         const matcher = (step as any).matcher || "equals";
@@ -151,6 +157,49 @@ export class PlaywrightExecutor implements StepExecutor {
 
       default:
         throw new Error(`Unknown step action: ${String((step as any).action)}`);
+    }
+  }
+
+  /**
+   * Proactive Reflex: Uses CDP to detect if the target is occluded by a known obstacle.
+   */
+  private async resolveObstacles(page: Page, targetSelector: string, timeout: number): Promise<void> {
+    try {
+      const targetElement = page.locator(targetSelector).first();
+      const box = await targetElement.boundingBox();
+      if (!box) return;
+
+      const x = Math.round(box.x + box.width / 2);
+      const y = Math.round(box.y + box.height / 2);
+
+      // Evaluate the top-most element at the target's center point
+      const topElement = await page.evaluate(({ x, y }) => {
+      // Use globalThis or window cast to bypass the Node-side check
+      const el = (globalThis as any).document.elementFromPoint(x, y);
+      return el ? { id: el.id, className: el.className, tagName: el.tagName } : null;
+    }, { x, y });
+
+      if (!topElement) return;
+
+      // Identify if this top element is a registered obstacle in the CCTR
+      const obstacle = this.cctrManager.identifyObstacle(topElement);
+
+      if (obstacle?.isObstacle && obstacle.dismissalRef) {
+        const dismissal = this.cctrManager.getLocator(obstacle.dismissalRef);
+        if (dismissal && dismissal.selectors.length > 0) {
+          // Use the primary selector to clear the obstacle
+          const selector = dismissal.selectors[0].value;
+          
+          await page.click(selector, { timeout: 5000 });
+          console.log(`[OBSTACLE_CLEARED] Dismissed ${obstacle.dismissalRef} to reach ${targetSelector}`);
+          
+          // Recursive check to ensure the path is now fully clear (e.g., stacked modals)
+          await this.resolveObstacles(page, targetSelector, timeout);
+        }
+      }
+    } catch (error) {
+      // Best-effort: if the reflex fails, allow the main execution to attempt the action and fail normally
+      return;
     }
   }
 }

@@ -1,4 +1,4 @@
-import type { LocatorDefinition, ClrSelector } from "./ctrTypes";
+import type { LocatorDefinition, CtrSelector } from "./ctrTypes";
 
 export function validateLocatorDefinition(
   raw: unknown,
@@ -47,7 +47,7 @@ export function validateLocatorDefinition(
     );
   }
 
-  const selectors: ClrSelector[] = obj.selectors.map((s, i) => {
+  const selectors: CtrSelector[] = obj.selectors.map((s, i) => {
     if (!s || typeof s !== "object") {
       throw new Error(
         `Invalid selector at '${path}.selectors[${i}]'.`
@@ -69,7 +69,7 @@ export function validateLocatorDefinition(
     }
 
     return {
-      using: sel.using as ClrSelector["using"],
+      using: sel.using as CtrSelector["using"],
       value: sel.value
     };
   });

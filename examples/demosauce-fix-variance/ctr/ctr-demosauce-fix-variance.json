@@ -1,0 +1,128 @@
+{
+  "id": "demosauce-fix-variance",
+  "description": "Auto-generated CTR for SauceDemo",
+  "versionRange": "demo",
+  "domain": "WEB",
+  "locators": {
+    "username.edit": {
+      "contexts": [
+        "root"
+      ],
+      "selectors": [
+        {
+          "using": "css",
+          "value": "[data-test=\"username\"]"
+        },
+        {
+          "using": "css",
+          "value": "#user-name"
+        },
+        {
+          "using": "css",
+          "value": "[name=\"user-name\"]"
+        }
+      ]
+    },
+    "password.edit": {
+      "contexts": [
+        "root"
+      ],
+      "selectors": [
+        {
+          "using": "css",
+          "value": "[data-test=\"password\"]"
+        },
+        {
+          "using": "css",
+          "value": "#password"
+        },
+        {
+          "using": "css",
+          "value": "[name=\"password\"]"
+        }
+      ]
+    },
+    "loginButton.button": {
+      "contexts": [
+        "root"
+      ],
+      "selectors": [
+        {
+          "using": "css",
+          "value": "[data-test=\"login-button\"]"
+        },
+        {
+          "using": "css",
+          "value": "#login-button"
+        },
+        {
+          "using": "css",
+          "value": "[name=\"login-button\"]"
+        }
+      ]
+    },
+    "errorButton.button": {
+      "contexts": [
+        "root"
+      ],
+      "selectors": [
+        {
+          "using": "css",
+          "value": "[data-test=\"error-button\"]"
+        }
+      ]
+    },
+    "loginContainer.container": {
+      "contexts": [
+        "root"
+      ],
+      "selectors": [
+        {
+          "using": "css",
+          "value": "[data-test=\"login-container\"]"
+        }
+      ]
+    },
+    "inventoryGridItem.button": {
+      "contexts": [
+        "inventory"
+      ],
+      "selectors": [
+        {
+          "using": "xpath",
+          "value": "//div[contains(normalize-space(.), '{{PARAM_GRID_ANCHOR}}')]//button[contains(concat(' ', normalize-space(@class), ' '), ' btn ')]"
+        }
+      ]
+    },
+    "shoppingCartLink.link": {
+      "contexts": [
+        "inventory"
+      ],
+      "selectors": [
+        {
+          "using": "css",
+          "value": "[data-test=\"shopping-cart-link\"]"
+        }
+      ]
+    },
+    "checkout.button": {
+      "contexts": [
+        "cart"
+      ],
+      "selectors": [
+        {
+          "using": "css",
+          "value": "[data-test=\"checkout\"]"
+        },
+        {
+          "using": "css",
+          "value": "#checkout"
+        },
+        {
+          "using": "css",
+          "value": "[name=\"checkout\"]"
+        }
+      ]
+    }
+  }
+}

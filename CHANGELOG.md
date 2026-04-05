@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.0-beta] - 2026-04-06
+
+### Hardened
+- **Topology Isolation:** Implemented deep cloning via `structuredClone` in the `SuiteCoordinator` compile loop to prevent destructive state mutation of shared base topologies during multi-variant unrolling.
+- **Semantic Reporting Alignment:** Enhanced `DataMatrixResolver` to natively parse and route the `description` field from variance dictionaries, replacing raw instance IDs with human-readable titles in reporting artifacts.
+
+### Added
+- **Unified Assertion Unrolling:** Introduced a compiler-level bridge in `SuiteCoordinator` to automatically unroll declarative, inline AweMG assertions into atomic, linear execution steps.
+- **Deterministic Variance Examples:** Added `demosauce-fix-variance` and `demosauce-bottish` scenarios to demonstrate 100% Signal Strength across divergent topologies.
+
+### Improved
+- **Execution-Report Dualism:** Refined unrolling logic for `EXPECT_URL` to satisfy the strict `value` requirements of the Playwright engine while providing semantic `target` metadata ("page URL") for high-fidelity HTML reporting.
+
+
 ## [1.0.0-beta] - 2026-04-04
 
 ### Added

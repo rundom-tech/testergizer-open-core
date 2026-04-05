@@ -139,6 +139,7 @@ export interface JsonTestDefinition {
 export interface UnrolledTestlet {
   instanceId: string; 
   parentTestId: string;
+  description?: string;
   testDomain?: TestDomain | TestDomain[];
   testMatrix?: TestMatrix | number;
   actions: JsonStep[];
@@ -197,4 +198,11 @@ export interface TestExecutorOptions {
   /** Optional append-only observer for artifacts (writes are performed by the CLI layer). */
   artifactObserver?: ArtifactObserver;
   ctrDefinition?: any; // Accept the CTR definition for API testing
+  /** Common Central Target Registry (CCTR)
+   *  Quality Intelligence: Provides a unified registry for known obstacles and their resolution strategies across the ecosystem.
+   */
+  cctr?: {
+    globalUrl?: string;
+    localPath?: string;
+  };
 }

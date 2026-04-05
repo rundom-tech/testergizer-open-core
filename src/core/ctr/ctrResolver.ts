@@ -1,6 +1,6 @@
 import type {
   LocatorDefinition,
-  ClrSelector,
+  CtrSelector,
   LocatorResolutionResult
 } from "./ctrTypes";
 
